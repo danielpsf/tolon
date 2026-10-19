@@ -19,3 +19,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.4 On a Wayland session (GNOME), the fallback notification shows Join and Snooze and the sound plays.
 - [ ] S4.1 On X11, the interrupt covers a full-screen browser video.
 - [ ] AC12.3 `.AppImage` runs after `chmod +x`; `.deb` installs on Ubuntu 22.04 and 24.04.
+
+## Every OS
+- [ ] AC6.2 With the system output muted, an alarm makes no sound; the system volume is unchanged after an alarm.
+- [ ] AC6.3 Settings, Alarms, "Play" previews the chosen sound once.
