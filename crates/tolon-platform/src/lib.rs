@@ -160,8 +160,7 @@ pub enum Takeover {
 pub enum Reason {
     /// A Wayland session: compositors ignore always-on-top requests from ordinary windows.
     WaylandNoTakeover,
-    /// Nothing is known to cover the screen: no implementation for this OS ([`StubPlatform`]), or
-    /// a Linux session type other than X11 and Wayland (`mir`, `tty`, `unspecified`).
+    /// No implementation for this OS ([`StubPlatform`]): nothing can cover the screen.
     Unsupported,
 }
 
