@@ -3,6 +3,7 @@
 
 mod commands;
 mod pipeline;
+mod refresh;
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -43,6 +44,7 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
         db: Mutex::new(store),
         fetcher,
     });
+    tauri::async_runtime::spawn(refresh::run(app.clone()));
     Ok(())
 }
 
