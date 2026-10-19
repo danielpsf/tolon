@@ -6,12 +6,14 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod macos_level;
+pub mod monitors;
 pub mod session;
 #[cfg(target_os = "windows")]
 mod windows;
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
+use std::num::NonZeroIsize;
 use std::ptr::NonNull;
 
 #[cfg(target_os = "linux")]
@@ -64,6 +66,9 @@ pub enum PlatformError {
     /// The native view is not attached to a native window.
     #[error("the view has no window")]
     NoWindow,
+    /// An OS call failed. `code` is the Win32 error or `HRESULT` it reported.
+    #[error("{call} failed with OS error {code:#010x}")]
+    Os { call: &'static str, code: u32 },
 }
 
 /// Whether the interrupt window can take over the screen on this system (AC4.1, AC4.5).
@@ -167,6 +172,28 @@ pub(crate) fn ns_view_from_raw(raw: RawWindowHandle) -> Result<NonNull<c_void>, 
     }
 }
 
+/// The `HWND` behind a Win32 window handle, or why there is none.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) fn hwnd_of(window: &dyn HasWindowHandle) -> Result<NonZeroIsize, PlatformError> {
+    let handle = window
+        .window_handle()
+        .map_err(|e| PlatformError::HandleUnavailable(e.to_string()))?;
+    hwnd_from_raw(handle.as_raw())
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) fn hwnd_from_raw(raw: RawWindowHandle) -> Result<NonZeroIsize, PlatformError> {
+    match raw {
+        RawWindowHandle::Win32(h) => Ok(h.hwnd),
+        RawWindowHandle::AppKit(_) => Err(PlatformError::WrongHandleKind("AppKit")),
+        RawWindowHandle::Xlib(_) | RawWindowHandle::Xcb(_) => {
+            Err(PlatformError::WrongHandleKind("X11"))
+        }
+        RawWindowHandle::Wayland(_) => Err(PlatformError::WrongHandleKind("Wayland")),
+        _ => Err(PlatformError::WrongHandleKind("other")),
+    }
+}
+
 /// Window handles for tests: a fixed raw handle, or a window that is already closed.
 #[cfg(test)]
 #[allow(dead_code)]
@@ -192,7 +219,7 @@ pub(crate) mod fake {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use raw_window_handle::{AppKitWindowHandle, XlibWindowHandle};
+    use raw_window_handle::{AppKitWindowHandle, Win32WindowHandle, XlibWindowHandle};
 
     #[test]
     fn stub_platform_reports_its_name() {
@@ -219,6 +246,42 @@ mod tests {
         assert_eq!(
             ns_view_from_raw(raw),
             Err(PlatformError::WrongHandleKind("X11"))
+        );
+    }
+
+    #[test]
+    fn win32_handle_yields_the_hwnd() {
+        let hwnd = NonZeroIsize::MIN;
+        let raw = RawWindowHandle::Win32(Win32WindowHandle::new(hwnd));
+        assert_eq!(hwnd_from_raw(raw), Ok(hwnd));
+    }
+
+    #[test]
+    fn non_win32_handle_is_not_an_hwnd() {
+        let raw = RawWindowHandle::Xlib(XlibWindowHandle::new(1));
+        assert_eq!(
+            hwnd_from_raw(raw),
+            Err(PlatformError::WrongHandleKind("X11"))
+        );
+    }
+
+    #[test]
+    fn closed_window_has_no_hwnd() {
+        assert!(matches!(
+            hwnd_of(&fake::Closed),
+            Err(PlatformError::HandleUnavailable(_))
+        ));
+    }
+
+    #[test]
+    fn os_errors_print_the_code() {
+        let e = PlatformError::Os {
+            call: "SetWindowPos",
+            code: 0x8007_0005,
+        };
+        assert_eq!(
+            e.to_string(),
+            "SetWindowPos failed with OS error 0x80070005"
         );
     }
 
