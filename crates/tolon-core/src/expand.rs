@@ -1,6 +1,6 @@
 //! Expansion: events to the concrete occurrences inside a window, in the machine's zone.
 
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc};
+use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, NaiveDateTime, Utc};
 use chrono_tz::Tz;
 use rrule::{RRule, RRuleSet, Tz as RTz, Unvalidated};
 use std::collections::HashSet;
@@ -13,6 +13,8 @@ use crate::model::{
 pub const WINDOW_DAYS: i64 = 7;
 
 /// Generator steps per event before giving up; stops a rule that never matches from spinning.
+/// shortcut: after skip-ahead only a sub-daily series or one with a far-off COUNT can reach this;
+/// instances past the cap are dropped, so raise it or skip ahead for sub-daily rules if that bites.
 const MAX_STEPS: usize = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,17 +69,26 @@ pub fn expand_window(
 
 /// The recurrence generator for `start` and `rrule`, with EXDATEs applied. `None` when the rule
 /// does not validate against the start.
+///
+/// With `horizon` the generator starts near that instant instead of at the real DTSTART (see
+/// [`skip_ahead`]); parse-time validation passes `None`.
 pub(crate) fn rrule_set(
     rrule: &str,
     start: &EventTime,
     exdates: &[EventTime],
     local: Tz,
+    horizon: Option<DateTime<Utc>>,
 ) -> Option<RRuleSet> {
     let zone = start.zone_or(local);
     let rtz = RTz::from(zone);
-    let dt_start = start.resolve(zone)?.with_timezone(&rtz);
-    let rule: RRule<Unvalidated> = normalise_until(rrule, zone).parse().ok()?;
-    let mut set = rule.build(dt_start).ok()?.limit();
+    let real_start = start.resolve(zone)?;
+    let rule_text = normalise_until(rrule, zone);
+    let mut dt_start = real_start;
+    if let Some(h) = horizon {
+        dt_start = skip_ahead(&rule_text, real_start, h).unwrap_or(real_start);
+    }
+    let rule: RRule<Unvalidated> = rule_text.parse().ok()?;
+    let mut set = rule.build(dt_start.with_timezone(&rtz)).ok()?.limit();
     for ex in exdates {
         if let Some(x) = ex.resolve(zone) {
             set = set.exdate(x.with_timezone(&rtz));
@@ -116,6 +127,65 @@ fn normalise_until(rule: &str, zone: Tz) -> String {
         })
         .collect::<Vec<_>>()
         .join(";")
+}
+
+/// A DTSTART moved forward by a whole number of rule periods, landing at least two periods before
+/// `horizon`, so a long-running series is not walked from its first day on every expansion.
+/// `None` means walk from the real start: a rule with COUNT (which counts from the real DTSTART),
+/// a sub-daily rule, or a start whose wall-clock time or day of month does not survive the shift.
+/// shortcut: sub-daily rules are not skipped ahead; add it if a feed needs hourly series.
+fn skip_ahead(rule: &str, start: DateTime<Tz>, horizon: DateTime<Utc>) -> Option<DateTime<Tz>> {
+    let (mut freq, mut interval) = ("", 1i64);
+    for part in rule.split(';') {
+        match part.split_once('=') {
+            Some((k, _)) if k.eq_ignore_ascii_case("COUNT") => return None,
+            Some((k, v)) if k.eq_ignore_ascii_case("FREQ") => freq = v,
+            Some((k, v)) if k.eq_ignore_ascii_case("INTERVAL") => interval = v.parse().ok()?,
+            _ => {}
+        }
+    }
+    if interval < 1 {
+        return None;
+    }
+    let zone = start.timezone();
+    let origin = start.naive_local();
+    let target = horizon.with_timezone(&zone).naive_local();
+    let days = (target.date() - origin.date()).num_days();
+    let months = i64::from(target.year() - origin.year()) * 12 + i64::from(target.month())
+        - i64::from(origin.month());
+    // Whole periods to move, leaving two periods of slack before the horizon.
+    let (periods, shift): (i64, Box<dyn Fn(i64) -> Option<NaiveDateTime>>) =
+        match freq.to_ascii_uppercase().as_str() {
+            "DAILY" => (
+                days / interval - 2,
+                Box::new(move |k| origin.checked_add_signed(Duration::days(k * interval))),
+            ),
+            "WEEKLY" => (
+                days / (7 * interval) - 2,
+                Box::new(move |k| origin.checked_add_signed(Duration::days(k * interval * 7))),
+            ),
+            "MONTHLY" => (
+                months / interval - 2,
+                Box::new(move |k| {
+                    origin.checked_add_months(Months::new(u32::try_from(k * interval).ok()?))
+                }),
+            ),
+            "YEARLY" => (
+                months / (12 * interval) - 2,
+                Box::new(move |k| {
+                    origin.checked_add_months(Months::new(u32::try_from(k * interval * 12).ok()?))
+                }),
+            ),
+            _ => return None,
+        };
+    // A month or year shift can land on a day that does not exist (31st, 29 Feb); step back to one that does.
+    let by_month = matches!(freq.to_ascii_uppercase().as_str(), "MONTHLY" | "YEARLY");
+    (1..=periods.min(12)).find_map(|back| {
+        let moved = shift(periods - back + 1)?;
+        let same_day = (!by_month || moved.day() == origin.day()) && moved.time() == origin.time();
+        let dt = wall_clock(moved, zone)?;
+        (same_day && dt.naive_local() == moved).then_some(dt)
+    })
 }
 
 /// How long an instance lasts: whole local days for all-day events, an exact span otherwise.
@@ -208,7 +278,9 @@ fn expand_event(
             }
         }
         Some(rule) => {
-            if let Some(set) = rrule_set(rule, &e.start, &e.exdates, local) {
+            let lookback = shape.span.max(Duration::days(shape.days.unwrap_or(0)));
+            let horizon = from.checked_sub_signed(lookback).unwrap_or(from);
+            if let Some(set) = rrule_set(rule, &e.start, &e.exdates, local, Some(horizon)) {
                 for dt in set.into_iter().take(MAX_STEPS) {
                     let original = dt.with_timezone(&Utc);
                     if original >= to {

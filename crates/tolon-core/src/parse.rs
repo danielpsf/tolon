@@ -278,7 +278,7 @@ fn build(props: &[Property], calendar: &CalendarId) -> Option<Raw> {
         .collect();
     let rrule = match get("RRULE").and_then(|p| p.value.clone()) {
         Some(rule) => {
-            rrule_set(&rule, &start, &exdates, Tz::UTC)?;
+            rrule_set(&rule, &start, &exdates, Tz::UTC, None)?;
             Some(rule)
         }
         None => None,
