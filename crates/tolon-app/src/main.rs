@@ -1,4 +1,7 @@
-//! Tolon desktop app. The Tauri shell, commands, windows, tray and scheduler
-//! wiring arrive in later tasks.
+// Hide the console window on Windows in release builds.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-fn main() {}
+fn main() -> anyhow::Result<()> {
+    tauri::Builder::default().run(tauri::generate_context!())?;
+    Ok(())
+}
