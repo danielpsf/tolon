@@ -2,14 +2,15 @@
 // Run with `npm --prefix ui run e2e` after `npm --prefix ui run tauri build -- --debug --no-bundle`.
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import net from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { after, before, test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { Builder, By, Key, until } from "selenium-webdriver";
+import { Builder, By, error, Key, until } from "selenium-webdriver";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const application = join(root, "target", "debug", process.platform === "win32" ? "tolon-app.exe" : "tolon-app");
@@ -39,10 +40,16 @@ async function waitForDriver(child) {
 let tauriDriver;
 let spawnError;
 let driver;
+// Linux: the app keeps tolon.db under XDG_DATA_HOME, so a temp dir gives every run an empty calendar list.
+// Windows keeps it under %APPDATA% and is left alone: the tests remove what they add.
+const dataHome = mkdtempSync(join(tmpdir(), "tolon-e2e-"));
 
 before(async () => {
   assert.ok(existsSync(application), `debug app not built: ${application}`);
-  tauriDriver = spawn("tauri-driver", driverArgs(), { stdio: "inherit" });
+  tauriDriver = spawn("tauri-driver", driverArgs(), {
+    stdio: "inherit",
+    env: { ...process.env, XDG_DATA_HOME: dataHome },
+  });
   tauriDriver.on("error", (err) => {
     spawnError = err;
   });
@@ -51,11 +58,16 @@ before(async () => {
     .usingServer(driverUrl)
     .withCapabilities({ browserName: "wry", "tauri:options": { application } })
     .build();
+  // The language follows the system by default; the `lang` query parameter pins it so the copy below is English.
+  const url = new URL(await driver.getCurrentUrl());
+  url.search = "?lang=en-US";
+  await driver.get(url.href);
 });
 
 after(async () => {
   await driver?.quit();
   tauriDriver?.kill();
+  rmSync(dataHome, { recursive: true, force: true });
 });
 
 test("the app boots and shows the paper background", async () => {
@@ -103,19 +115,24 @@ async function closedPort() {
 
 const find = (css) => driver.wait(until.elementLocated(By.css(css)), WAIT);
 
-/** The row whose detail line shows this loopback port, or false while it is not listed. */
-async function rowFor(port) {
+/** The row of the calendar these tests add (the host is the name), or false while it is not listed. */
+async function rowForTestCalendar() {
   for (const row of await driver.findElements(By.css(".tl-row"))) {
-    if ((await row.getText()).includes(`:${port}/`)) return row;
+    try {
+      if ((await row.findElement(By.css(".tl-name")).getText()).startsWith("127.0.0.1")) return row;
+    } catch (e) {
+      // The row was removed between the lookup and the read: it is not listed any more.
+      if (!(e instanceof error.StaleElementReferenceError)) throw e;
+    }
   }
   return false;
 }
-async function waitForRow(port) {
+async function waitForRow() {
   try {
-    return await driver.wait(() => rowFor(port), WAIT);
+    return await driver.wait(rowForTestCalendar, WAIT);
   } catch (e) {
     const page = await driver.findElement(By.css("body")).getText();
-    throw new Error(`no row for port ${port}; the page shows: ${JSON.stringify(page)}`, { cause: e });
+    throw new Error(`no row for the test calendar; the page shows: ${JSON.stringify(page)}`, { cause: e });
   }
 }
 
@@ -124,33 +141,31 @@ async function openAddForm() {
   return find("#calendar-url");
 }
 
-let port;
-
 test("s1_3 unreachable link is added with its status", async () => {
-  port = await closedPort();
+  const port = await closedPort();
   const input = await openAddForm();
   await input.sendKeys(`https://127.0.0.1:${port}/calendar/private-123/basic.ics`);
   await (await find('#add-calendar button[type="submit"]')).click();
 
-  const row = await waitForRow(port);
+  const row = await waitForRow();
   // The calendar stays listed so the person can fix the link (AC1.2), with the sentence for its error kind.
   assert.equal(await row.findElement(By.css(".tl-status.failed")).getText(), `Sync failed: ${english}`);
   assert.equal(await row.findElement(By.css(".tl-name")).getText(), "127.0.0.1, iCal subscription");
-  // The row shows host and last segment only; the secret in the middle of the path never reaches the page.
-  assert.equal(await row.findElement(By.css(".sm-caption")).getText(), `https://127.0.0.1:${port}/.../basic.ics`);
+  // The row shows scheme and host only (AC1.3); the path, where a private feed keeps its token, never reaches the page.
+  assert.equal(await row.findElement(By.css(".sm-caption")).getText(), "https://127.0.0.1");
   assert.ok(!(await driver.findElement(By.css("body")).getText()).includes("private-123"));
   assert.equal((await driver.findElements(By.css("#add-calendar"))).length, 0, "the form closes after a successful add");
 });
 
 test("a calendar switch turns the calendar off and on", async () => {
-  const row = await waitForRow(port);
+  const row = await waitForRow();
   const toggle = await row.findElement(By.css('input[role="switch"]'));
   assert.equal(await toggle.getAttribute("aria-label"), "Enable calendar 127.0.0.1");
   assert.equal(await toggle.isSelected(), true);
   await toggle.click();
-  await driver.wait(async () => !(await (await waitForRow(port)).findElement(By.css('input[role="switch"]')).isSelected()), WAIT);
-  await (await waitForRow(port)).findElement(By.css('input[role="switch"]')).click();
-  await driver.wait(async () => (await waitForRow(port)).findElement(By.css('input[role="switch"]')).isSelected(), WAIT);
+  await driver.wait(async () => !(await (await waitForRow()).findElement(By.css('input[role="switch"]')).isSelected()), WAIT);
+  await (await waitForRow()).findElement(By.css('input[role="switch"]')).click();
+  await driver.wait(async () => (await waitForRow()).findElement(By.css('input[role="switch"]')).isSelected(), WAIT);
 });
 
 test("a link Tolon cannot add shows its sentence and adds no row", async () => {
@@ -165,7 +180,7 @@ test("a link Tolon cannot add shows its sentence and adds no row", async () => {
 });
 
 test("removing a calendar asks first and then removes it", async () => {
-  const row = await waitForRow(port);
+  const row = await waitForRow();
   await row.findElement(By.css(".tl-remove button")).click();
   const dialog = await find("dialog[open]");
   assert.match(await dialog.getText(), /Tolon stops reading this calendar\. The calendar itself is not changed\./);
@@ -173,9 +188,15 @@ test("removing a calendar asks first and then removes it", async () => {
   const cancel = await dialog.findElement(By.css(".sm-dialog-actions button"));
   await cancel.click();
   await driver.wait(async () => (await driver.findElements(By.css("dialog[open]"))).length === 0, WAIT);
-  assert.ok(await rowFor(port), "Cancel keeps the calendar");
+  assert.ok(await rowForTestCalendar(), "Cancel keeps the calendar");
 
-  await (await waitForRow(port)).findElement(By.css(".tl-remove button")).click();
+  await (await waitForRow()).findElement(By.css(".tl-remove button")).click();
   await (await find("dialog[open] .sm-btn.danger")).click();
-  await driver.wait(async () => !(await rowFor(port)), WAIT, "the calendar is still listed");
+  await driver.wait(async () => !(await rowForTestCalendar()), WAIT, "the calendar is still listed");
+  // The dialog's own Remove button is gone by now, so focus lands on Add calendar, not on the page body.
+  await driver.wait(async () => (await driver.executeScript("return document.activeElement?.textContent ?? \"\"")) === "Add calendar", WAIT);
+});
+
+test("the app keeps its data in the temp dir", { skip: process.platform !== "linux" }, () => {
+  assert.ok(existsSync(join(dataHome, "dev.tolon.desktop", "tolon.db")), "tolon.db is not under XDG_DATA_HOME");
 });

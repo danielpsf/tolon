@@ -19,23 +19,31 @@ const calendar = (over: Partial<CalendarDto> = {}): CalendarDto => ({
 });
 
 describe("displayUrl", () => {
-  it("keeps the host and the last segment, as mockup 03 shows", () => {
-    expect(displayUrl(calendar().url)).toBe("https://calendar.google.com/.../basic.ics");
+  // AC1.3: only scheme and host may reach the page. Each shape hides its token somewhere different.
+  const shapes: [string, string, string][] = [
+    ["Google", "https://calendar.google.com/calendar/ical/me%40example.com/private-SECRET/basic.ics", "https://calendar.google.com"],
+    ["Outlook", "https://outlook.office365.com/owa/calendar/SECRET@example.com/SECRET/calendar.ics", "https://outlook.office365.com"],
+    ["iCloud", "https://p42-caldav.icloud.com/published/2/SECRET", "https://p42-caldav.icloud.com"],
+    ["Nextcloud", "https://cloud.example.com/remote.php/dav/public-calendars/SECRET?export", "https://cloud.example.com"],
+    ["a token-named file", "https://example.com/SECRET.ics", "https://example.com"],
+    ["a query token", "https://example.com/feed.ics?token=SECRET", "https://example.com"],
+    ["a fragment", "https://example.com/feed.ics#SECRET", "https://example.com"],
+    ["user info", "https://user:SECRET@example.com/feed.ics", "https://example.com"],
+    ["a port", "https://example.com:8443/SECRET/feed.ics", "https://example.com"],
+  ];
+
+  it.each(shapes)("shows scheme and host only for %s", (_name, raw, shown) => {
+    expect(displayUrl(raw)).toBe(shown);
+    expect(displayUrl(raw)).not.toContain("SECRET");
   });
 
-  it("never shows the secret, the query, the fragment or user info", () => {
-    const shown = displayUrl("https://user:pw@example.com:8443/a/private-123/b/team.ics?token=s3cret#frag");
-    expect(shown).toBe("https://example.com:8443/.../team.ics");
-    for (const secret of ["private-123", "s3cret", "frag", "user", "pw"]) expect(shown).not.toContain(secret);
-  });
-
-  it("shows only the host when the path is empty", () => {
-    expect(displayUrl("https://example.com/")).toBe("https://example.com");
-    expect(displayUrl("https://example.com")).toBe("https://example.com");
+  it("keeps the host of an IP address", () => {
+    expect(displayUrl("https://127.0.0.1:4444/a/b.ics")).toBe("https://127.0.0.1");
   });
 
   it("shows nothing for a missing or malformed URL", () => {
     expect(displayUrl(null)).toBe("");
+    expect(displayUrl("")).toBe("");
     expect(displayUrl("not a url")).toBe("");
   });
 });

@@ -4,20 +4,19 @@ import type { CalendarDto } from "./api-types";
 import type { Copy } from "./copy";
 
 /**
- * A subscription URL for display: host plus the last path segment, `https://host/.../basic.ics`.
- * Query, fragment, user info and the middle of the path never show (private feeds carry their
- * secret there). A string that is not a URL shows nothing.
+ * A subscription URL for display: scheme and host only, as `redact_url()` in tolon-sync does.
+ * Path, query, fragment, user info and port never show: private feeds put their token in any of
+ * them (Google in the middle of the path, iCloud and Nextcloud in the last segment).
+ * A string that is not a URL shows nothing.
  */
 export function displayUrl(raw: string | null): string {
   if (!raw) return "";
-  let url: URL;
   try {
-    url = new URL(raw);
+    const { protocol, hostname } = new URL(raw);
+    return hostname ? `${protocol}//${hostname}` : "";
   } catch {
     return "";
   }
-  const last = url.pathname.split("/").filter(Boolean).pop();
-  return `${url.protocol}//${url.host}${last ? `/.../${last}` : ""}`;
 }
 
 export interface Status {
