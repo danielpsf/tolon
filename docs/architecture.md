@@ -32,7 +32,7 @@ tolon/
     ledger.md               the running record of what is done, by whom, with commits
     decisions.md            ADRs: one entry per decision, dated
     agents/                 one brief per sub-agent role
-  mockups/                  SVG artboards (open them in FigCraft); the UI follows them
+  mockups/                  mockups.figcraft (FigCraft file, one frame per screen and theme); the UI follows it
   fixtures/ics/             real-world calendar feeds, anonymised, with expected JSON
   crates/
     tolon-core/             events, occurrences, expansion, ignore rules, alarm state machine, join-link detection; no I/O

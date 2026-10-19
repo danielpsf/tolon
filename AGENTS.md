@@ -1,6 +1,6 @@
 # Tolon: rules for agents and people
 
-You are building Tolon beta 1, a desktop app that takes over the screen before a meeting starts. Read, in this order: `docs/plan.md` (what and why, with every scenario), `docs/architecture.md` (how), `docs/ledger.md` (where we are), `docs/decisions.md` (what was already decided). The mockups in `mockups/` are the UI. The design system is Swiss Moss (https://github.com/danielpsf/swiss-moss, docs at https://danielpsf.github.io/swiss-moss/).
+You are building Tolon beta 1, a desktop app that takes over the screen before a meeting starts. Read, in this order: `docs/plan.md` (what and why, with every scenario), `docs/architecture.md` (how), `docs/ledger.md` (where we are), `docs/decisions.md` (what was already decided). The mockups in `mockups/mockups.figcraft` are the UI (read them with `figcraft-cli`, see `docs/decisions.md`). The design system is Swiss Moss (https://github.com/danielpsf/swiss-moss, docs at https://danielpsf.github.io/swiss-moss/).
 
 ## How work is organised
 
