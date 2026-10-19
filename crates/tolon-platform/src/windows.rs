@@ -10,12 +10,11 @@
 //! the app underneath, and `SPI_SETFOREGROUNDLOCKTIMEOUT` changes a system-wide setting.
 //!
 //! `HWND_TOPMOST` does not depend on the foreground lock, so the window covers other windows
-//! even when the OS refuses focus. In that case `raise_above_everything` still returns `Ok`:
-//! the interrupt is visible, and the app's own focus check (500 ms) decides whether to add the
-//! F4.5 notification.
+//! even when the OS refuses focus. In that case `raise_above_everything` still returns `Ok`, with
+//! `Raised { focused: false }`; the app decides whether to add the F4.5 notification.
 
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
-use crate::{hwnd_of, Platform, PlatformError, Screen};
+use crate::{hwnd_of, Platform, PlatformError, Raised, Screen};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
 use windows::core::BOOL;
@@ -128,7 +127,10 @@ impl Platform for WindowsPlatform {
         Ok(screens_from(&found))
     }
 
-    fn raise_above_everything(&self, window: &dyn HasWindowHandle) -> Result<(), PlatformError> {
+    fn raise_above_everything(
+        &self,
+        window: &dyn HasWindowHandle,
+    ) -> Result<Raised, PlatformError> {
         let hwnd = HWND(hwnd_of(window)?.get() as *mut c_void);
         // SAFETY: IsWindow accepts any handle value and only reports whether it is a window.
         if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
@@ -147,8 +149,9 @@ impl Platform for WindowsPlatform {
             )
         }
         .map_err(|e| os_error("SetWindowPos", &e))?;
-        take_foreground(hwnd);
-        Ok(())
+        Ok(Raised {
+            focused: take_foreground(hwnd),
+        })
     }
 }
 

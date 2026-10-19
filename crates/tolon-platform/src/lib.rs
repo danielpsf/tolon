@@ -114,6 +114,18 @@ impl Reason {
     }
 }
 
+/// What [`Platform::raise_above_everything`] achieved. The window is above other windows
+/// whenever the call returns `Ok`; focus is separate and the OS may refuse it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Raised {
+    /// The window had keyboard focus when the call returned (AC4.4). macOS: the window is the key
+    /// window at that moment, read right after `makeKeyAndOrderFront`; an app that is not yet
+    /// active can report `false` and gain focus a moment later. Windows: `SetForegroundWindow`
+    /// succeeded. Linux: always `false`, because Tauri and the window manager handle focus
+    /// there; the app must check focus itself.
+    pub focused: bool,
+}
+
 /// What the app needs from the operating system.
 ///
 /// Every call returns `Result`; a failure is reported, never fatal. On macOS every call must run
@@ -127,9 +139,11 @@ pub trait Platform: Send + Sync {
     fn screens(&self) -> Result<Vec<Screen>, PlatformError>;
 
     /// Put `window` above every other window, including full-screen apps, on all Spaces, and
-    /// focus it. Call it after Tauri has created the window; Tauri's `WebviewWindow` and
-    /// `Window` implement [`HasWindowHandle`].
-    fn raise_above_everything(&self, window: &dyn HasWindowHandle) -> Result<(), PlatformError>;
+    /// try to focus it. Call it after Tauri has created the window; Tauri's `WebviewWindow` and
+    /// `Window` implement [`HasWindowHandle`]. [`Raised::focused`] says whether the window got
+    /// keyboard focus; when it did not, the app runs the F4.5 notification as well.
+    fn raise_above_everything(&self, window: &dyn HasWindowHandle)
+        -> Result<Raised, PlatformError>;
 
     /// Whether [`Platform::raise_above_everything`] can really cover other windows here. The app
     /// asks once before an alarm and runs the F4.5 fallback on [`Takeover::Degraded`]. The
@@ -163,8 +177,11 @@ impl Platform for StubPlatform {
         }])
     }
 
-    fn raise_above_everything(&self, _window: &dyn HasWindowHandle) -> Result<(), PlatformError> {
-        Ok(())
+    fn raise_above_everything(
+        &self,
+        _window: &dyn HasWindowHandle,
+    ) -> Result<Raised, PlatformError> {
+        Ok(Raised { focused: false })
     }
 }
 
@@ -300,6 +317,15 @@ mod tests {
         assert_eq!(
             e.to_string(),
             "SetWindowPos failed with OS error 0x80070005"
+        );
+    }
+
+    #[test]
+    fn stub_raise_reports_no_focus() {
+        let w = fake::Fake(RawWindowHandle::Xlib(XlibWindowHandle::new(1)));
+        assert_eq!(
+            StubPlatform.raise_above_everything(&w),
+            Ok(Raised { focused: false })
         );
     }
 

@@ -2,7 +2,7 @@
 
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
-use crate::{ns_view_of, Platform, PlatformError, Screen};
+use crate::{ns_view_of, Platform, PlatformError, Raised, Screen};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSView, NSWindow, NSWindowCollectionBehavior};
@@ -57,7 +57,10 @@ impl Platform for MacPlatform {
             .collect())
     }
 
-    fn raise_above_everything(&self, window: &dyn HasWindowHandle) -> Result<(), PlatformError> {
+    fn raise_above_everything(
+        &self,
+        window: &dyn HasWindowHandle,
+    ) -> Result<Raised, PlatformError> {
         let _mtm = main_thread()?;
         let view = ns_view_of(window)?;
         // SAFETY: an AppKit handle carries a live NSView. `window` is borrowed for this call and
@@ -67,7 +70,9 @@ impl Platform for MacPlatform {
         ns_window.setLevel(INTERRUPT_WINDOW_LEVEL);
         ns_window.setCollectionBehavior(NSWindowCollectionBehavior(INTERRUPT_COLLECTION_BEHAVIOR));
         ns_window.makeKeyAndOrderFront(None);
-        Ok(())
+        Ok(Raised {
+            focused: ns_window.isKeyWindow(),
+        })
     }
 }
 

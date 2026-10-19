@@ -13,7 +13,7 @@
 //! X11 dependency, and Tauri's `available_monitors` already reads them.
 
 use crate::session::{detect_session, session_of_handle, takeover_for};
-use crate::{Platform, PlatformError, Screen, Takeover};
+use crate::{Platform, PlatformError, Raised, Screen, Takeover};
 use raw_window_handle::HasWindowHandle;
 
 pub struct LinuxPlatform;
@@ -31,12 +31,15 @@ impl Platform for LinuxPlatform {
         Ok(Vec::new())
     }
 
-    fn raise_above_everything(&self, window: &dyn HasWindowHandle) -> Result<(), PlatformError> {
+    fn raise_above_everything(
+        &self,
+        window: &dyn HasWindowHandle,
+    ) -> Result<Raised, PlatformError> {
         let handle = window
             .window_handle()
             .map_err(|e| PlatformError::HandleUnavailable(e.to_string()))?;
         session_of_handle(handle.as_raw())
-            .map(|_| ())
+            .map(|_| Raised { focused: false })
             .ok_or(PlatformError::WrongHandleKind("not X11 or Wayland"))
     }
 
@@ -64,7 +67,10 @@ mod tests {
     #[test]
     fn raise_accepts_an_x11_window() {
         let w = Fake(RawWindowHandle::Xlib(XlibWindowHandle::new(1)));
-        assert_eq!(LinuxPlatform.raise_above_everything(&w), Ok(()));
+        assert_eq!(
+            LinuxPlatform.raise_above_everything(&w),
+            Ok(Raised { focused: false })
+        );
     }
 
     #[test]
