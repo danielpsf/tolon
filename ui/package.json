@@ -11,9 +11,11 @@
     "tauri": "node scripts/tauri.mjs"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/inter-tight": "^5.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "swiss-moss": "github:danielpsf/swiss-moss"
+    "swiss-moss": "github:danielpsf/swiss-moss#a6454b60ba551650b74547ced6092fe3d8a55ac6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
