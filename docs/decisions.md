@@ -102,3 +102,9 @@ A calendar feed controls every field the join link comes from, and Tolon opens t
 - Each row has a quiet Remove button with a confirm dialog and a one-line consequence. The mockup has none, but AC1.2 ("so the person can fix the link") needs a way to remove a broken one.
 - The Google row is left out until beta 2 (M5); the ignore rules section is left out until their settings commands exist (L-016, M3). Neither shows a disabled stub.
 - "Add calendar" and "Paste an iCal URL" both open the iCal form until Google sign-in gives the first one its own path.
+
+## 2026-10-20 Platform contract after L-012
+- `Screen` carries logical and physical coordinates. Place windows with `Screen::placement()`: logical on macOS (one global point space; tao converts physical values with the window's current screen scale, which puts a window on the wrong screen in a Retina plus 1x setup), physical on Windows (per-monitor DPI makes logical values incomparable). Linux `screens()` returns `Unsupported`; the app uses Tauri's monitors there.
+- `raise_above_everything` returns `Raised { focus: Yes | No | Unknown }`. The app re-checks focus about 500 ms later and runs the F4.5 notification fallback only on a confirmed `No` or still-missing focus; `Unknown` alone is not a reason to fall back.
+- `takeover_support()` is required on every platform. Wayland is detected statically and always degrades (safer reading of AC4.5 than the 500 ms probe alone); X11 is `Full`. An unknown `XDG_SESSION_TYPE` (tty from startx, unspecified) falls back to `WAYLAND_DISPLAY`, then X11. The stub and unknown OSes report `Degraded(Unsupported)`.
+- Every `Platform` call runs on the main (UI) thread on every OS (macOS checks it).
