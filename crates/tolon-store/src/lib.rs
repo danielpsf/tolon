@@ -138,12 +138,12 @@ mod tests {
     #[test]
     fn migrations_apply_to_empty_db() -> TestResult {
         let store = Store::open_in_memory()?;
-        assert_eq!(store.schema_version()?, 1);
+        assert_eq!(store.schema_version()?, 2);
         assert_eq!(
             store.migration_status()?,
             MigrationStatus {
-                applied: 1,
-                expected: 1
+                applied: 2,
+                expected: 2
             }
         );
         assert!(store.migration_status()?.is_current());
@@ -176,7 +176,15 @@ mod tests {
             ),
             (
                 "alarms",
-                &["occurrence_key", "kind", "at", "state", "state_at", "until"],
+                &[
+                    "occurrence_key",
+                    "kind",
+                    "at",
+                    "state",
+                    "state_at",
+                    "until",
+                    "start",
+                ],
             ),
             ("settings", &["key", "value"]),
             (
@@ -246,14 +254,14 @@ mod tests {
             .settings()
             .set("k", &serde_json::json!(1))?;
         let again = Store::open(&path)?;
-        assert_eq!(again.schema_version()?, 1);
+        assert_eq!(again.schema_version()?, 2);
         let history: i64 =
             again
                 .conn
                 .query_row("select count(*) from refinery_schema_history", [], |r| {
                     r.get(0)
                 })?;
-        assert_eq!(history, 1);
+        assert_eq!(history, 2);
         assert_eq!(again.settings().get("k")?, Some(serde_json::json!(1)));
         Ok(())
     }
@@ -262,7 +270,7 @@ mod tests {
     fn broken_migration_errors_and_rolls_back() -> TestResult {
         let mut migrations = embedded::migrations::runner().get_migrations().clone();
         migrations.push(Migration::unapplied(
-            "V2__broken",
+            "V3__broken",
             "create table half_done (id integer); insert into no_such_table values (1);",
         )?);
         let dir = tempfile::tempdir()?;
@@ -270,15 +278,79 @@ mod tests {
         let result = Store::init(Connection::open(&path)?, Runner::new(&migrations));
         assert!(matches!(result, Err(StoreError::Migration(_))));
 
-        // V1 stayed applied, V2 left nothing behind, and a normal open still works.
+        // V1 and V2 stayed applied, V3 left nothing behind, and a normal open still works.
         let store = Store::open(&path)?;
-        assert_eq!(store.schema_version()?, 1);
+        assert_eq!(store.schema_version()?, 2);
         let leftover: i64 = store.conn.query_row(
             "select count(*) from sqlite_master where name = 'half_done'",
             [],
             |r| r.get(0),
         )?;
         assert_eq!(leftover, 0);
+        Ok(())
+    }
+
+    fn v1_runner() -> Runner {
+        let v1: Vec<Migration> = embedded::migrations::runner()
+            .get_migrations()
+            .iter()
+            .filter(|m| m.version() == 1)
+            .cloned()
+            .collect();
+        Runner::new(&v1)
+    }
+
+    #[test]
+    fn v1_then_v2_on_an_empty_db() -> TestResult {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("tolon.db");
+        let v1 = Store::init(Connection::open(&path)?, v1_runner())?;
+        assert_eq!(v1.schema_version()?, 1);
+        assert!(!columns(&v1, "alarms")?.contains(&"start".to_string()));
+        drop(v1);
+        let v2 = Store::open(&path)?;
+        assert_eq!(v2.schema_version()?, 2);
+        assert!(v2.migration_status()?.is_current());
+        assert_eq!(
+            columns(&v2, "alarms")?.last().map(String::as_str),
+            Some("start")
+        );
+        assert!(v2.alarms().list()?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn ac3_3_v1_alarm_row_migrates_with_start_equal_to_at() -> TestResult {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("tolon.db");
+        let v1 = Store::init(Connection::open(&path)?, v1_runner())?;
+        v1.conn.execute(
+            "insert into alarms (occurrence_key, kind, at, state, state_at, until)
+             values ('m1', 'lead', '2026-10-22T09:58:00Z', 'snoozed', '2026-10-22T09:59:00Z', '2026-10-22T10:03:00Z')",
+            [],
+        )?;
+        drop(v1);
+        let store = Store::open(&path)?;
+        assert_eq!(store.schema_version()?, 2);
+        let row = store.alarms().get("m1", "lead")?;
+        assert_eq!(
+            row,
+            Some(AlarmRow {
+                occurrence_key: "m1".into(),
+                kind: "lead".into(),
+                at: "2026-10-22T09:58:00Z".into(),
+                start: "2026-10-22T09:58:00Z".into(),
+                state: "snoozed".into(),
+                state_at: "2026-10-22T09:59:00Z".into(),
+                until: Some("2026-10-22T10:03:00Z".into()),
+            })
+        );
+        let raw: Option<String> = store.conn.query_row(
+            "select start from alarms where occurrence_key = 'm1'",
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!(raw.as_deref(), Some("2026-10-22T09:58:00Z"));
         Ok(())
     }
 

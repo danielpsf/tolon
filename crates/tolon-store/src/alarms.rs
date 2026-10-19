@@ -1,4 +1,4 @@
-//! `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
+//! `at`, `start` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` compares `at` as text; `prune_before` adds 10 minutes to `start` in SQLite first.
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
@@ -16,23 +16,25 @@ fn terminal_json() -> Result<String, StoreError> {
 
 /// One alarm row. Every field is an opaque string here; the app maps it to the core types.
 ///
-/// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
+/// `at`, `start` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). `start` is the meeting start; the alarm expires at `start` + 10 minutes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AlarmRow {
     pub occurrence_key: String,
     pub kind: String,
     pub at: String,
+    pub start: String,
     pub state: String,
     pub state_at: String,
     pub until: Option<String>,
 }
 
-const COLUMNS: &str = "occurrence_key, kind, at, state, state_at, until";
+// `coalesce`: the column is nullable; a NULL (none expected after the V2 backfill) reads as `at`.
+const COLUMNS: &str = "occurrence_key, kind, at, coalesce(start, at), state, state_at, until";
 
-const UPSERT: &str = "insert into alarms (occurrence_key, kind, at, state, state_at, until)
-     values (?1, ?2, ?3, ?4, ?5, ?6)
+const UPSERT: &str = "insert into alarms (occurrence_key, kind, at, start, state, state_at, until)
+     values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
      on conflict(occurrence_key, kind) do update
-       set at = excluded.at, state = excluded.state,
+       set at = excluded.at, start = excluded.start, state = excluded.state,
            state_at = excluded.state_at, until = excluded.until";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<AlarmRow> {
@@ -40,9 +42,10 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<AlarmRow> {
         occurrence_key: r.get(0)?,
         kind: r.get(1)?,
         at: r.get(2)?,
-        state: r.get(3)?,
-        state_at: r.get(4)?,
-        until: r.get(5)?,
+        start: r.get(3)?,
+        state: r.get(4)?,
+        state_at: r.get(5)?,
+        until: r.get(6)?,
     })
 }
 
@@ -65,6 +68,7 @@ impl<'a> AlarmsRepo<'a> {
                 row.occurrence_key,
                 row.kind,
                 row.at,
+                row.start,
                 row.state,
                 row.state_at,
                 row.until
@@ -83,6 +87,7 @@ impl<'a> AlarmsRepo<'a> {
                     row.occurrence_key,
                     row.kind,
                     row.at,
+                    row.start,
                     row.state,
                     row.state_at,
                     row.until
@@ -105,8 +110,6 @@ impl<'a> AlarmsRepo<'a> {
     }
 
     /// Every alarm, ordered by `at`.
-    ///
-    /// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
     pub fn list(&self) -> Result<Vec<AlarmRow>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
             "select {COLUMNS} from alarms order by at, occurrence_key, kind"
@@ -116,8 +119,6 @@ impl<'a> AlarmsRepo<'a> {
     }
 
     /// Alarms whose state is not in `TERMINAL_STATES`, ordered by `at`.
-    ///
-    /// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
     pub fn list_active(&self) -> Result<Vec<AlarmRow>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
             "select {COLUMNS} from alarms
@@ -128,14 +129,18 @@ impl<'a> AlarmsRepo<'a> {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Deletes terminal alarms whose `at` is before `cutoff`. Non-terminal rows stay. Returns
-    /// the number deleted.
+    /// Deletes terminal alarms whose expiry, `start` + 10 minutes, is before `cutoff`.
+    /// Non-terminal rows stay. Returns the number deleted.
     ///
-    /// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
+    /// Text comparison cannot add minutes, so SQLite does: `strftime` parses the `Z` start,
+    /// adds 10 minutes (carrying over hour and day) and renders the same
+    /// `YYYY-MM-DDTHH:MM:SSZ` shape as `cutoff`; the two are then compared as text. `cutoff`
+    /// must be UTC `Z`. A `start` SQLite cannot parse gives NULL, and that row is kept.
     pub fn prune_before(&self, cutoff: &str) -> Result<usize, StoreError> {
         Ok(self.conn.execute(
             "delete from alarms
-             where at < ?1 and state in (select value from json_each(?2))",
+             where strftime('%Y-%m-%dT%H:%M:%SZ', coalesce(start, at), '+10 minutes') < ?1
+               and state in (select value from json_each(?2))",
             params![cutoff, terminal_json()?],
         )?)
     }
@@ -169,6 +174,7 @@ mod tests {
             occurrence_key: key.into(),
             kind: kind.into(),
             at: at.into(),
+            start: at.into(),
             state: state.into(),
             state_at: "2026-01-01T00:00:00Z".into(),
             until: until.map(Into::into),
@@ -277,20 +283,32 @@ mod tests {
         Ok(())
     }
 
+    fn with_start(mut r: AlarmRow, start: &str) -> AlarmRow {
+        r.start = start.into();
+        r
+    }
+
     #[test]
     fn prune_before_deletes_only_old_terminal_rows() -> TestResult {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
+        let (t1, t3, t5, t8) = (
+            "2026-10-22T08:01:00Z",
+            "2026-10-22T08:03:00Z",
+            "2026-10-22T08:05:00Z",
+            "2026-10-22T08:08:00Z",
+        );
         a.upsert_all(&[
-            row("old-dismissed", "lead", "t1", "dismissed", None),
-            row("old-joined", "lead", "t2", "joined", None),
-            row("old-expired", "lead", "t3", "expired", None),
-            row("old-snoozed", "lead", "t1", "snoozed", Some("t9")),
-            row("old-scheduled", "lead", "t1", "scheduled", None),
-            row("new-dismissed", "lead", "t8", "dismissed", None),
-            row("at-cutoff", "lead", "t5", "dismissed", None),
+            row("old-dismissed", "lead", t1, "dismissed", None),
+            row("old-joined", "lead", t1, "joined", None),
+            row("old-expired", "lead", t3, "expired", None),
+            row("old-snoozed", "lead", t1, "snoozed", Some(t8)),
+            row("old-scheduled", "lead", t1, "scheduled", None),
+            row("new-dismissed", "lead", t8, "dismissed", None),
+            row("at-cutoff", "lead", t5, "dismissed", None),
         ])?;
-        assert_eq!(a.prune_before("t5")?, 3);
+        // Expiry is start + 10 min: t1 -> 08:11, t3 -> 08:13, t5 -> 08:15 (not before the cutoff).
+        assert_eq!(a.prune_before("2026-10-22T08:15:00Z")?, 3);
         assert_eq!(
             keys(&a.list()?),
             [
@@ -307,10 +325,70 @@ mod tests {
     fn prune_before_keeps_a_snoozed_row() -> TestResult {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
-        let snoozed = row("k", "lead", "t1", "snoozed", Some("t99"));
+        let snoozed = row(
+            "k",
+            "lead",
+            "2026-10-22T08:00:00Z",
+            "snoozed",
+            Some("2026-10-22T09:00:00Z"),
+        );
         a.upsert(&snoozed)?;
-        assert_eq!(a.prune_before("t50")?, 0);
+        assert_eq!(a.prune_before("2026-10-23T00:00:00Z")?, 0);
         assert_eq!(a.get("k", "lead")?, Some(snoozed));
+        Ok(())
+    }
+
+    #[test]
+    fn prune_uses_start_plus_ten_minutes_not_at() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let a = store.alarms();
+        // A lead alarm: fires at 09:55, the meeting starts at 10:00, so it expires at 10:10.
+        a.upsert(&with_start(
+            row("m", "lead", "2026-10-22T09:55:00Z", "dismissed", None),
+            "2026-10-22T10:00:00Z",
+        ))?;
+        assert_eq!(a.prune_before("2026-10-22T10:10:00Z")?, 0);
+        assert_eq!(a.prune_before("2026-10-22T10:10:01Z")?, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn prune_adds_ten_minutes_across_day_month_and_year_boundaries() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let a = store.alarms();
+        for (start, expiry) in [
+            ("2026-10-22T23:55:00Z", "2026-10-23T00:05:00Z"),
+            ("2026-10-31T23:59:59Z", "2026-11-01T00:09:59Z"),
+            ("2026-12-31T23:50:00Z", "2027-01-01T00:00:00Z"),
+            ("2028-02-28T23:55:00Z", "2028-02-29T00:05:00Z"),
+        ] {
+            a.upsert(&with_start(
+                row("k", "start", start, "expired", None),
+                start,
+            ))?;
+            assert_eq!(
+                a.prune_before(expiry)?,
+                0,
+                "expiry {expiry} is not before itself"
+            );
+            assert_eq!(a.list()?.len(), 1);
+            // One second later the row is past its expiry. Text order is right across the boundary.
+            let later = a.conn.query_row(
+                "select strftime('%Y-%m-%dT%H:%M:%SZ', ?1, '+1 second')",
+                [expiry],
+                |r| r.get::<_, String>(0),
+            )?;
+            assert_eq!(a.prune_before(&later)?, 1, "start {start}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn prune_keeps_a_row_whose_start_does_not_parse() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let a = store.alarms();
+        a.upsert(&row("k", "lead", "not-a-time", "dismissed", None))?;
+        assert_eq!(a.prune_before("9999-12-31T23:59:59Z")?, 0);
         Ok(())
     }
 
@@ -371,9 +449,12 @@ mod tests {
             [("d", "lead"), ("b", "lead"), ("a", "lead"), ("c", "lead")]
         );
         assert_eq!(keys(&a.list_active()?), [("d", "lead")]);
-        // Cutoff at midnight: removes the terminal rows of the 22nd, keeps the 23rd and the snoozed row.
-        assert_eq!(a.prune_before("2026-10-23T00:00:00Z")?, 2);
-        assert_eq!(keys(&a.list()?), [("d", "lead"), ("c", "lead")]);
+        // Cutoff at 00:05: expiry (start + 10 min) of "a" is 00:09, so only the 08:00 row goes.
+        assert_eq!(a.prune_before("2026-10-23T00:05:00Z")?, 1);
+        assert_eq!(
+            keys(&a.list()?),
+            [("d", "lead"), ("a", "lead"), ("c", "lead")]
+        );
         Ok(())
     }
 
@@ -381,7 +462,10 @@ mod tests {
     fn ac3_3_alarm_state_survives_restart() -> TestResult {
         let dir = tempfile::tempdir()?;
         let path = dir.path().join("tolon.db");
-        let dismissed = row("m1", "lead", "2026-01-01T09:55:00Z", "dismissed", None);
+        let dismissed = with_start(
+            row("m1", "lead", "2026-01-01T09:55:00Z", "dismissed", None),
+            "2026-01-01T10:00:00Z",
+        );
         let snoozed = row(
             "m2",
             "start",
@@ -400,6 +484,25 @@ mod tests {
         assert_eq!(a.get("m1", "lead")?, Some(dismissed));
         assert_eq!(a.get("m2", "start")?, Some(snoozed.clone()));
         assert_eq!(a.list_active()?, [snoozed]);
+        Ok(())
+    }
+
+    #[test]
+    fn ac3_3_alarm_start_survives_restart() -> TestResult {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("tolon.db");
+        let lead = with_start(
+            row("m1", "lead", "2026-01-01T09:58:00Z", "scheduled", None),
+            "2026-01-01T10:00:00Z",
+        );
+        Store::open(&path)?.alarms().upsert(&lead)?;
+        let store = Store::open(&path)?;
+        let got = store.alarms().get("m1", "lead")?;
+        assert_eq!(
+            got.as_ref().map(|r| r.start.as_str()),
+            Some("2026-01-01T10:00:00Z")
+        );
+        assert_eq!(got, Some(lead));
         Ok(())
     }
 }
