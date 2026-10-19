@@ -108,3 +108,8 @@ A calendar feed controls every field the join link comes from, and Tolon opens t
 - `raise_above_everything` returns `Raised { focus: Yes | No | Unknown }`. The app re-checks focus about 500 ms later and runs the F4.5 notification fallback only on a confirmed `No` or still-missing focus; `Unknown` alone is not a reason to fall back.
 - `takeover_support()` is required on every platform. Wayland is detected statically and always degrades (safer reading of AC4.5 than the 500 ms probe alone); X11 is `Full`. An unknown `XDG_SESSION_TYPE` (tty from startx, unspecified) falls back to `WAYLAND_DISPLAY`, then X11. The stub and unknown OSes report `Degraded(Unsupported)`.
 - Every `Platform` call runs on the main (UI) thread on every OS (macOS checks it).
+
+## 2026-10-20 Alarm sound (L-014)
+- Two sounds, soft bell (1.5 s) and chime (1 s), are synthesised by `crates/tolon-platform/sounds/src/synth.py` (stdlib only, deterministic) and embedded; they are original work under Apache-2.0. "None" is a third choice.
+- `SoundPlayer` plays one shot on a dedicated audio thread; repeat-every-30-s stays in the scheduler loop (L-032). Playback uses the default output through rodio, so the system mute applies; Tolon never calls a volume API (AC6.2, checked by a source grep and a full-scale player test, plus a manual checklist line).
+- A lost device is reopened on the next play; a sound that never drains ages out; a play that times out (3 s) is cancelled so it cannot start late. No device is an error the app can ignore, never a crash.
