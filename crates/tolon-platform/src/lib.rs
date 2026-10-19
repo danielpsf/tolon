@@ -6,6 +6,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod macos_level;
+pub mod session;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -65,6 +66,35 @@ pub enum PlatformError {
     NoWindow,
 }
 
+/// Whether the interrupt window can take over the screen on this system (AC4.1, AC4.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Takeover {
+    /// Always-on-top and full screen work. Open the interrupt window.
+    Full,
+    /// The system will not let a window cover everything. The app runs the F4.5 fallback
+    /// (notification with Join and Snooze, alarm sound) and logs the reason once.
+    Degraded(Reason),
+}
+
+/// Why a takeover is [`Takeover::Degraded`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reason {
+    /// A Wayland session: compositors ignore always-on-top requests from ordinary windows.
+    WaylandNoTakeover,
+    /// Neither `WAYLAND_DISPLAY` nor `DISPLAY` is set, so no window can open at all.
+    NoDisplayServer,
+}
+
+impl Reason {
+    /// Stable code for logs and the UI; the UI turns it into copy (decisions.md, "Scenario copy").
+    pub fn code(self) -> &'static str {
+        match self {
+            Reason::WaylandNoTakeover => "wayland_no_takeover",
+            Reason::NoDisplayServer => "no_display_server",
+        }
+    }
+}
+
 /// What the app needs from the operating system.
 ///
 /// Every call returns `Result`; a failure is reported, never fatal. On macOS every call must run
@@ -73,13 +103,21 @@ pub trait Platform: Send + Sync {
     /// Short implementation name, for logs and diagnostics.
     fn name(&self) -> &'static str;
 
-    /// Connected screens, primary first.
+    /// Connected screens, primary first. An empty list means this platform cannot enumerate
+    /// screens (Linux today); the app then uses Tauri's `available_monitors`.
     fn screens(&self) -> Result<Vec<Screen>, PlatformError>;
 
     /// Put `window` above every other window, including full-screen apps, on all Spaces, and
     /// focus it. Call it after Tauri has created the window; Tauri's `WebviewWindow` and
     /// `Window` implement [`HasWindowHandle`].
     fn raise_above_everything(&self, window: &dyn HasWindowHandle) -> Result<(), PlatformError>;
+
+    /// Whether [`Platform::raise_above_everything`] can really cover other windows here. The app
+    /// asks once before an alarm and runs the F4.5 fallback on [`Takeover::Degraded`]. The
+    /// default is [`Takeover::Full`]; only Linux overrides it.
+    fn takeover_support(&self) -> Takeover {
+        Takeover::Full
+    }
 }
 
 /// Implementation for CI and tests: one fixed 1440x900 primary screen; raising does nothing.
@@ -160,6 +198,17 @@ mod tests {
             ns_view_from_raw(raw),
             Err(PlatformError::WrongHandleKind("X11"))
         );
+    }
+
+    #[test]
+    fn stub_takeover_is_full() {
+        assert_eq!(StubPlatform.takeover_support(), Takeover::Full);
+    }
+
+    #[test]
+    fn reason_codes_are_stable() {
+        assert_eq!(Reason::WaylandNoTakeover.code(), "wayland_no_takeover");
+        assert_eq!(Reason::NoDisplayServer.code(), "no_display_server");
     }
 
     #[test]
