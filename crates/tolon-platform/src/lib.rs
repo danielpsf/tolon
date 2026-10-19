@@ -167,6 +167,28 @@ pub(crate) fn ns_view_from_raw(raw: RawWindowHandle) -> Result<NonNull<c_void>, 
     }
 }
 
+/// Window handles for tests: a fixed raw handle, or a window that is already closed.
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) mod fake {
+    use raw_window_handle::{HandleError, HasWindowHandle, RawWindowHandle, WindowHandle};
+
+    pub struct Fake(pub RawWindowHandle);
+    impl HasWindowHandle for Fake {
+        fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+            // SAFETY: tests never dereference the handle; it only has to be well formed.
+            Ok(unsafe { WindowHandle::borrow_raw(self.0) })
+        }
+    }
+
+    pub struct Closed;
+    impl HasWindowHandle for Closed {
+        fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+            Err(HandleError::Unavailable)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
