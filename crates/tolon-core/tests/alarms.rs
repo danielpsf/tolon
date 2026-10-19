@@ -2,17 +2,11 @@
 
 mod common;
 
-use chrono::{DateTime, Duration, Utc};
-use common::{utc, TestResult, LOCAL};
+use common::{at, occ, TestResult};
 use tolon_core::{
     already_there, apply_rules, dismiss, join, snooze, Alarm, AlarmKind, AlarmState, EventId,
-    IgnoreReason, IgnoreRules, JoinTarget, Occurrence, OccurrenceKey, Verdict,
+    IgnoreReason, IgnoreRules, OccurrenceKey, Verdict,
 };
-
-/// 14:00 on the common test day, as the meeting start.
-fn at(h: u32, m: u32) -> TestResult<DateTime<Utc>> {
-    utc(2026, 10, 22, h, m)
-}
 
 fn key(event: &str) -> TestResult<OccurrenceKey> {
     Ok(OccurrenceKey {
@@ -120,23 +114,6 @@ fn actions_move_open_alarms_and_leave_final_ones_alone() -> TestResult {
     assert!(!snooze(&mut zero, 0, at(13, 59)?));
     assert_eq!(zero.state, AlarmState::Scheduled);
     Ok(())
-}
-
-/// A one-hour meeting with its own join link, starting at `start`.
-fn occ(title: &str, start: DateTime<Utc>, people: u32) -> Occurrence {
-    Occurrence {
-        key: OccurrenceKey {
-            event: EventId(format!("cal:{title}")),
-            original_start: start,
-        },
-        event: EventId(format!("cal:{title}")),
-        start: start.with_timezone(&LOCAL),
-        end: (start + Duration::hours(1)).with_timezone(&LOCAL),
-        title: title.to_string(),
-        all_day: false,
-        join: JoinTarget::Link(format!("https://example.com/{title}")),
-        people,
-    }
 }
 
 fn verdicts(rules: &IgnoreRules, titles: &[(&str, u32)]) -> TestResult<Vec<Verdict>> {

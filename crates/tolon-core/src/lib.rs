@@ -6,6 +6,7 @@ mod expand;
 mod model;
 mod parse;
 mod rules;
+mod schedule;
 mod tzid;
 
 pub use alarm::{
@@ -18,6 +19,10 @@ pub use model::{
 };
 pub use parse::{parse_ics, ParseOptions, ParsedCalendar};
 pub use rules::{apply_rules, IgnoreReason, IgnoreRules, Verdict};
+pub use schedule::{
+    apply_transitions, countdown, group_firing, plan, tick, AlarmSettings, Countdown,
+    InterruptGroup, QuietHours, Transition, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
+};
 
 /// Crate name, a placeholder export until the real API lands.
 pub const NAME: &str = env!("CARGO_PKG_NAME");
