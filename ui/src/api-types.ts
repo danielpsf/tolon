@@ -1,14 +1,19 @@
-// Error shapes from L-029 (tolon-app). Mirror them here until that branch merges.
+// Mirrors what `tolon-app` sends: `CalendarDto` in crates/tolon-app/src/pipeline.rs,
+// `SyncErrorDto` and `CommandError` in crates/tolon-app/src/errors.rs.
 
-export type SyncErrorKind =
-  | "timeout"
-  | "connect"
-  | "not_calendar"
-  | "too_large"
-  | "network"
-  | "unsupported_scheme"
-  | "invalid_url";
+export const SYNC_ERROR_KINDS = [
+  "timeout",
+  "connect",
+  "not_calendar",
+  "too_large",
+  "network",
+  "unsupported_scheme",
+  "invalid_url",
+] as const;
 
+export type SyncErrorKind = (typeof SYNC_ERROR_KINDS)[number];
+
+/** `last_error` from a stored code: `http:404` is `{ kind: "http", status: 404 }`. */
 export type SyncError = { kind: "http"; status: number } | { kind: SyncErrorKind };
 
 export const COMMAND_ERROR_CODES = [
@@ -28,7 +33,14 @@ export interface CommandError {
   code: CommandErrorCode;
 }
 
-/** Only the field the i18n layer reads; L-029 and L-008 own the rest of the shape. */
 export interface CalendarDto {
+  id: string;
+  name: string;
+  kind: string;
+  enabled: boolean;
+  /** Shown on the settings page; never logged. */
+  url: string | null;
+  /** RFC 3339 timestamp, or null when the calendar never synced. */
+  last_sync_at: string | null;
   last_error: SyncError | null;
 }
