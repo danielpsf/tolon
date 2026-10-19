@@ -52,6 +52,7 @@ fn main() -> anyhow::Result<()> {
     // Info and below, stderr only; fetch failures log a redacted host, never the URL.
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
+        .with_writer(std::io::stderr)
         .try_init();
 
     tauri::Builder::default()

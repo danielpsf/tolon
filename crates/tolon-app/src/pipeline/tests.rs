@@ -561,3 +561,34 @@ async fn a_poisoned_store_lock_is_recovered() -> TestResult {
     assert_eq!(list(&db)?.len(), 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn unreadable_stored_events_are_skipped_and_their_text_is_not_logged() -> TestResult {
+    let logs = Sink::default();
+    let _guard = logs.capture();
+    let db = db()?;
+    let dto = add_ics(
+        &db,
+        &Fake::new(vec![modified(basic_feed(Some("Team")), None)]),
+        SECRET_URL,
+        now(),
+    )
+    .await?;
+    lock(&db).events().replace_for_calendar(
+        &dto.id,
+        &[tolon_store::FeedEvent {
+            uid: "bad".to_owned(),
+            payload: r#"{"title":"SECRET-TITLE","start":"#.to_owned(),
+        }],
+        &now().to_rfc3339(),
+    )?;
+
+    assert!(today(&db, now(), Tz::UTC)?.is_empty());
+    let out = logs.text();
+    assert!(out.contains("stored event could not be read"), "{out}");
+    assert!(
+        !out.contains("SECRET-TITLE"),
+        "payload text reached the log: {out}"
+    );
+    Ok(())
+}

@@ -312,9 +312,9 @@ pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occur
     for stored in stored {
         match serde_json::from_str::<Event>(&stored.payload) {
             Ok(e) => events.push(e),
-            // Titles are personal data, so only the ids are logged.
+            // Titles are personal data and the error text can quote the payload: log the id and category only.
             Err(e) => {
-                tracing::warn!(event = %stored.id, error = %e, "stored event could not be read")
+                tracing::warn!(event = %stored.id, category = ?e.classify(), "stored event could not be read")
             }
         }
     }
