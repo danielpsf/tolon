@@ -14,15 +14,16 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const application = join(root, "target", "debug", process.platform === "win32" ? "tolon-app.exe" : "tolon-app");
 const driverUrl = "http://127.0.0.1:4444";
 
-// On Windows tauri-driver needs msedgedriver; GitHub runners ship it under EDGEWEBDRIVER, not on PATH.
+// tauri-driver finds msedgedriver.exe on PATH (CI installs the one matching WebView2); TOLON_NATIVE_DRIVER overrides it.
 function driverArgs() {
-  const dir = process.env.EDGEWEBDRIVER;
-  if (process.platform !== "win32" || !dir) return [];
-  return ["--native-driver", join(dir, "msedgedriver.exe")];
+  const native = process.env.TOLON_NATIVE_DRIVER;
+  console.log(`native driver: ${native ?? "tauri-driver default (PATH lookup)"}`);
+  return native ? ["--native-driver", native] : [];
 }
 
 async function waitForDriver(child) {
   for (let i = 0; i < 100; i++) {
+    if (spawnError) throw spawnError;
     if (child.exitCode !== null) throw new Error(`tauri-driver exited with code ${child.exitCode}`);
     try {
       if ((await fetch(`${driverUrl}/status`)).ok) return;
@@ -35,13 +36,14 @@ async function waitForDriver(child) {
 }
 
 let tauriDriver;
+let spawnError;
 let driver;
 
 before(async () => {
   assert.ok(existsSync(application), `debug app not built: ${application}`);
   tauriDriver = spawn("tauri-driver", driverArgs(), { stdio: "inherit" });
   tauriDriver.on("error", (err) => {
-    throw err;
+    spawnError = err;
   });
   await waitForDriver(tauriDriver);
   driver = await new Builder()
