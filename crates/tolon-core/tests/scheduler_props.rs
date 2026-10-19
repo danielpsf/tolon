@@ -1,16 +1,18 @@
 //! Property tests for the scheduler (docs/agents/core.md): for any events and any sequence of
 //! ticks and actions, an alarm fires at most once per Scheduled-to-Firing transition, a Dismissed
-//! alarm never fires, and `plan` is idempotent.
+//! alarm never fires, `plan` is idempotent and leaves a non-Scheduled state alone, and no meeting
+//! ever has two interrupts up at once. Ticks run with random pauses and quiet hours.
 
 mod common;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveTime, Utc};
+use chrono_tz::Tz;
 use common::{at, occ};
 use proptest::prelude::*;
 use std::collections::{HashMap, HashSet};
 use tolon_core::{
     already_there, apply_transitions, dismiss, join, plan, snooze, tick, Alarm, AlarmKind,
-    AlarmSettings, AlarmState, Occurrence, OccurrenceKey,
+    AlarmSettings, AlarmState, Occurrence, OccurrenceKey, QuietHours,
 };
 
 const CASES: u32 = 512;
@@ -43,8 +45,9 @@ fn alarm_settings() -> impl Strategy<Value = AlarmSettings> {
 
 #[derive(Debug, Clone)]
 enum Op {
-    /// `now` offset in seconds from the base (negative: before it), and an optional pause end.
-    Tick(i64, Option<i64>),
+    /// `now` offset in seconds from the base (negative: before it), an optional pause end, and
+    /// optional quiet hours.
+    Tick(i64, Option<i64>, Option<Quiet>),
     Snooze(usize, u32),
     Dismiss(usize),
     Join(usize),
@@ -55,13 +58,32 @@ enum Op {
 
 fn op() -> impl Strategy<Value = Op> {
     prop_oneof![
-        6 => (-600i64..10_000, prop::option::of(-600i64..10_000)).prop_map(|(n, p)| Op::Tick(n, p)),
+        6 => (-600i64..10_000, prop::option::of(-600i64..10_000), quiet())
+            .prop_map(|(n, p, q)| Op::Tick(n, p, q)),
         2 => (0usize..16, 0u32..12).prop_map(|(i, m)| Op::Snooze(i, m)),
         1 => (0usize..16).prop_map(Op::Dismiss),
         1 => (0usize..16).prop_map(Op::Join),
         1 => (0usize..16).prop_map(Op::AlreadyThere),
         1 => (-600i64..10_000).prop_map(Op::Replan),
     ]
+}
+
+/// Daily window as minutes of the day (start, end) and the weekend switch. The test day is a
+/// Thursday and the ticks span under three hours, so the window is what matters.
+type Quiet = (u32, u32, bool);
+
+fn quiet() -> impl Strategy<Value = Option<Quiet>> {
+    prop::option::of((0u32..1440, 0u32..1440, any::<bool>()))
+}
+
+fn quiet_hours((start, end, weekends): Quiet) -> Option<QuietHours> {
+    let time = |m: u32| NaiveTime::from_hms_opt(m / 60, m % 60, 0);
+    Some(QuietHours {
+        start: time(start)?,
+        end: time(end)?,
+        weekends,
+        tz: Tz::UTC,
+    })
 }
 
 type Id = (OccurrenceKey, AlarmKind);
@@ -79,13 +101,14 @@ proptest! {
     fn fires_at_most_once_per_scheduled_transition(
         occs in occurrences(),
         settings in alarm_settings(),
-        nows in prop::collection::vec((-600i64..10_000, 1usize..4), 1..40),
+        nows in prop::collection::vec((-600i64..10_000, 1usize..4, quiet()), 1..40),
     ) {
         let mut alarms = plan(&occs, &settings, &[], base());
         let mut fires: HashMap<Id, u32> = HashMap::new();
-        for (now, repeat) in nows {
+        for (now, repeat, q) in nows {
+            let q = q.and_then(quiet_hours);
             for _ in 0..repeat {
-                let transitions = tick(&alarms, secs(now), None, None);
+                let transitions = tick(&alarms, secs(now), None, q.as_ref());
                 let seen: HashSet<Id> = transitions.iter().map(|t| (t.occurrence.clone(), t.kind)).collect();
                 prop_assert_eq!(seen.len(), transitions.len(), "an alarm twice in one tick");
                 for t in transitions.iter().filter(|t| t.fires()) {
@@ -115,9 +138,10 @@ proptest! {
 
         for op in ops {
             match op {
-                Op::Tick(now, pause) => {
+                Op::Tick(now, pause, q) => {
                     clock = now;
-                    let transitions = tick(&alarms, secs(now), pause.map(secs), None);
+                    let q = q.and_then(quiet_hours);
+                    let transitions = tick(&alarms, secs(now), pause.map(secs), q.as_ref());
                     for t in &transitions {
                         let key = (t.occurrence.clone(), t.kind);
                         prop_assert!(!ended.contains(&key) || !t.fires(), "ended alarm fired: {key:?}");
@@ -126,6 +150,14 @@ proptest! {
                         }
                     }
                     apply_transitions(&mut alarms, &transitions);
+                    // One interrupt per meeting: never two alarms of one occurrence Firing.
+                    for a in alarms.iter().filter(|a| a.state.since().is_some()) {
+                        let n = alarms
+                            .iter()
+                            .filter(|b| b.occurrence == a.occurrence && b.state.since().is_some())
+                            .count();
+                        prop_assert_eq!(n, 1, "two Firing alarms for {:?}", a.occurrence);
+                    }
                 }
                 Op::Replan(now) => {
                     alarms = plan(&occs, &settings, &alarms, secs(now));
@@ -173,19 +205,11 @@ proptest! {
         settings in alarm_settings(),
         stored_settings in alarm_settings(),
         states in prop::collection::vec(state(), 0..12),
+        shifts in prop::collection::vec(0i64..3600, 12),
         strays in prop::collection::vec(stray_alarm(), 0..4),
         now in -600i64..10_000,
     ) {
-        let mut stored: Vec<Alarm> = plan(&occs, &stored_settings, &[], base())
-            .into_iter()
-            .zip(states)
-            .map(|(mut a, state)| {
-                a.state = state;
-                a
-            })
-            .collect();
-        stored.extend(strays);
-
+        let stored = stored_alarms(&occs, &stored_settings, states, &shifts, strays);
         let once = plan(&occs, &settings, &stored, secs(now));
         let twice = plan(&occs, &settings, &once, secs(now));
         prop_assert_eq!(&once, &twice);
@@ -198,6 +222,40 @@ proptest! {
         // Every alarm planned belongs to a given occurrence, or is a final one kept as stored.
         for a in &once {
             prop_assert!(a.state.is_final() || occs.iter().any(|o| o.key == a.occurrence));
+        }
+    }
+
+    /// `plan` leaves a non-Scheduled state alone, and keeps every final alarm. The one change it
+    /// may make is Expired to Scheduled, for an instance that moved later into an open window.
+    #[test]
+    fn plan_never_changes_a_non_scheduled_state_except_a_moved_expired_one(
+        occs in occurrences(),
+        settings in alarm_settings(),
+        stored_settings in alarm_settings(),
+        states in prop::collection::vec(state(), 0..12),
+        shifts in prop::collection::vec(0i64..3600, 12),
+        strays in prop::collection::vec(stray_alarm(), 0..4),
+        now in -600i64..10_000,
+    ) {
+        let stored = stored_alarms(&occs, &stored_settings, states, &shifts, strays);
+        let out = plan(&occs, &settings, &stored, secs(now));
+        // The last row for an identity is the one `plan` reads.
+        let last: HashMap<Id, &Alarm> = stored.iter().map(|a| (id(a), a)).collect();
+        for (key, old) in last {
+            if old.state == AlarmState::Scheduled {
+                continue;
+            }
+            let new = out.iter().find(|a| id(a) == key);
+            if old.state.is_final() {
+                prop_assert!(new.is_some(), "final alarm dropped: {old:?}");
+            }
+            if let Some(new) = new {
+                let rearmed = old.state == AlarmState::Expired
+                    && new.state == AlarmState::Scheduled
+                    && new.start > old.start
+                    && new.expires_at() > secs(now);
+                prop_assert!(new.state == old.state || rearmed, "{old:?} became {new:?}");
+            }
         }
     }
 }
@@ -231,4 +289,28 @@ fn stray_alarm() -> impl Strategy<Value = Alarm> {
 fn pick(alarms: &mut [Alarm], i: usize) -> Option<&mut Alarm> {
     let n = alarms.len();
     alarms.get_mut(i.checked_rem(n)?)
+}
+
+/// Stored rows as the store could hand them back: the alarms of `occs` planned under other
+/// settings, given random states and a `start` that is earlier than the occurrence's by a random
+/// shift (a meeting moved later since), plus rows of occurrences that are gone.
+fn stored_alarms(
+    occs: &[Occurrence],
+    settings: &AlarmSettings,
+    states: Vec<AlarmState>,
+    shifts: &[i64],
+    strays: Vec<Alarm>,
+) -> Vec<Alarm> {
+    let mut stored: Vec<Alarm> = plan(occs, settings, &[], base())
+        .into_iter()
+        .zip(states)
+        .zip(shifts)
+        .map(|((mut a, state), shift)| {
+            a.state = state;
+            a.start -= Duration::seconds(*shift);
+            a
+        })
+        .collect();
+    stored.extend(strays);
+    stored
 }
