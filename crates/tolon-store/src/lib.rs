@@ -5,11 +5,13 @@ use std::path::Path;
 use refinery::Runner;
 use rusqlite::Connection;
 
+mod alarms;
 mod calendars;
 mod events;
 mod settings;
 mod sync_log;
 
+pub use alarms::{AlarmRow, AlarmsRepo, TERMINAL_STATES};
 pub use calendars::{Calendar, CalendarsRepo};
 pub use events::{Event, EventsRepo, FeedEvent};
 pub use settings::SettingsRepo;
@@ -98,6 +100,10 @@ impl Store {
 
     pub fn settings(&self) -> SettingsRepo<'_> {
         SettingsRepo::new(&self.conn)
+    }
+
+    pub fn alarms(&self) -> AlarmsRepo<'_> {
+        AlarmsRepo::new(&self.conn)
     }
 
     pub fn calendars(&self) -> CalendarsRepo<'_> {
