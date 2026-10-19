@@ -48,9 +48,6 @@
   flex-direction: column;
   margin-bottom: var(--sm-space-2);
 }
-.tl-head .sm-display-m {
-  font-size: 48px;
-}
 
 /* Calendar rows: dot, name and detail, status, a fixed slot for Remove, the switch. */
 .tl-rows {
@@ -80,9 +77,6 @@
 }
 .tl-text > * {
   overflow-wrap: anywhere;
-}
-.tl-row .sm-badge.muted {
-  background: var(--sm-muted);
 }
 .tl-status {
   color: var(--sm-moss);
