@@ -69,6 +69,15 @@ describe("catalogues", () => {
     expect(catalogues["pt-PT"].nav.appearance).toBe("Aspeto");
     expect(catalogues["pt-BR"].nav.appearance).toBe("Aparência");
     expect(catalogues["pt-PT"].nav.label).toBe("Definições");
+    expect(catalogues["pt-PT"].calendars.changesSave).toBe("As alterações são guardadas automaticamente.");
+    expect(catalogues["pt-BR"].calendars.changesSave).toBe("As alterações são salvas automaticamente.");
+    expect(catalogues["pt-BR"].nav.quietHours).toBe("Horário de silêncio");
+    expect(catalogues["pt-PT"].nav.quietHours).toBe("Horário de silêncio");
+  });
+
+  it("keeps the mockup 03 sentence in en-US", () => {
+    expect(catalogues["en-US"].calendars.changesSave).toBe("Changes save as you make them.");
+    expect(catalogues["en-GB"].calendars.changesSave).toBe("Changes save automatically.");
   });
 });
 
@@ -174,6 +183,38 @@ describe("error codes", () => {
     expect(createCopy("en-US").syncError({ kind: "http", status: 418 })).toBe("Sync failed: 418");
   });
 
+  it("pins the S1.3 and S2.3 sentences verbatim in en-US", () => {
+    const c = createCopy("en-US");
+    expect(c.syncError({ kind: "http", status: 404 })).toBe("Sync failed: 404");
+    expect(c.syncLogDetail("skipped:1")).toBe("1 component skipped");
+  });
+
+  it.each(LOCALES)("%s gives http:404 no hint", (locale) => {
+    const c = createCopy(locale);
+    expect(c.syncError({ kind: "http", status: 404 })).toBe(c.t.errors.sync.http(404));
+  });
+
+  it("never renders undefined for an unknown kind or an http error without a status", () => {
+    for (const locale of LOCALES) {
+      const c = createCopy(locale);
+      const unknownKind = c.syncError({ kind: "from_the_future" } as unknown as SyncError);
+      const noStatus = c.syncError({ kind: "http" } as unknown as SyncError);
+      const badStatus = c.syncError({ kind: "http", status: "404" } as unknown as SyncError);
+      for (const text of [unknownKind, noStatus, badStatus]) {
+        expect(text).toBe(c.t.errors.sync.unknown);
+        expect(text).not.toContain("undefined");
+      }
+      // Keys of the catalogue that are not error kinds must not leak through.
+      expect(c.syncError({ kind: "httpHint" } as unknown as SyncError)).toBe(c.t.errors.sync.unknown);
+    }
+  });
+
+  it("uses the pt-PT hint 'endereço expirado' for 401", () => {
+    expect(createCopy("pt-PT").syncError({ kind: "http", status: 401 })).toBe(
+      "A sincronização falhou: 401, endereço expirado",
+    );
+  });
+
   it("falls back to the internal error for a code from a newer core", () => {
     const c = createCopy("pt-BR");
     expect(c.commandError({ code: "brand_new" as never })).toBe(c.t.errors.command.internal);
@@ -186,8 +227,10 @@ describe("formatting", () => {
 
   it("formats time in the locale's style", () => {
     expect(createCopy("en-US").formatTime(afternoon).replace(/\s/g, " ")).toBe("2:05 PM");
+    expect(createCopy("en-US").formatTime(morning).replace(/\s/g, " ")).toBe("9:05 AM");
     expect(createCopy("en-GB").formatTime(afternoon)).toBe("14:05");
-    expect(createCopy("pt-BR").formatTime(morning)).toBe("9:05");
+    expect(createCopy("pt-BR").formatTime(morning)).toBe("09:05");
+    expect(createCopy("pt-PT").formatTime(morning)).toBe("09:05");
     expect(createCopy("pt-PT").formatTime(afternoon)).toBe("14:05");
   });
 

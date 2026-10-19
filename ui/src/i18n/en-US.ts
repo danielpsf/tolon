@@ -56,11 +56,11 @@ export const enUS = {
       network: "Sync failed: there is no network connection.",
       unsupported_scheme: "Sync failed: only https and webcal links work.",
       invalid_url: "Sync failed: that is not a valid URL.",
+      unknown: "Sync failed.",
     },
     httpHints: {
       unauthorized: "link expired",
       forbidden: "access denied",
-      notFound: "calendar not found",
       tooManyRequests: "too many requests",
       server: "server error",
     },
@@ -80,9 +80,10 @@ export const enUS = {
     sync: Record<SyncErrorKind, string> & {
       http: (status: number) => string;
       httpHint: (status: number, hint: string) => string;
+      unknown: string;
     };
     command: Record<CommandErrorCode, string>;
-    httpHints: Record<"unauthorized" | "forbidden" | "notFound" | "tooManyRequests" | "server", string>;
+    httpHints: Record<"unauthorized" | "forbidden" | "tooManyRequests" | "server", string>;
   };
 };
 

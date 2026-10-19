@@ -30,7 +30,7 @@ export const enGB: Messages = {
     ignoreDeclined: "Events I declined",
     ignoreSolo: "Events without other people",
     ignoreMatching: (keywords) => `Events matching: ${keywords}`,
-    changesSave: "Changes save as you make them.",
+    changesSave: "Changes save automatically.",
   },
   relative: {
     neverSynced: "Not synced yet",
@@ -56,11 +56,11 @@ export const enGB: Messages = {
       network: "Sync failed: there is no network connection.",
       unsupported_scheme: "Sync failed: only https and webcal links work.",
       invalid_url: "Sync failed: that is not a valid URL.",
+      unknown: "Sync failed.",
     },
     httpHints: {
       unauthorized: "link expired",
       forbidden: "access denied",
-      notFound: "calendar not found",
       tooManyRequests: "too many requests",
       server: "server error",
     },

@@ -1,4 +1,4 @@
-import type { CommandError, SyncError } from "../api-types";
+import { SYNC_ERROR_KINDS, type CommandError, type SyncError } from "../api-types";
 import type { Messages } from "./en-US";
 import type { Locale } from "./locale";
 
@@ -6,9 +6,10 @@ type Instant = Date | number;
 
 const MINUTE = 60_000;
 
-/** Wall-clock time in the locale's own style: 14:05 in en-GB and pt, 2:05 PM in en-US. */
+/** Wall-clock time in the locale's own style: 2:05 PM in en-US, 09:05 and 14:05 elsewhere. */
 export function formatTime(locale: Locale, at: Instant): string {
-  return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(at);
+  const hour = locale === "en-US" ? "numeric" : "2-digit";
+  return new Intl.DateTimeFormat(locale, { hour, minute: "2-digit" }).format(at);
 }
 
 /** "2 min", "3 hr", "2 days": Intl picks the unit label and its plural. */
@@ -46,17 +47,25 @@ function httpHint(m: Messages, status: number): string | null {
   const hints = m.errors.httpHints;
   if (status === 401) return hints.unauthorized;
   if (status === 403) return hints.forbidden;
-  if (status === 404) return hints.notFound;
   if (status === 429) return hints.tooManyRequests;
   if (status >= 500) return hints.server;
   return null;
 }
 
-/** `CalendarDto.last_error` to copy. */
+/**
+ * `CalendarDto.last_error` to copy. The core sends `kind` as a plain string, so a kind this
+ * build does not know, or `http` without a status, gets the generic sentence, never `undefined`.
+ * 404 has no hint on purpose: S1.3 quotes "Sync failed: 404".
+ */
 export function syncErrorText(m: Messages, error: SyncError): string {
-  if (error.kind !== "http") return m.errors.sync[error.kind];
-  const hint = httpHint(m, error.status);
-  return hint ? m.errors.sync.httpHint(error.status, hint) : m.errors.sync.http(error.status);
+  const { kind } = error;
+  if (kind === "http") {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status !== "number" || !Number.isFinite(status)) return m.errors.sync.unknown;
+    const hint = httpHint(m, status);
+    return hint ? m.errors.sync.httpHint(status, hint) : m.errors.sync.http(status);
+  }
+  return (SYNC_ERROR_KINDS as readonly string[]).includes(kind) ? m.errors.sync[kind] : m.errors.sync.unknown;
 }
 
 /** A rejected command to copy. A code from a newer core falls back to the internal-error copy. */
