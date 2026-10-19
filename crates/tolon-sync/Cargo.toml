@@ -9,3 +9,10 @@ workspace = true
 
 [dependencies]
 tolon-core = { path = "../tolon-core" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
