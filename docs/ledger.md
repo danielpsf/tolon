@@ -6,7 +6,7 @@ Conventions: ids are `L-NNN` in creation order. The orchestrator creates rows; t
 
 | id | milestone | task | owner (agent role) | status | commit | proof / follow-ups |
 | --- | --- | --- | --- | --- | --- | --- |
-| L-001 | M0 | Create the Cargo workspace and crate skeletons per `docs/architecture.md` | core | review | d4e85cf | Gate run by hand (fmt, clippy, test) green. No LICENSE file in repo yet; manifests say `MIT OR Apache-2.0`, confirm and add it. Toolchain pinned to 1.99. |
+| L-001 | M0 | Create the Cargo workspace and crate skeletons per `docs/architecture.md` | core | done | d4e85cf | reviewer pass; bootstrap gate (fmt, clippy, test) green on macOS. Gate run by hand (fmt, clippy, test) green. No LICENSE file in repo yet; manifests say `MIT OR Apache-2.0`, confirm and add it. Toolchain pinned to 1.99. |
 | L-002 | M0 | Tauri 2 app boots on macOS, Windows, Linux with an empty Swiss Moss page | ui | todo | | |
 | L-003 | M0 | Vendor Swiss Moss into `ui/` as an npm dependency and bundle Inter + Inter Tight | ui | todo | | |
 | L-004 | M0 | SQLite store with migrations V1, `settings` repo, startup migration check | core | todo | | |
