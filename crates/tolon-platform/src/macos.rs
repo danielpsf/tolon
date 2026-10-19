@@ -1,6 +1,7 @@
 //! macOS implementation on AppKit. Every call needs the main thread.
 
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
+use crate::monitors::{to_physical_i32, to_physical_u32};
 use crate::{ns_view_of, Platform, PlatformError, Screen};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
@@ -37,13 +38,19 @@ impl Platform for MacPlatform {
             .enumerate()
             .map(|(i, s)| {
                 let f = s.frame();
+                let scale = s.backingScaleFactor();
+                let y = top_left_y(f.origin.y, f.size.height, primary_height);
                 Screen {
                     id: display_id(&s, u32::try_from(i).unwrap_or(u32::MAX)),
                     x: f.origin.x,
-                    y: top_left_y(f.origin.y, f.size.height, primary_height),
+                    y,
                     width: f.size.width,
                     height: f.size.height,
-                    scale_factor: s.backingScaleFactor(),
+                    physical_x: to_physical_i32(f.origin.x, scale),
+                    physical_y: to_physical_i32(y, scale),
+                    physical_width: to_physical_u32(f.size.width, scale),
+                    physical_height: to_physical_u32(f.size.height, scale),
+                    scale_factor: scale,
                     is_main: i == 0,
                 }
             })

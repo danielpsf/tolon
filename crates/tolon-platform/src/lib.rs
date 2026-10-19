@@ -35,17 +35,31 @@ pub type NativePlatform = StubPlatform;
 
 /// One connected display.
 ///
-/// `x` and `y` are the top-left corner in logical points, in the global coordinate space with
-/// the primary screen at `(0, 0)` and `y` growing downward (the convention Tauri and winit use
-/// for monitor positions). Multiply by `scale_factor` for physical pixels.
+/// Both coordinate sets put the primary screen's top-left corner at `(0, 0)` with `y` growing
+/// downward.
+///
+/// **Place windows with the `physical_*` fields**, through Tauri's `PhysicalPosition` and
+/// `PhysicalSize`. They are exact on every OS. `x`, `y`, `width` and `height` are logical
+/// points, for display and size maths. Only macOS has one logical space shared by all screens;
+/// on Windows each screen is divided by its own `scale_factor`, so the logical `x` and `y` of
+/// two screens with different scales cannot be compared with each other.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Screen {
     /// Stable while the display stays connected (macOS: `CGDirectDisplayID`).
     pub id: u32,
+    /// Top-left corner and size in logical points.
     pub x: f64,
     pub y: f64,
     pub width: f64,
     pub height: f64,
+    /// Top-left corner in physical pixels of the virtual screen (Windows: the native rectangle;
+    /// macOS: logical points times `scale_factor`, rounded).
+    pub physical_x: i32,
+    pub physical_y: i32,
+    /// Size in physical pixels.
+    pub physical_width: u32,
+    pub physical_height: u32,
+    /// Physical pixels per logical point.
     pub scale_factor: f64,
     /// The primary screen (macOS: the one with the menu bar). Exactly one screen has it set.
     pub is_main: bool,
@@ -140,6 +154,10 @@ impl Platform for StubPlatform {
             y: 0.0,
             width: 1440.0,
             height: 900.0,
+            physical_x: 0,
+            physical_y: 0,
+            physical_width: 2880,
+            physical_height: 1800,
             scale_factor: 2.0,
             is_main: true,
         }])
