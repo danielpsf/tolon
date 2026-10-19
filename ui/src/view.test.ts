@@ -1,0 +1,109 @@
+import { describe, expect, it } from "vitest";
+import { asCommandError } from "./api";
+import type { CalendarDto } from "./api-types";
+import { createCopy } from "./copy";
+import { displayUrl, errorText, statusOf, titleOf } from "./view";
+
+const en = createCopy("en-US");
+const now = Date.parse("2026-10-20T10:00:00Z");
+
+const calendar = (over: Partial<CalendarDto> = {}): CalendarDto => ({
+  id: "c1",
+  name: "Work",
+  kind: "ics",
+  enabled: true,
+  url: "https://calendar.google.com/calendar/ical/me%40example.com/private-123/basic.ics",
+  last_sync_at: "2026-10-20T09:59:00Z",
+  last_error: null,
+  ...over,
+});
+
+describe("displayUrl", () => {
+  it("keeps the host and the last segment, as mockup 03 shows", () => {
+    expect(displayUrl(calendar().url)).toBe("https://calendar.google.com/.../basic.ics");
+  });
+
+  it("never shows the secret, the query, the fragment or user info", () => {
+    const shown = displayUrl("https://user:pw@example.com:8443/a/private-123/b/team.ics?token=s3cret#frag");
+    expect(shown).toBe("https://example.com:8443/.../team.ics");
+    for (const secret of ["private-123", "s3cret", "frag", "user", "pw"]) expect(shown).not.toContain(secret);
+  });
+
+  it("shows only the host when the path is empty", () => {
+    expect(displayUrl("https://example.com/")).toBe("https://example.com");
+    expect(displayUrl("https://example.com")).toBe("https://example.com");
+  });
+
+  it("shows nothing for a missing or malformed URL", () => {
+    expect(displayUrl(null)).toBe("");
+    expect(displayUrl("not a url")).toBe("");
+  });
+});
+
+describe("statusOf", () => {
+  it("reads 'Synced 1 min ago' for a good sync, as in mockup 03", () => {
+    expect(statusOf(calendar(), en, now)).toEqual({ text: "Synced 1 min ago", failed: false });
+  });
+
+  it("reads 'Synced just now' inside the first minute", () => {
+    const fresh = calendar({ last_sync_at: "2026-10-20T09:59:45Z" });
+    expect(statusOf(fresh, en, now).text).toBe("Synced just now");
+  });
+
+  it("reads 'Sync failed: 404' for an HTTP 404 (S1.3)", () => {
+    const failed = calendar({ last_sync_at: null, last_error: { kind: "http", status: 404 } });
+    expect(statusOf(failed, en, now)).toEqual({ text: "Sync failed: 404", failed: true });
+  });
+
+  it("adds the hint for an expired link, as in mockup 03", () => {
+    const expired = calendar({ last_error: { kind: "http", status: 401 } });
+    expect(statusOf(expired, en, now).text).toBe("Sync failed: 401, link expired");
+  });
+
+  it("lets a failure win over an earlier good sync", () => {
+    const failed = calendar({ last_error: { kind: "timeout" } });
+    expect(statusOf(failed, en, now)).toEqual({
+      text: "Sync failed: the calendar took too long to answer.",
+      failed: true,
+    });
+  });
+
+  it("says so when the calendar never synced, or the timestamp is unreadable", () => {
+    expect(statusOf(calendar({ last_sync_at: null }), en, now).text).toBe("Not synced yet");
+    expect(statusOf(calendar({ last_sync_at: "garbage" }), en, now).text).toBe("Not synced yet");
+  });
+
+  it("follows the locale", () => {
+    const pt = createCopy("pt-BR");
+    expect(statusOf(calendar(), pt, now).text).toBe("Sincronizado há 1 min");
+  });
+});
+
+describe("titleOf", () => {
+  it("labels a feed with its kind, as 'Work, iCal subscription' in mockup 03", () => {
+    expect(titleOf(calendar(), en)).toBe("Work, iCal subscription");
+  });
+
+  it("leaves a kind it does not know with the bare name", () => {
+    expect(titleOf(calendar({ kind: "other" }), en)).toBe("Work");
+  });
+});
+
+describe("error mapping", () => {
+  it("turns a command error code into its sentence", () => {
+    expect(errorText({ code: "invalid_url" }, en)).toBe("That is not a valid calendar URL.");
+    expect(errorText({ code: "unsupported_scheme" }, en)).toBe("Tolon can only add https or webcal links.");
+    expect(errorText({ code: "not_found" }, en)).toBe("That calendar no longer exists.");
+  });
+
+  it("reads anything that is not a { code } as the internal error", () => {
+    for (const odd of ["boom", null, undefined, 42, new Error("x"), { code: 7 }]) {
+      expect(asCommandError(odd)).toEqual({ code: "internal" });
+      expect(errorText(odd, en)).toBe("Something went wrong inside Tolon. Try again.");
+    }
+  });
+
+  it("falls back to the internal sentence for a code from a newer core", () => {
+    expect(errorText({ code: "from_the_future" }, en)).toBe("Something went wrong inside Tolon. Try again.");
+  });
+});
