@@ -5,6 +5,7 @@ mod fixtures;
 mod fsutil;
 mod ids;
 mod layers;
+mod release_features;
 mod scenario_ids;
 
 use anyhow::{Context, Result};
@@ -15,10 +16,11 @@ const USAGE: &str = "usage: cargo xtask <command>\n\n\
 commands:\n  ci                   fmt, clippy, tests, layers, scenario ids, ui lint and tests\n  \
 layers               check crate dependency direction and target_os confinement\n  \
 check-scenario-ids   check scenario and AC ids against docs/plan.md\n  \
+check-release-features  keep the e2e-loopback test seam out of release builds\n  \
 fixtures             rewrite fixtures/ics/*.expected.json (review the diff)\n  \
 bump                 not implemented yet (L-019)";
 
-fn repo_root() -> Result<PathBuf> {
+pub(crate) fn repo_root() -> Result<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest
         .parent()
@@ -32,6 +34,7 @@ fn run(command: &str) -> Result<ExitCode> {
         "ci" => ci::run(&root)?,
         "layers" => layers::run(&root)?,
         "check-scenario-ids" => scenario_ids::run(&root)?,
+        "check-release-features" => release_features::run(&root)?,
         "fixtures" => fixtures::run(&root)?,
         "bump" => {
             eprintln!("bump: not implemented yet (L-019)");

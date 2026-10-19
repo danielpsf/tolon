@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::Command;
 
-use crate::{layers, scenario_ids};
+use crate::{layers, release_features, scenario_ids};
 
 const CLIPPY_ARGS: &[&str] = &[
     "clippy",
@@ -45,6 +45,17 @@ pub fn run(root: &Path) -> Result<()> {
     run_step(root, "fmt", &cargo, &["fmt", "--all", "--check"])?;
     run_step(root, "clippy", &cargo, CLIPPY_ARGS)?;
     run_step(root, "test", &cargo, &["test", "--workspace"])?;
+    // The e2e-only seam is off in the steps above; lint and test it too (debug profile only).
+    let mut seam_lint = vec!["clippy", "-p", "tolon-app", "--features", "e2e-loopback"];
+    seam_lint.extend(&CLIPPY_ARGS[2..]);
+    run_step(root, "clippy e2e-loopback", &cargo, &seam_lint)?;
+    run_step(
+        root,
+        "test e2e-loopback",
+        &cargo,
+        &["test", "-p", "tolon-sync", "--features", "e2e-loopback"],
+    )?;
+    run_internal("check-release-features", || release_features::run(root))?;
     run_internal("layers", || layers::run(root))?;
     run_internal("check-scenario-ids", || scenario_ids::run(root))?;
 
