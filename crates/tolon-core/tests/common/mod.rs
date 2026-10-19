@@ -73,6 +73,29 @@ pub fn huge_ics() -> TestResult<String> {
     Ok(s)
 }
 
+/// A time on the test day (Thursday 22 Oct 2026), in UTC.
+pub fn at(h: u32, m: u32) -> TestResult<DateTime<Utc>> {
+    utc(2026, 10, 22, h, m)
+}
+
+/// A one-hour meeting with its own join link, starting at `start`.
+pub fn occ(title: &str, start: DateTime<Utc>, people: u32) -> tolon_core::Occurrence {
+    use tolon_core::{EventId, JoinTarget, OccurrenceKey};
+    tolon_core::Occurrence {
+        key: OccurrenceKey {
+            event: EventId(format!("cal:{title}")),
+            original_start: start,
+        },
+        event: EventId(format!("cal:{title}")),
+        start: start.with_timezone(&LOCAL),
+        end: (start + Duration::hours(1)).with_timezone(&LOCAL),
+        title: title.to_string(),
+        all_day: false,
+        join: JoinTarget::Link(format!("https://example.com/{title}")),
+        people,
+    }
+}
+
 /// The 12 files of S2.1, in plan order.
 pub const FIXTURE_FILES: &[&str] = &[
     "google-basic.ics",

@@ -1,9 +1,10 @@
 //! Domain types. `Event` is stored as canonical JSON (`events.payload`), so field order is the
 //! serialisation order: do not reorder fields without a store migration.
 
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Offset, TimeZone, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Offset, SecondsFormat, TimeZone, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -149,6 +150,43 @@ pub struct Event {
 pub struct OccurrenceKey {
     pub event: EventId,
     pub original_start: DateTime<Utc>,
+}
+
+/// The stable text form kept in `alarms.occurrence_key`: `<event id>@<original start, RFC 3339 UTC>`.
+/// Event ids can contain `@`, the timestamp cannot, so parsing splits on the last one.
+impl fmt::Display for OccurrenceKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let at = self
+            .original_start
+            .to_rfc3339_opts(SecondsFormat::AutoSi, true);
+        write!(f, "{}@{at}", self.event.0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParseKeyError;
+
+impl fmt::Display for ParseKeyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("not an occurrence key: expected <event id>@<RFC 3339 time>")
+    }
+}
+
+impl std::error::Error for ParseKeyError {}
+
+impl FromStr for OccurrenceKey {
+    type Err = ParseKeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (event, at) = s.rsplit_once('@').ok_or(ParseKeyError)?;
+        let original_start = DateTime::parse_from_rfc3339(at)
+            .map_err(|_| ParseKeyError)?
+            .with_timezone(&Utc);
+        Ok(Self {
+            event: EventId(event.to_string()),
+            original_start,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
