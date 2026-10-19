@@ -14,7 +14,9 @@ export type Locale = keyof typeof catalogues;
 
 export const LOCALES = Object.keys(catalogues) as Locale[];
 
-const BRITISH_REGIONS = new Set(["GB", "IE", "AU", "NZ"]);
+// docs/decisions.md: pt-AO falls to pt-PT, en-IE to en-GB. Portuguese outside Brazil follows pt-PT.
+const PT_PT_REGIONS = new Set(["PT", "AO", "MZ", "CV", "GW", "ST", "TL", "MO"]);
+const EN_US_REGIONS = new Set(["US", "CA", "PH"]);
 
 /** One BCP 47 tag to a shipped locale, or null when the language is not shipped. */
 function matchTag(tag: string): Locale | null {
@@ -25,9 +27,9 @@ function matchTag(tag: string): Locale | null {
   } catch {
     return null;
   }
-  if (language === "en") return region && BRITISH_REGIONS.has(region) ? "en-GB" : "en-US";
-  // The user is Brazilian: bare "pt" and every other pt-* region use the pt-BR catalogue.
-  if (language === "pt") return region === "PT" ? "pt-PT" : "pt-BR";
+  if (language === "en") return !region || EN_US_REGIONS.has(region) ? "en-US" : "en-GB";
+  // Bare "pt" and BR stay pt-BR (the user is Brazilian).
+  if (language === "pt") return region && PT_PT_REGIONS.has(region) ? "pt-PT" : "pt-BR";
   return null;
 }
 
