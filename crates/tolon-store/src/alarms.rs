@@ -1,3 +1,5 @@
+//! `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
+
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::StoreError;
@@ -11,6 +13,8 @@ fn terminal_json() -> Result<String, StoreError> {
 }
 
 /// One alarm row. Every field is an opaque string here; the app maps it to the core types.
+///
+/// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AlarmRow {
     pub occurrence_key: String,
@@ -99,6 +103,8 @@ impl<'a> AlarmsRepo<'a> {
     }
 
     /// Every alarm, ordered by `at`.
+    ///
+    /// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
     pub fn list(&self) -> Result<Vec<AlarmRow>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
             "select {COLUMNS} from alarms order by at, occurrence_key, kind"
@@ -108,6 +114,8 @@ impl<'a> AlarmsRepo<'a> {
     }
 
     /// Alarms whose state is not in `TERMINAL_STATES`, ordered by `at`.
+    ///
+    /// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
     pub fn list_active(&self) -> Result<Vec<AlarmRow>, StoreError> {
         let mut stmt = self.conn.prepare(&format!(
             "select {COLUMNS} from alarms
@@ -118,8 +126,10 @@ impl<'a> AlarmsRepo<'a> {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Deletes terminal alarms whose `at` is before `cutoff` (string comparison, so use one
-    /// timestamp format). Non-terminal rows stay. Returns the number deleted.
+    /// Deletes terminal alarms whose `at` is before `cutoff`. Non-terminal rows stay. Returns
+    /// the number deleted.
+    ///
+    /// `at` and `state_at` must be RFC 3339 UTC with a `Z` suffix (for example `2026-10-22T08:00:00Z`). Ordering in `list`/`list_active` and `prune_before` compare them as text.
     pub fn prune_before(&self, cutoff: &str) -> Result<usize, StoreError> {
         Ok(self.conn.execute(
             "delete from alarms
@@ -335,6 +345,33 @@ mod tests {
         ])?;
         a.delete_missing(&[(evil.to_string(), "Lead".to_string())])?;
         assert_eq!(keys(&a.list()?), [(evil, "Lead")]);
+        Ok(())
+    }
+
+    #[test]
+    fn ordering_and_prune_use_utc_z_timestamps() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let a = store.alarms();
+        a.upsert_all(&[
+            row("c", "Lead", "2026-10-23T00:00:00Z", "Dismissed", None),
+            row("a", "Lead", "2026-10-22T23:59:59Z", "Dismissed", None),
+            row("b", "Lead", "2026-10-22T08:00:00Z", "Expired", None),
+            row(
+                "d",
+                "Lead",
+                "2026-10-21T09:00:00Z",
+                "Snoozed",
+                Some("2026-10-24T09:00:00Z"),
+            ),
+        ])?;
+        assert_eq!(
+            keys(&a.list()?),
+            [("d", "Lead"), ("b", "Lead"), ("a", "Lead"), ("c", "Lead")]
+        );
+        assert_eq!(keys(&a.list_active()?), [("d", "Lead")]);
+        // Cutoff at midnight: removes the terminal rows of the 22nd, keeps the 23rd and the snoozed row.
+        assert_eq!(a.prune_before("2026-10-23T00:00:00Z")?, 2);
+        assert_eq!(keys(&a.list()?), [("d", "Lead"), ("c", "Lead")]);
         Ok(())
     }
 
