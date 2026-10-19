@@ -130,6 +130,10 @@ export function CalendarsPage() {
   const [removing, setRemoving] = useState<CalendarDto | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
+  // The dialog hands focus back to the Remove button it came from, which is gone after a removal.
+  // Its `close` event fires after that hand-back, so focus moves to Add calendar there. A frame callback
+  // would not do: WebView2 holds those back while its window is in the background.
+  const focusAddOnClose = useRef(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -171,8 +175,7 @@ export function CalendarsPage() {
     }
     setRemoveBusy(false);
     setRemoving(null);
-    // The dialog hands focus back to the Remove button it came from, which is gone by then.
-    requestAnimationFrame(() => addButton.current?.focus());
+    focusAddOnClose.current = true;
   }
 
   const open = () => setAdding(true);
@@ -274,7 +277,11 @@ export function CalendarsPage() {
       <ConfirmRemove
         target={removing}
         busy={removeBusy}
-        onCancel={() => setRemoving(null)}
+        onCancel={() => {
+          setRemoving(null);
+          if (focusAddOnClose.current) addButton.current?.focus();
+          focusAddOnClose.current = false;
+        }}
         onConfirm={() => void confirmRemove()}
       />
     </>
