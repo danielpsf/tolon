@@ -3,6 +3,7 @@
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -96,10 +97,10 @@ test("the app boots and shows the paper background", async () => {
 });
 
 // ---- Calendars page (L-008) -------------------------------------------------------------------
-// Production only fetches https, and a test cannot hand the app a certificate it trusts, so no test here
-// can make a fetch succeed: S1.1 (a feed that syncs) needs a test fetch path in tolon-app. What can run
-// is the failure path, which touches the same commands: a closed local port refuses the connection at once
-// and needs no network. The 404 wording of S1.3 is covered by the Rust test s1_3 and the Vitest mapping.
+// Production only fetches https. A feed that syncs (S1.1) needs the `e2e-loopback` build feature: ci.yml builds
+// the debug app with `--features e2e-loopback`, which lets it fetch http from a loopback host and from nothing
+// else. The failure path (S1.3) needs no feature: a closed local port refuses the connection at once.
+// The 404 wording of S1.3 is covered by the Rust test s1_3 and the Vitest mapping.
 
 const WAIT = 15_000;
 const english = "Tolon could not connect to the server.";
@@ -219,4 +220,68 @@ test("removing a calendar asks first and then removes it", async () => {
 
 test("the app keeps its data in the temp dir", { skip: process.platform !== "linux" }, () => {
   assert.ok(existsSync(join(dataHome, "dev.tolon.desktop", "tolon.db")), "tolon.db is not under XDG_DATA_HOME");
+});
+
+// ---- S1.1 with a fixture feed (L-037) ---------------------------------------------------------
+
+const pad = (n) => String(n).padStart(2, "0");
+const now = new Date();
+const day = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+/** A feed named by X-WR-CALNAME with one event today; floating time reads in the machine's zone. */
+const FIXTURE_FEED = [
+  "BEGIN:VCALENDAR",
+  "VERSION:2.0",
+  "PRODID:-//Tolon e2e//EN",
+  "X-WR-CALNAME:Team fixture",
+  "BEGIN:VEVENT",
+  "UID:e2e-standup@example.com",
+  `DTSTAMP:${day}T000000Z`,
+  `DTSTART:${day}T120000`,
+  `DTEND:${day}T123000`,
+  "SUMMARY:Team standup",
+  "END:VEVENT",
+  "END:VCALENDAR",
+  "",
+].join("\r\n");
+
+/** Serves the fixture feed on 127.0.0.1 and a random port; `requests` lists the paths asked for. */
+async function fixtureServer() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push(req.url);
+    res.writeHead(200, { "Content-Type": "text/calendar; charset=utf-8" });
+    res.end(FIXTURE_FEED);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { server, requests, port: server.address().port };
+}
+
+const fixtureRows = () =>
+  driver.findElements(By.xpath('//*[contains(@class, "tl-name") and starts-with(., "Team fixture")]/ancestor::*[contains(@class, "tl-row")][1]'));
+
+test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () => {
+  const { server, requests, port } = await fixtureServer();
+  try {
+    const input = await openAddForm();
+    await input.sendKeys(`http://127.0.0.1:${port}/calendar/private-123/basic.ics`);
+    await (await find('#add-calendar button[type="submit"]')).click();
+
+    const row = await waitFor("a row named from the feed", async () => (await fixtureRows())[0]);
+    // The name carries the kind after a comma, as in the s1_3 row ("127.0.0.1, iCal subscription").
+    assert.equal(await row.findElement(By.css(".tl-name")).getText(), "Team fixture, iCal subscription");
+    assert.equal(await row.findElement(By.css(".tl-status")).getText(), "Synced just now");
+    assert.equal((await row.findElements(By.css(".tl-status.failed"))).length, 0);
+    // The row shows scheme and host only (AC1.3); the token in the path never reaches the page.
+    assert.equal(await row.findElement(By.css(".sm-caption")).getText(), "http://127.0.0.1");
+    assert.ok(!(await driver.findElement(By.css("body")).getText()).includes("private-123"));
+    assert.deepEqual(requests, ["/calendar/private-123/basic.ics"], "one fetch, made by the add");
+
+    // Leave nothing behind: Windows keeps its data outside the temp dir.
+    await row.findElement(By.css(".tl-remove button")).click();
+    await (await find("dialog[open] .sm-btn.danger")).click();
+    await waitFor("the fixture calendar to leave the list", async () => (await fixtureRows()).length === 0);
+  } finally {
+    server.closeAllConnections(); // reqwest keeps the connection alive; close() alone would wait for it
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
