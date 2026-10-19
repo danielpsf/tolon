@@ -6,7 +6,9 @@ use crate::StoreError;
 
 /// States after which an alarm never fires again. The names match `AlarmState` in
 /// `docs/architecture.md`; the store keeps states as plain strings.
-pub const TERMINAL_STATES: [&str; 3] = ["Dismissed", "Joined", "Expired"];
+///
+/// Must match `tolon_core::AlarmState::name()` for the final states; tolon-app pins this with a test.
+pub const TERMINAL_STATES: [&str; 3] = ["dismissed", "joined", "expired"];
 
 fn terminal_json() -> Result<String, StoreError> {
     Ok(serde_json::to_string(&TERMINAL_STATES)?)
@@ -183,11 +185,11 @@ mod tests {
     fn upsert_and_get() -> TestResult {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
-        assert_eq!(a.get("k", "Lead")?, None);
-        let r = row("k", "Lead", "t1", "Scheduled", None);
+        assert_eq!(a.get("k", "lead")?, None);
+        let r = row("k", "lead", "t1", "scheduled", None);
         a.upsert(&r)?;
-        assert_eq!(a.get("k", "Lead")?, Some(r));
-        assert_eq!(a.get("k", "Start")?, None);
+        assert_eq!(a.get("k", "lead")?, Some(r));
+        assert_eq!(a.get("k", "start")?, None);
         Ok(())
     }
 
@@ -195,13 +197,13 @@ mod tests {
     fn upsert_overwrites_the_state() -> TestResult {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
-        a.upsert(&row("k", "Lead", "t1", "Scheduled", None))?;
-        let snoozed = row("k", "Lead", "t1", "Snoozed", Some("t2"));
+        a.upsert(&row("k", "lead", "t1", "scheduled", None))?;
+        let snoozed = row("k", "lead", "t1", "snoozed", Some("t2"));
         a.upsert(&snoozed)?;
         assert_eq!(a.list()?, std::slice::from_ref(&snoozed));
-        let dismissed = row("k", "Lead", "t1", "Dismissed", None);
+        let dismissed = row("k", "lead", "t1", "dismissed", None);
         a.upsert(&dismissed)?;
-        assert_eq!(a.get("k", "Lead")?, Some(dismissed));
+        assert_eq!(a.get("k", "lead")?, Some(dismissed));
         Ok(())
     }
 
@@ -209,15 +211,15 @@ mod tests {
     fn upsert_all_writes_every_row_and_overwrites() -> TestResult {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
-        a.upsert(&row("a", "Lead", "t1", "Scheduled", None))?;
+        a.upsert(&row("a", "lead", "t1", "scheduled", None))?;
         a.upsert_all(&[
-            row("a", "Lead", "t1", "Joined", None),
-            row("b", "Lead", "t2", "Scheduled", None),
-            row("b", "Start", "t3", "Scheduled", None),
+            row("a", "lead", "t1", "joined", None),
+            row("b", "lead", "t2", "scheduled", None),
+            row("b", "start", "t3", "scheduled", None),
         ])?;
         let all = a.list()?;
-        assert_eq!(keys(&all), [("a", "Lead"), ("b", "Lead"), ("b", "Start")]);
-        assert_eq!(all[0].state, "Joined");
+        assert_eq!(keys(&all), [("a", "lead"), ("b", "lead"), ("b", "start")]);
+        assert_eq!(all[0].state, "joined");
         a.upsert_all(&[])?;
         assert_eq!(a.list()?.len(), 3);
         Ok(())
@@ -233,8 +235,8 @@ mod tests {
              begin select raise(abort, 'boom'); end;",
         )?;
         let res = a.upsert_all(&[
-            row("a", "Lead", "t1", "Scheduled", None),
-            row("b", "Lead", "t2", "boom", None),
+            row("a", "lead", "t1", "scheduled", None),
+            row("b", "lead", "t2", "boom", None),
         ]);
         assert!(res.is_err());
         assert!(a.list()?.is_empty());
@@ -246,13 +248,13 @@ mod tests {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
         a.upsert_all(&[
-            row("c", "Lead", "t3", "Scheduled", None),
-            row("a", "Lead", "t1", "Scheduled", None),
-            row("b", "Lead", "t2", "Scheduled", None),
+            row("c", "lead", "t3", "scheduled", None),
+            row("a", "lead", "t1", "scheduled", None),
+            row("b", "lead", "t2", "scheduled", None),
         ])?;
         assert_eq!(
             keys(&a.list()?),
-            [("a", "Lead"), ("b", "Lead"), ("c", "Lead")]
+            [("a", "lead"), ("b", "lead"), ("c", "lead")]
         );
         Ok(())
     }
@@ -262,15 +264,15 @@ mod tests {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
         a.upsert_all(&[
-            row("1", "Lead", "t1", "Scheduled", None),
-            row("2", "Lead", "t2", "Firing", None),
-            row("3", "Lead", "t3", "Snoozed", Some("t9")),
-            row("4", "Lead", "t4", "Dismissed", None),
-            row("5", "Lead", "t5", "Joined", None),
-            row("6", "Lead", "t6", "Expired", None),
+            row("1", "lead", "t1", "scheduled", None),
+            row("2", "lead", "t2", "firing", None),
+            row("3", "lead", "t3", "snoozed", Some("t9")),
+            row("4", "lead", "t4", "dismissed", None),
+            row("5", "lead", "t5", "joined", None),
+            row("6", "lead", "t6", "expired", None),
         ])?;
         let active = a.list_active()?;
-        assert_eq!(keys(&active), [("1", "Lead"), ("2", "Lead"), ("3", "Lead")]);
+        assert_eq!(keys(&active), [("1", "lead"), ("2", "lead"), ("3", "lead")]);
         assert_eq!(a.list()?.len(), 6);
         Ok(())
     }
@@ -280,22 +282,22 @@ mod tests {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
         a.upsert_all(&[
-            row("old-dismissed", "Lead", "t1", "Dismissed", None),
-            row("old-joined", "Lead", "t2", "Joined", None),
-            row("old-expired", "Lead", "t3", "Expired", None),
-            row("old-snoozed", "Lead", "t1", "Snoozed", Some("t9")),
-            row("old-scheduled", "Lead", "t1", "Scheduled", None),
-            row("new-dismissed", "Lead", "t8", "Dismissed", None),
-            row("at-cutoff", "Lead", "t5", "Dismissed", None),
+            row("old-dismissed", "lead", "t1", "dismissed", None),
+            row("old-joined", "lead", "t2", "joined", None),
+            row("old-expired", "lead", "t3", "expired", None),
+            row("old-snoozed", "lead", "t1", "snoozed", Some("t9")),
+            row("old-scheduled", "lead", "t1", "scheduled", None),
+            row("new-dismissed", "lead", "t8", "dismissed", None),
+            row("at-cutoff", "lead", "t5", "dismissed", None),
         ])?;
         assert_eq!(a.prune_before("t5")?, 3);
         assert_eq!(
             keys(&a.list()?),
             [
-                ("old-scheduled", "Lead"),
-                ("old-snoozed", "Lead"),
-                ("at-cutoff", "Lead"),
-                ("new-dismissed", "Lead"),
+                ("old-scheduled", "lead"),
+                ("old-snoozed", "lead"),
+                ("at-cutoff", "lead"),
+                ("new-dismissed", "lead"),
             ]
         );
         Ok(())
@@ -305,10 +307,10 @@ mod tests {
     fn prune_before_keeps_a_snoozed_row() -> TestResult {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
-        let snoozed = row("k", "Lead", "t1", "Snoozed", Some("t99"));
+        let snoozed = row("k", "lead", "t1", "snoozed", Some("t99"));
         a.upsert(&snoozed)?;
         assert_eq!(a.prune_before("t50")?, 0);
-        assert_eq!(a.get("k", "Lead")?, Some(snoozed));
+        assert_eq!(a.get("k", "lead")?, Some(snoozed));
         Ok(())
     }
 
@@ -317,18 +319,18 @@ mod tests {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
         a.upsert_all(&[
-            row("a", "Lead", "t1", "Scheduled", None),
-            row("a", "Start", "t2", "Scheduled", None),
-            row("b", "Lead", "t3", "Dismissed", None),
-            row("c", "Lead", "t4", "Snoozed", Some("t9")),
+            row("a", "lead", "t1", "scheduled", None),
+            row("a", "start", "t2", "scheduled", None),
+            row("b", "lead", "t3", "dismissed", None),
+            row("c", "lead", "t4", "snoozed", Some("t9")),
         ])?;
         let keep = [
-            ("a".to_string(), "Lead".to_string()),
-            ("c".to_string(), "Lead".to_string()),
-            ("zzz".to_string(), "Lead".to_string()),
+            ("a".to_string(), "lead".to_string()),
+            ("c".to_string(), "lead".to_string()),
+            ("zzz".to_string(), "lead".to_string()),
         ];
         assert_eq!(a.delete_missing(&keep)?, 2);
-        assert_eq!(keys(&a.list()?), [("a", "Lead"), ("c", "Lead")]);
+        assert_eq!(keys(&a.list()?), [("a", "lead"), ("c", "lead")]);
         assert_eq!(a.delete_missing(&[])?, 2);
         assert!(a.list()?.is_empty());
         Ok(())
@@ -340,11 +342,11 @@ mod tests {
         let a = store.alarms();
         let evil = "x'\"],[\"y";
         a.upsert_all(&[
-            row(evil, "Lead", "t1", "Scheduled", None),
-            row("b", "Lead", "t2", "Scheduled", None),
+            row(evil, "lead", "t1", "scheduled", None),
+            row("b", "lead", "t2", "scheduled", None),
         ])?;
-        a.delete_missing(&[(evil.to_string(), "Lead".to_string())])?;
-        assert_eq!(keys(&a.list()?), [(evil, "Lead")]);
+        a.delete_missing(&[(evil.to_string(), "lead".to_string())])?;
+        assert_eq!(keys(&a.list()?), [(evil, "lead")]);
         Ok(())
     }
 
@@ -353,25 +355,25 @@ mod tests {
         let store = Store::open_in_memory()?;
         let a = store.alarms();
         a.upsert_all(&[
-            row("c", "Lead", "2026-10-23T00:00:00Z", "Dismissed", None),
-            row("a", "Lead", "2026-10-22T23:59:59Z", "Dismissed", None),
-            row("b", "Lead", "2026-10-22T08:00:00Z", "Expired", None),
+            row("c", "lead", "2026-10-23T00:00:00Z", "dismissed", None),
+            row("a", "lead", "2026-10-22T23:59:59Z", "dismissed", None),
+            row("b", "lead", "2026-10-22T08:00:00Z", "expired", None),
             row(
                 "d",
-                "Lead",
+                "lead",
                 "2026-10-21T09:00:00Z",
-                "Snoozed",
+                "snoozed",
                 Some("2026-10-24T09:00:00Z"),
             ),
         ])?;
         assert_eq!(
             keys(&a.list()?),
-            [("d", "Lead"), ("b", "Lead"), ("a", "Lead"), ("c", "Lead")]
+            [("d", "lead"), ("b", "lead"), ("a", "lead"), ("c", "lead")]
         );
-        assert_eq!(keys(&a.list_active()?), [("d", "Lead")]);
+        assert_eq!(keys(&a.list_active()?), [("d", "lead")]);
         // Cutoff at midnight: removes the terminal rows of the 22nd, keeps the 23rd and the snoozed row.
         assert_eq!(a.prune_before("2026-10-23T00:00:00Z")?, 2);
-        assert_eq!(keys(&a.list()?), [("d", "Lead"), ("c", "Lead")]);
+        assert_eq!(keys(&a.list()?), [("d", "lead"), ("c", "lead")]);
         Ok(())
     }
 
@@ -379,12 +381,12 @@ mod tests {
     fn ac3_3_alarm_state_survives_restart() -> TestResult {
         let dir = tempfile::tempdir()?;
         let path = dir.path().join("tolon.db");
-        let dismissed = row("m1", "Lead", "2026-01-01T09:55:00Z", "Dismissed", None);
+        let dismissed = row("m1", "lead", "2026-01-01T09:55:00Z", "dismissed", None);
         let snoozed = row(
             "m2",
-            "Start",
+            "start",
             "2026-01-01T10:00:00Z",
-            "Snoozed",
+            "snoozed",
             Some("2026-01-01T10:05:00Z"),
         );
         {
@@ -395,8 +397,8 @@ mod tests {
         }
         let store = Store::open(&path)?;
         let a = store.alarms();
-        assert_eq!(a.get("m1", "Lead")?, Some(dismissed));
-        assert_eq!(a.get("m2", "Start")?, Some(snoozed.clone()));
+        assert_eq!(a.get("m1", "lead")?, Some(dismissed));
+        assert_eq!(a.get("m2", "start")?, Some(snoozed.clone()));
         assert_eq!(a.list_active()?, [snoozed]);
         Ok(())
     }
