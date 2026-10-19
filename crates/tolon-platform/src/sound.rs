@@ -187,16 +187,44 @@ fn gone() -> PlatformError {
     PlatformError::Audio("the audio thread has stopped".into())
 }
 
+/// Open the default output the way `rodio::DeviceSinkBuilder::open_default_sink` does (default
+/// device with its other configs as fallback, then any other real output device), but with an
+/// error callback that marks the sink dead.
 fn open_default() -> Result<Box<dyn Output>, PlatformError> {
+    use rodio::cpal::traits::HostTrait;
+    use rodio::stream::DeviceSinkError;
+    use rodio::DeviceTrait;
+
     let dead = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&dead);
-    let mut sink = rodio::DeviceSinkBuilder::from_default_device()
-        .map_err(|e| PlatformError::Audio(format!("no audio output: {e}")))?
-        .with_error_callback(move |e| {
-            tracing::warn!("audio stream error, the next sound reopens the device: {e}");
-            flag.store(true, Ordering::SeqCst);
+    let on_error = move |e: rodio::CpalError| {
+        tracing::warn!("audio stream error, the next sound reopens the device: {e}");
+        flag.store(true, Ordering::SeqCst);
+    };
+    let open_on = |device: rodio::Device| {
+        rodio::DeviceSinkBuilder::from_device(device).and_then(|b| {
+            b.with_error_callback(on_error.clone())
+                .open_sink_or_fallback()
         })
-        .open_stream()
+    };
+    let host = rodio::cpal::default_host();
+    let mut sink = host
+        .default_output_device()
+        .ok_or(DeviceSinkError::NoDevice)
+        .and_then(open_on)
+        .or_else(|original| {
+            let Ok(devices) = host.output_devices() else {
+                return Err(original);
+            };
+            devices
+                .filter(|d| {
+                    d.description()
+                        .map(|desc| desc.driver().is_some_and(|driver| driver != "null"))
+                        .unwrap_or(false)
+                })
+                .find_map(|d| open_on(d).ok())
+                .ok_or(original)
+        })
         .map_err(|e| PlatformError::Audio(format!("no audio output: {e}")))?;
     sink.log_on_drop(false);
     Ok(Box::new(Device { sink, dead }))
@@ -351,11 +379,23 @@ mod tests {
             }
         }
 
-        fn opener(&self, delay: Duration) -> Opener {
+        fn opener(&self) -> Opener {
+            self.make_opener(None)
+        }
+
+        /// An opener that waits for a message on `gate` before it returns, so a test decides
+        /// exactly when the open finishes.
+        fn gated_opener(&self, gate: mpsc::Receiver<()>) -> Opener {
+            self.make_opener(Some(gate))
+        }
+
+        fn make_opener(&self, gate: Option<mpsc::Receiver<()>>) -> Opener {
             let opens = Arc::clone(&self.opens);
             let latest = Arc::clone(&self.latest_dead);
             Box::new(move || {
-                std::thread::sleep(delay);
+                if let Some(gate) = &gate {
+                    let _ = gate.recv();
+                }
                 opens.fetch_add(1, Ordering::SeqCst);
                 let dead = Arc::new(AtomicBool::new(false));
                 if let Ok(mut slot) = latest.lock() {
@@ -465,7 +505,7 @@ mod tests {
     #[test]
     fn ac6_1_none_never_opens_the_device() {
         let counting = Counting::new();
-        let player = SoundPlayer::with_opener(counting.opener(Duration::ZERO), REPLY_TIMEOUT);
+        let player = SoundPlayer::with_opener(counting.opener(), REPLY_TIMEOUT);
         let played = player.ok().map(|p| {
             let playback = p.play(Sound::None);
             let stopped = playback.as_ref().map(|pb| p.stop(pb).is_ok());
@@ -489,7 +529,7 @@ mod tests {
     #[test]
     fn ac6_1_a_stream_error_makes_the_next_play_reopen_and_succeed() {
         let counting = Counting::new();
-        let mut state = State::new(counting.opener(Duration::ZERO));
+        let mut state = State::new(counting.opener());
         let now = Instant::now();
         let (first, first_answer) = play_command(1, &not_cancelled());
         state.handle(first, now);
@@ -514,7 +554,7 @@ mod tests {
     #[test]
     fn ac6_1_a_sound_that_never_drains_ages_out_and_the_device_reopens() {
         let counting = Counting::new();
-        let mut state = State::new(counting.opener(Duration::ZERO));
+        let mut state = State::new(counting.opener());
         let now = Instant::now();
         let (first, _first_answer) = play_command(1, &not_cancelled());
         state.handle(first, now);
@@ -538,7 +578,7 @@ mod tests {
     #[test]
     fn ac6_1_a_play_nobody_waits_for_is_stopped_at_once() {
         let counting = Counting::new();
-        let mut state = State::new(counting.opener(Duration::ZERO));
+        let mut state = State::new(counting.opener());
         let (command, answer) = play_command(1, &not_cancelled());
         drop(answer);
         state.handle(command, Instant::now());
@@ -548,7 +588,7 @@ mod tests {
     #[test]
     fn ac6_1_a_cancelled_play_does_not_start() {
         let counting = Counting::new();
-        let mut state = State::new(counting.opener(Duration::ZERO));
+        let mut state = State::new(counting.opener());
         let cancelled = Arc::new(AtomicBool::new(true));
         let (command, _answer) = play_command(1, &cancelled);
         state.handle(command, Instant::now());
@@ -558,13 +598,13 @@ mod tests {
     #[test]
     fn ac6_1_a_play_that_times_out_is_not_left_playing() {
         let counting = Counting::new();
-        let Ok(player) = SoundPlayer::with_opener(
-            counting.opener(Duration::from_millis(300)),
-            Duration::from_millis(30),
-        ) else {
+        let (release, gate) = mpsc::channel();
+        let Ok(player) =
+            SoundPlayer::with_opener(counting.gated_opener(gate), Duration::from_millis(30))
+        else {
             return;
         };
-        let started = Instant::now();
+        // The opener cannot finish before the gate opens, so the timeout is certain.
         let result = player.play(Sound::SoftBell);
         assert_eq!(
             result,
@@ -572,7 +612,7 @@ mod tests {
                 "the audio thread did not answer".into()
             ))
         );
-        assert!(started.elapsed() < Duration::from_millis(250));
+        assert!(release.send(()).is_ok());
         // The command queue is ordered: this answer comes after the late start was handled.
         assert_eq!(player.live(), Some(0));
     }
@@ -580,7 +620,7 @@ mod tests {
     #[test]
     fn ac6_2_player_volume_stays_at_full_scale() {
         let counting = Counting::new();
-        let mut state = State::new(counting.opener(Duration::ZERO));
+        let mut state = State::new(counting.opener());
         let (command, _answer) = play_command(1, &not_cancelled());
         state.handle(command, Instant::now());
         assert_eq!(state.playing.len(), 1);
