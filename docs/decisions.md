@@ -96,3 +96,9 @@ A calendar feed controls every field the join link comes from, and Tolon opens t
 - At most 8 KB of each field is scanned, and the link is detected once per event.
 - `JoinTarget::Link` carries `host` and `recognised` (the host is a known provider: Meet, Zoom incl. zoomgov, Teams, Webex, Jitsi). Per AC5.1 any https link in the location is still used, but the interrupt (L-010) must show the host next to the join button when `recognised` is false, and never open a link without a key press or click.
 - The Teams `X-MICROSOFT-SKYPETEAMSMEETINGURL` property counts as conference data.
+
+## 2026-10-20 Calendars page deviations from mockup 03 (L-008)
+- A calendar link shows as scheme and host only (`https://calendar.google.com`), never path or query: iCloud, Nextcloud and many published feeds put the secret in the last segment. This matches `redact_url()` in the core. Mockup 03 shows a path and will be updated.
+- Each row has a quiet Remove button with a confirm dialog and a one-line consequence. The mockup has none, but AC1.2 ("so the person can fix the link") needs a way to remove a broken one.
+- The Google row is left out until beta 2 (M5); the ignore rules section is left out until their settings commands exist (L-016, M3). Neither shows a disabled stub.
+- "Add calendar" and "Paste an iCal URL" both open the iCal form until Google sign-in gives the first one its own path.
