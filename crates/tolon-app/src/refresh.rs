@@ -107,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_stagger_spreads_ids_inside_the_first_minute() {
+    fn ac1_4_refresh_stagger_spreads_ids_inside_the_first_minute() {
         let offsets: Vec<i64> = (0..40).map(|i| stagger_secs(&format!("cal-{i}"))).collect();
         assert!(offsets.iter().all(|s| (0..60).contains(s)));
         let mut distinct = offsets.clone();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_first_run_waits_for_each_calendars_offset() {
+    fn ac1_4_refresh_first_run_waits_for_each_calendars_offset() {
         let started = at("2026-10-20T08:00:00Z");
         let cals = [cal("a", true, "2026-10-01T00:00:00Z")];
         let offset = chrono::Duration::seconds(stagger_secs("a"));
@@ -133,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_repeats_every_five_minutes_after_the_last_attempt() {
+    fn ac1_4_refresh_repeats_every_five_minutes_after_the_last_attempt() {
         let started = at("2026-10-20T08:00:00Z");
         let cals = [cal("a", true, "2026-10-01T00:00:00Z")];
         let last = HashMap::from([("a".to_owned(), at("2026-10-20T08:00:30Z"))]);
@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_skips_disabled_and_waits_after_a_fresh_add() {
+    fn ac1_4_refresh_skips_disabled_and_waits_after_a_fresh_add() {
         let started = at("2026-10-20T08:00:00Z");
         let cals = [
             cal("off", false, "2026-10-01T00:00:00Z"),
