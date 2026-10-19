@@ -70,3 +70,6 @@ Every piece of UI copy is translated, starting with en-US, en-GB, pt-BR and pt-P
 - The locale follows the system language, with an override in Settings, Appearance. Unknown locales fall back by language (pt-AO to pt-PT, en-IE to en-GB), then to en-US.
 - The writing rules in `AGENTS.md` apply in every language. pt-BR and pt-PT are separate catalogues, not one with tweaks; each needs a native reviewer before a release.
 - Logs stay in English.
+
+## 2026-10-20 Scenario copy lives in the UI
+`docs/plan.md` quotes English wording in S1.1 ("Synced just now"), S1.3 ("Sync failed: 404"), S2.3 ("1 component skipped") and AC1.2. Since Tolon is translated, the core and the app store and send codes (`http:404`, `timeout`, `connect`, `not_calendar`, `too_large`, `network`, `skipped:N`; command errors `{code}`), and the UI renders the sentence per locale. Those scenarios are proven in two halves: a Rust test for the code, and a UI test that maps the code to the quoted en-US sentence. Other app decisions from L-029: a 304 clears a stale `last_error`; `sync_now(id)` syncs a disabled calendar; ignore-rule settings are `ignore_all_day`, `ignore_declined`, `ignore_cancelled` (JSON bools, default true); the webview may only `listen`/`unlisten` to events (capability `default.json`).
