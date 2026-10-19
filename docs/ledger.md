@@ -26,7 +26,7 @@ Conventions: ids are `L-NNN` in creation order. The orchestrator creates rows; t
 | L-030 | M1 | Close M1: F1 and F2 scenarios pass in CI (S1.x WebDriver on Linux and Windows), 12 fixtures green, ledger and status updated | orchestrator | todo | | |
 | L-009 | M2 | Alarm planning and state machine with proptest (S3.1 to S3.6) | core | todo | | |
 | L-010 | M2 | Interrupt window per mockup 01: page, countdown (AC4.7), keyboard (S4.3, AC4.4), creation per screen and close-all (S4.2, AC4.6), WebDriver test for keys; depends on L-029 | ui | todo | | |
-| L-011 | M2 | macOS window level above full-screen apps via objc2 (S4.1) | platform | todo | | manual checklist |
+| L-011 | M2 | macOS window level above full-screen apps via objc2 (S4.1) | platform | in progress | ebc963b, 4ff6fb7, 26dcd95 | Code merged 5f5b01d after reviewer pass on code, gates and per-commit builds (level 1001, behaviour 0x111 checked against AppKit; main-thread check real; no panics). Open: S4.1 manual sign-off on a real full-screen app. Steps in `crates/tolon-platform/examples/raise.rs` (`raise plain` expected hidden, `raise raise` expected visible; windows close after 5 s). The reviewer's on-screen run was inconclusive and stopped because it took over the user's screen. |
 | L-012 | M2 | Windows topmost and Linux X11 / Wayland fallback (S4.4) | platform | todo | | |
 | L-013 | M2 | Join link detection `detect_join` in `tolon-core` (S5.1, S5.2, AC5.1, AC5.2); the opener lands with L-032; after L-009 (same crate) | core | todo | | |
 | L-014 | M2 | Alarm sound with repeat and preview (F6) | platform | todo | | |
