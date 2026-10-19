@@ -46,6 +46,7 @@ before(async () => {
   await waitForDriver(tauriDriver);
   driver = await new Builder()
     .usingServer(driverUrl)
+    .forBrowser("wry")
     .withCapabilities({ "tauri:options": { application } })
     .build();
 });
