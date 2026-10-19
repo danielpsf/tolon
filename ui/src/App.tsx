@@ -1,8 +1,11 @@
+import { useEffect } from "react";
 import { copy } from "./copy";
-
-document.title = copy.windowTitle;
 
 // Empty on purpose: the Swiss Moss body rule paints the paper background.
 export function App() {
-  return <main aria-label={copy.windowTitle} />;
+  const { t } = copy();
+  useEffect(() => {
+    document.title = t.app.windowTitle;
+  }, [t]);
+  return <main aria-label={t.app.windowTitle} />;
 }
