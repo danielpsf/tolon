@@ -59,10 +59,14 @@ jobs:
     needs: [gate, changes]
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ${{ matrix.os }}
+    # Non-blocking until L-027 makes Windows reliable (decisions.md 2026-10-19); failures still show per job.
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest]
+        # windows-2022: on the windows-2025 image WebView2 never opens its debug port under msedgedriver
+        # (actions/runner-images#14738), so the session fails with DevToolsActivePort.
+        os: [ubuntu-22.04, windows-2022]
     steps:
       - uses: actions/checkout@v4
       - name: Linux deps

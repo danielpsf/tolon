@@ -32,3 +32,6 @@ Compositors that refuse always-on-top get a notification with actions plus sound
 
 ## 2026-10-19 No telemetry
 None in beta. If a crash reporter is ever added it will be opt-in and documented.
+
+## 2026-10-19 WebDriver e2e is non-blocking for now
+The e2e jobs (Linux, Windows) run with `continue-on-error` so `main` is not red while Windows WebDriver is unreliable on hosted runners (L-027, actions/runner-images#14738). The `cargo xtask ci` gate stays blocking on all three OS. Revert to blocking once L-027 shows Windows e2e green on several runs in a row.
