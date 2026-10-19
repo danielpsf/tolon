@@ -1,0 +1,126 @@
+{
+  "calendar_name": "Personal",
+  "events": 3,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": false,
+      "end": "2026-10-22T16:00:00+02:00",
+      "event": "fixture:floating-single@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-single@example.com",
+        "original_start": "2026-10-22T13:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T15:00:00+02:00",
+      "title": "Dentist (floating, 15:00 wherever I am)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-23T08:00:00+02:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-23T05:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T07:30:00+02:00",
+      "title": "Morning run (floating, daily)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-24T08:00:00+02:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-24T05:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-24T07:30:00+02:00",
+      "title": "Morning run (floating, daily)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T08:00:00+01:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-25T06:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T07:30:00+01:00",
+      "title": "Morning run (floating, daily)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T08:00:00+01:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-26T06:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T07:30:00+01:00",
+      "title": "Morning run (floating, daily)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-27T00:30:00+01:00",
+      "event": "fixture:floating-midnight@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-midnight@example.com",
+        "original_start": "2026-10-26T22:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T23:30:00+01:00",
+      "title": "Late call across midnight (floating)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-27T08:00:00+01:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-27T06:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-27T07:30:00+01:00",
+      "title": "Morning run (floating, daily)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-28T08:00:00+01:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-28T06:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-28T07:30:00+01:00",
+      "title": "Morning run (floating, daily)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-29T08:00:00+01:00",
+      "event": "fixture:floating-daily@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:floating-daily@example.com",
+        "original_start": "2026-10-29T06:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-29T07:30:00+01:00",
+      "title": "Morning run (floating, daily)"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}

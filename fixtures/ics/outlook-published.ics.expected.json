@@ -1,0 +1,48 @@
+{
+  "calendar_name": "Calendar",
+  "events": 4,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": false,
+      "end": "2026-10-22T18:00:00+02:00",
+      "event": "fixture:040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F6000000000000000010000000DDDD4444EEEE5555FFFF6666",
+      "join": "none",
+      "key": {
+        "event": "fixture:040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F6000000000000000010000000DDDD4444EEEE5555FFFF6666",
+        "original_start": "2026-10-22T15:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T17:00:00+02:00",
+      "title": "Customer call (US West)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T17:30:00+01:00",
+      "event": "fixture:040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F8000000000000000010000000JJJJ0000KKKK1111LLLL2222",
+      "join": "none",
+      "key": {
+        "event": "fixture:040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F8000000000000000010000000JJJJ0000KKKK1111LLLL2222",
+        "original_start": "2026-10-26T15:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T16:30:00+01:00",
+      "title": "Budget sync"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-27T14:00:00+01:00",
+      "event": "fixture:040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F5000000000000000010000000AAAA1111BBBB2222CCCC3333",
+      "join": "none",
+      "key": {
+        "event": "fixture:040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F5000000000000000010000000AAAA1111BBBB2222CCCC3333",
+        "original_start": "2026-10-27T12:00:00Z"
+      },
+      "people": 1,
+      "start": "2026-10-27T13:00:00+01:00",
+      "title": "Design review"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}

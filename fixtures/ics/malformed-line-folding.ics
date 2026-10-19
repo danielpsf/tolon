@@ -1,0 +1,67 @@
+BEGIN:VCALENDAR
+PRODID:-//Example Corp//Calendar Export 1.0//EN
+VERSION:2.0
+X-WR-CALNAME:Team
+ Calendar (folded name)
+
+BEGIN:VEVENT
+DTSTART:20261022T090000Z
+DTEND:20261022T100000Z
+UID:fold-long-summary@example.com
+SUMMARY:Quarterly planning with the extended leadership group and the regi
+ onal leads from every office
+DESCRIPTION:Line one of the agenda\nLine two after a tab fold:
+	continued after a tab\, with an escaped comma
+ and a space fold.
+END:VEVENT
+
+BEGIN:VEVENT
+DTST
+ ART:20261022T110000Z
+DTEND:20261022T113000Z
+UID:fold-in-name@example.com
+summary:Lower-case property names
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261022T130000Z
+DTEND:20261022T133000Z
+UID:stray-line@example.com
+SUMMARY:Stray line inside an event
+this line lost its leading space and has no separator
+LOCATION:Room 1
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261022T140000Z
+DTEND:20261022T143000Z
+UID:never-closed@example.com
+SUMMARY:Event with no END line
+BEGIN:VEVENT
+DTSTART:notadate
+DTEND:20261022T153000Z
+UID:garbage-dtstart@example.com
+SUMMARY:Unreadable start
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261022T160000Z
+DTEND:20261022T163000Z
+RRULE:FREQ=BOGUS;COUNT=3
+UID:bad-rrule@example.com
+SUMMARY:Unreadable recurrence rule
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261023T090000Z
+DTEND:20261023T093000Z
+UID:after-the-trash@example.com
+SUMMARY:Still parsed after the damage
+BEGIN:VALARM
+TRIGGER:-PT10M
+ACTION:DISPLAY
+DESCRIPTION:Reminder text that must not replace the event description
+END:VALARM
+DESCRIPTION:Real description
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261024T090000Z
+DTEND:20261024T093000Z
+UID:cut-off-feed@example.com
+SUMMARY:Feed ends in the middle of this event

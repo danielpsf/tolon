@@ -1,0 +1,152 @@
+{
+  "calendar_name": "Berlin Office",
+  "events": 6,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": false,
+      "end": "2026-10-23T09:15:00+02:00",
+      "event": "fixture:daily-standup@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-standup@example.com",
+        "original_start": "2026-10-23T07:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T09:00:00+02:00",
+      "title": "Daily stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-24T09:15:00+02:00",
+      "event": "fixture:daily-standup@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-standup@example.com",
+        "original_start": "2026-10-24T07:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-24T09:00:00+02:00",
+      "title": "Daily stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T02:00:00+02:00",
+      "event": "fixture:utc-before-change@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:utc-before-change@example.com",
+        "original_start": "2026-10-24T23:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T01:30:00+02:00",
+      "title": "UTC job before the change"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T03:30:00+01:00",
+      "event": "fixture:night-maintenance@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:night-maintenance@example.com",
+        "original_start": "2026-10-25T00:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T02:30:00+02:00",
+      "title": "Night maintenance (02:30 happens twice)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T03:00:00+01:00",
+      "event": "fixture:utc-after-change@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:utc-after-change@example.com",
+        "original_start": "2026-10-25T01:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T02:30:00+01:00",
+      "title": "UTC job after the change"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T09:15:00+01:00",
+      "event": "fixture:daily-standup@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-standup@example.com",
+        "original_start": "2026-10-25T08:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T09:00:00+01:00",
+      "title": "Daily stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T09:15:00+01:00",
+      "event": "fixture:daily-standup@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-standup@example.com",
+        "original_start": "2026-10-26T08:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T09:00:00+01:00",
+      "title": "Daily stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T10:00:00+01:00",
+      "event": "fixture:monday-planning@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:monday-planning@example.com",
+        "original_start": "2026-10-26T08:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T09:00:00+01:00",
+      "title": "Monday planning"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T15:30:00+01:00",
+      "event": "fixture:new-york-call@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:new-york-call@example.com",
+        "original_start": "2026-10-26T14:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T15:00:00+01:00",
+      "title": "New York call (US still on summer time)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-27T09:15:00+01:00",
+      "event": "fixture:daily-standup@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-standup@example.com",
+        "original_start": "2026-10-27T08:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-27T09:00:00+01:00",
+      "title": "Daily stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-28T09:15:00+01:00",
+      "event": "fixture:daily-standup@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-standup@example.com",
+        "original_start": "2026-10-28T08:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-28T09:00:00+01:00",
+      "title": "Daily stand-up"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}

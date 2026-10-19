@@ -1,0 +1,61 @@
+{
+  "calendar_name": "Équipe Ünïcödé 🚀",
+  "events": 4,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": false,
+      "end": "2026-10-22T12:00:00+02:00",
+      "event": "fixture:utf8-emoji@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:utf8-emoji@example.com",
+        "original_start": "2026-10-22T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T11:00:00+02:00",
+      "title": "🎉 Release party 🍾 mit Käse und Brötchen"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-23T12:00:00+02:00",
+      "event": "fixture:utf8-cjk@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:utf8-cjk@example.com",
+        "original_start": "2026-10-23T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T11:00:00+02:00",
+      "title": "週次ミーティング 東京チーム 🇯🇵"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-24T12:00:00+02:00",
+      "event": "fixture:utf8-zwj-fold@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:utf8-zwj-fold@example.com",
+        "original_start": "2026-10-24T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-24T11:00:00+02:00",
+      "title": "Family day 👨‍👩‍👧‍👦 with a very long title that the exporter folds after a complete character 🌍🌎🌏"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T11:00:00+01:00",
+      "event": "fixture:utf8-rtl@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:utf8-rtl@example.com",
+        "original_start": "2026-10-25T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T10:00:00+01:00",
+      "title": "اجتماع الفريق ☕ Team sync"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}

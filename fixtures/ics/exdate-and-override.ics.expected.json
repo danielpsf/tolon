@@ -1,0 +1,87 @@
+{
+  "calendar_name": "Support Rota",
+  "events": 2,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": false,
+      "end": "2026-10-22T11:30:00+02:00",
+      "event": "fixture:daily-sync@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-sync@example.com",
+        "original_start": "2026-10-22T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T11:00:00+02:00",
+      "title": "Daily sync"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-24T11:00:00+02:00",
+      "event": "fixture:daily-sync@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-sync@example.com",
+        "original_start": "2026-10-24T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-24T10:00:00+02:00",
+      "title": "Daily sync"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T11:30:00+01:00",
+      "event": "fixture:daily-sync@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-sync@example.com",
+        "original_start": "2026-10-25T10:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T11:00:00+01:00",
+      "title": "Daily sync"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T17:00:00+01:00",
+      "event": "fixture:invited-instance-only@example.com#20261025T150000Z",
+      "join": "none",
+      "key": {
+        "event": "fixture:invited-instance-only@example.com#20261025T150000Z",
+        "original_start": "2026-10-25T15:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T16:00:00+01:00",
+      "title": "Vendor demo (one instance, series not shared)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T14:30:00+01:00",
+      "event": "fixture:daily-sync@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-sync@example.com",
+        "original_start": "2026-10-26T10:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T14:00:00+01:00",
+      "title": "Daily sync (moved to afternoon)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-28T16:45:00+01:00",
+      "event": "fixture:daily-sync@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-sync@example.com",
+        "original_start": "2026-11-02T10:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-28T16:00:00+01:00",
+      "title": "Daily sync (pulled forward from 2 Nov)"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}

@@ -1,0 +1,106 @@
+{
+  "calendar_name": "Platform Team",
+  "events": 6,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": false,
+      "end": "2026-10-22T11:00:00+02:00",
+      "event": "fixture:daily-count@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:daily-count@example.com",
+        "original_start": "2026-10-22T08:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T10:00:00+02:00",
+      "title": "Launch war room (3 days)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-22T16:00:00+02:00",
+      "event": "fixture:weekly-retro@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:weekly-retro@example.com",
+        "original_start": "2026-10-22T13:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T15:00:00+02:00",
+      "title": "Retro (every other Thursday)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-23T09:45:00+02:00",
+      "event": "fixture:weekly-standup@example.com",
+      "join": {
+        "link": "https://meet.example.com/xyz-standup"
+      },
+      "key": {
+        "event": "fixture:weekly-standup@example.com",
+        "original_start": "2026-10-23T07:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T09:30:00+02:00",
+      "title": "Stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-24T12:00:00+02:00",
+      "event": "fixture:saturday-until@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:saturday-until@example.com",
+        "original_start": "2026-10-24T09:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-24T11:00:00+02:00",
+      "title": "Saturday support shift (ends 24 Oct)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-25T15:00:00+01:00",
+      "event": "fixture:monthly-report@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:monthly-report@example.com",
+        "original_start": "2026-10-25T13:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T14:00:00+01:00",
+      "title": "Monthly report review (25th)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-26T09:45:00+01:00",
+      "event": "fixture:weekly-standup@example.com",
+      "join": {
+        "link": "https://meet.example.com/xyz-standup"
+      },
+      "key": {
+        "event": "fixture:weekly-standup@example.com",
+        "original_start": "2026-10-26T08:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T09:30:00+01:00",
+      "title": "Stand-up"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-28T09:45:00+01:00",
+      "event": "fixture:weekly-standup@example.com",
+      "join": {
+        "link": "https://meet.example.com/xyz-standup"
+      },
+      "key": {
+        "event": "fixture:weekly-standup@example.com",
+        "original_start": "2026-10-28T08:30:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-28T09:30:00+01:00",
+      "title": "Stand-up"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}
