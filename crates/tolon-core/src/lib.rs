@@ -5,6 +5,7 @@ mod alarm;
 mod expand;
 mod model;
 mod parse;
+mod rules;
 mod tzid;
 
 pub use alarm::{
@@ -16,6 +17,7 @@ pub use model::{
     OccurrenceKey, Override, ParseKeyError, Response,
 };
 pub use parse::{parse_ics, ParseOptions, ParsedCalendar};
+pub use rules::{apply_rules, IgnoreReason, IgnoreRules, Verdict};
 
 /// Crate name, a placeholder export until the real API lands.
 pub const NAME: &str = env!("CARGO_PKG_NAME");

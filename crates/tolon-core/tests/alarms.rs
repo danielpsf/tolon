@@ -2,10 +2,11 @@
 
 mod common;
 
-use chrono::{DateTime, Utc};
-use common::{utc, TestResult};
+use chrono::{DateTime, Duration, Utc};
+use common::{utc, TestResult, LOCAL};
 use tolon_core::{
-    already_there, dismiss, join, snooze, Alarm, AlarmKind, AlarmState, EventId, OccurrenceKey,
+    already_there, apply_rules, dismiss, join, snooze, Alarm, AlarmKind, AlarmState, EventId,
+    IgnoreReason, IgnoreRules, JoinTarget, Occurrence, OccurrenceKey, Verdict,
 };
 
 /// 14:00 on the common test day, as the meeting start.
@@ -118,5 +119,92 @@ fn actions_move_open_alarms_and_leave_final_ones_alone() -> TestResult {
     let mut zero = alarm(AlarmState::Scheduled)?;
     assert!(!snooze(&mut zero, 0, at(13, 59)?));
     assert_eq!(zero.state, AlarmState::Scheduled);
+    Ok(())
+}
+
+/// A one-hour meeting with its own join link, starting at `start`.
+fn occ(title: &str, start: DateTime<Utc>, people: u32) -> Occurrence {
+    Occurrence {
+        key: OccurrenceKey {
+            event: EventId(format!("cal:{title}")),
+            original_start: start,
+        },
+        event: EventId(format!("cal:{title}")),
+        start: start.with_timezone(&LOCAL),
+        end: (start + Duration::hours(1)).with_timezone(&LOCAL),
+        title: title.to_string(),
+        all_day: false,
+        join: JoinTarget::Link(format!("https://example.com/{title}")),
+        people,
+    }
+}
+
+fn verdicts(rules: &IgnoreRules, titles: &[(&str, u32)]) -> TestResult<Vec<Verdict>> {
+    let start = at(14, 0)?;
+    let input = titles.iter().map(|(t, p)| occ(t, start, *p)).collect();
+    Ok(apply_rules(input, rules)
+        .into_iter()
+        .map(|(_, v)| v)
+        .collect())
+}
+
+#[test]
+fn ac8_2_keywords_are_case_insensitive_and_comma_separated() -> TestResult {
+    let got = verdicts(
+        &IgnoreRules::default(),
+        &[
+            ("Focus time", 3),
+            ("lunch with Sam", 3),
+            ("Out of office: OOO", 3),
+            ("ooo", 3),
+            ("Sprint planning", 3),
+        ],
+    )?;
+    let ignored = |k: &str| Verdict::Ignored(IgnoreReason::Keyword(k.to_string()));
+    assert_eq!(
+        got,
+        [
+            ignored("Focus"),
+            ignored("Lunch"),
+            ignored("OOO"),
+            ignored("OOO"),
+            Verdict::Keep
+        ]
+    );
+
+    let custom = IgnoreRules {
+        keywords: " standup ,, ,Ünï ".to_string(),
+        without_other_attendees: false,
+    };
+    let got = verdicts(
+        &custom,
+        &[("Daily STANDUP", 4), ("ÜNÏcode", 4), ("Focus", 4)],
+    )?;
+    assert_eq!(got, [ignored("standup"), ignored("Ünï"), Verdict::Keep]);
+
+    let empty = IgnoreRules {
+        keywords: " , ,".to_string(),
+        without_other_attendees: false,
+    };
+    assert_eq!(verdicts(&empty, &[("Focus", 0)])?, [Verdict::Keep]);
+    Ok(())
+}
+
+#[test]
+fn ac8_2_events_without_other_attendees_default_off() -> TestResult {
+    let titles = [("Solo", 0), ("Just me", 1), ("Pair", 2)];
+    assert_eq!(
+        verdicts(&IgnoreRules::default(), &titles)?,
+        [Verdict::Keep, Verdict::Keep, Verdict::Keep]
+    );
+    let on = IgnoreRules {
+        without_other_attendees: true,
+        ..IgnoreRules::default()
+    };
+    let no_others = Verdict::Ignored(IgnoreReason::NoOtherAttendees);
+    assert_eq!(
+        verdicts(&on, &titles)?,
+        [no_others.clone(), no_others, Verdict::Keep]
+    );
     Ok(())
 }
