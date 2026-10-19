@@ -5,6 +5,7 @@ use chrono_tz::Tz;
 use rrule::{RRule, RRuleSet, Tz as RTz, Unvalidated};
 use std::collections::HashSet;
 
+use crate::join::detect_join;
 use crate::model::{
     wall_clock, Event, EventStatus, EventTime, JoinTarget, Occurrence, OccurrenceKey, Response,
 };
@@ -235,40 +236,40 @@ fn expand_event(
         .filter_map(|o| Some(o.recurrence_id.resolve(local)?.with_timezone(&Utc)))
         .collect();
 
-    let mut emit =
-        |src: &Event, start: DateTime<Tz>, end: DateTime<Tz>, original: DateTime<Utc>| {
-            let hidden = (opts.ignore_cancelled && src.status == EventStatus::Cancelled)
-                || (opts.ignore_declined && src.my_response == Some(Response::Declined))
-                || (src.all_day && !opts.include_all_day);
-            let overlaps = start.with_timezone(&Utc) < to
-                && (end.with_timezone(&Utc) > from || start.with_timezone(&Utc) >= from);
-            if hidden || !overlaps {
-                return;
-            }
-            out.push(Occurrence {
-                key: OccurrenceKey {
-                    event: e.id.clone(),
-                    original_start: original,
-                },
+    let base_join = detect_join(e);
+    let mut emit = |src: &Event,
+                    join: &JoinTarget,
+                    start: DateTime<Tz>,
+                    end: DateTime<Tz>,
+                    original: DateTime<Utc>| {
+        let hidden = (opts.ignore_cancelled && src.status == EventStatus::Cancelled)
+            || (opts.ignore_declined && src.my_response == Some(Response::Declined))
+            || (src.all_day && !opts.include_all_day);
+        let overlaps = start.with_timezone(&Utc) < to
+            && (end.with_timezone(&Utc) > from || start.with_timezone(&Utc) >= from);
+        if hidden || !overlaps {
+            return;
+        }
+        out.push(Occurrence {
+            key: OccurrenceKey {
                 event: e.id.clone(),
-                start,
-                end,
-                title: src.title.clone(),
-                all_day: src.all_day,
-                join: match (&src.conference, &src.html_link) {
-                    (Some(link), _) => JoinTarget::Link(link.clone()),
-                    (None, Some(page)) => JoinTarget::EventPage(page.clone()),
-                    (None, None) => JoinTarget::None,
-                },
-                people: src.attendees_count,
-            });
-        };
+                original_start: original,
+            },
+            event: e.id.clone(),
+            start,
+            end,
+            title: src.title.clone(),
+            all_day: src.all_day,
+            join: join.clone(),
+            people: src.attendees_count,
+        });
+    };
 
     match &e.rrule {
         None => {
             if let Some(start) = e.start.resolve(local) {
                 if let Some(end) = shape.end_for(start) {
-                    emit(e, start, end, start.with_timezone(&Utc));
+                    emit(e, &base_join, start, end, start.with_timezone(&Utc));
                 }
             }
         }
@@ -286,7 +287,7 @@ fn expand_event(
                     }
                     let start = dt.with_timezone(&local);
                     if let Some(end) = shape.end_for(start) {
-                        emit(e, start, end, original);
+                        emit(e, &base_join, start, end, original);
                     }
                 }
             }
@@ -302,7 +303,13 @@ fn expand_event(
             continue;
         };
         if let Some(end) = oshape.end_for(start) {
-            emit(&o.event, start, end, rid.with_timezone(&Utc));
+            emit(
+                &o.event,
+                &detect_join(&o.event),
+                start,
+                end,
+                rid.with_timezone(&Utc),
+            );
         }
     }
 }

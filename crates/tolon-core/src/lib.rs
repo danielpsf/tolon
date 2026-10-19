@@ -3,6 +3,7 @@
 
 mod alarm;
 mod expand;
+mod join;
 mod model;
 mod parse;
 mod rules;
@@ -13,6 +14,7 @@ pub use alarm::{
     already_there, dismiss, join, snooze, Alarm, AlarmKind, AlarmState, EXPIRY_MINUTES,
 };
 pub use expand::{expand, expand_window, ExpandOptions, WINDOW_DAYS};
+pub use join::detect_join;
 pub use model::{
     wall_clock, CalendarId, Event, EventId, EventStatus, EventTime, JoinTarget, Occurrence,
     OccurrenceKey, Override, ParseKeyError, Response,

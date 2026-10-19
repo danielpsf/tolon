@@ -91,7 +91,11 @@ pub fn occ(title: &str, start: DateTime<Utc>, people: u32) -> tolon_core::Occurr
         end: (start + Duration::hours(1)).with_timezone(&LOCAL),
         title: title.to_string(),
         all_day: false,
-        join: JoinTarget::Link(format!("https://example.com/{title}")),
+        join: JoinTarget::Link {
+            url: format!("https://example.com/{title}"),
+            host: "example.com".to_string(),
+            recognised: false,
+        },
         people,
     }
 }

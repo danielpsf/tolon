@@ -21,7 +21,11 @@
       "end": "2026-10-22T11:45:00+02:00",
       "event": "fixture:basic-0004@example.com",
       "join": {
-        "link": "https://meet.example.com/abc-defg-hij"
+        "link": {
+          "host": "meet.google.com",
+          "recognised": true,
+          "url": "https://meet.google.com/qzv-mtkp-lwe"
+        }
       },
       "key": {
         "event": "fixture:basic-0004@example.com",

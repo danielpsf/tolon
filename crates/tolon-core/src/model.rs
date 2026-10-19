@@ -137,7 +137,8 @@ pub struct Event {
     pub attendees_count: u32,
     pub location: Option<String>,
     pub description: Option<String>,
-    /// Video-call link the feed names explicitly (`X-GOOGLE-CONFERENCE`).
+    /// Video-call link the feed names explicitly (`X-GOOGLE-CONFERENCE`, else
+    /// `X-MICROSOFT-SKYPETEAMSMEETINGURL`).
     pub conference: Option<String>,
     /// The `URL` property.
     pub html_link: Option<String>,
@@ -192,7 +193,15 @@ impl FromStr for OccurrenceKey {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JoinTarget {
-    Link(String),
+    /// A call link. `host` is lower-case (punycode stays `xn--`) so the UI can show where it
+    /// goes before opening it. `recognised` is true when it came from the feed's conference
+    /// data or its host is a known call provider; false for any other `https://` link found
+    /// in `location`.
+    Link {
+        url: String,
+        host: String,
+        recognised: bool,
+    },
     EventPage(String),
     None,
 }

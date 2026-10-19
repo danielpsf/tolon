@@ -284,8 +284,16 @@ fn s3_6_overlapping_meetings_group() -> TestResult {
     assert_eq!(
         links,
         [
-            JoinTarget::Link("https://example.com/design review".to_string()),
-            JoinTarget::Link("https://example.com/1:1 with Sam".to_string())
+            JoinTarget::Link {
+                url: "https://example.com/design review".to_string(),
+                host: "example.com".to_string(),
+                recognised: false
+            },
+            JoinTarget::Link {
+                url: "https://example.com/1:1 with Sam".to_string(),
+                host: "example.com".to_string(),
+                recognised: false
+            }
         ],
         "each keeps its own Join target"
     );
