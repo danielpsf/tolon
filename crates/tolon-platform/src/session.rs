@@ -9,24 +9,27 @@ use raw_window_handle::RawWindowHandle;
 pub enum Session {
     X11,
     Wayland,
+    /// `XDG_SESSION_TYPE` names something else (`mir`, `tty`, `unspecified`): unknown, so no
+    /// takeover is promised.
+    Other,
 }
 
 /// Decide the session from `XDG_SESSION_TYPE` and `WAYLAND_DISPLAY`.
 ///
-/// `XDG_SESSION_TYPE` (`x11` or `wayland`, any case) wins because the login manager sets it
-/// for the whole session. When it is missing, empty, `tty` or `unspecified`, a set
-/// `WAYLAND_DISPLAY` means Wayland; a Wayland session with XWayland also sets `DISPLAY`, so
-/// `DISPLAY` cannot tell the two apart and is not read. When nothing says Wayland the answer
-/// is X11: Tolon is a GTK app and cannot start without a display, so a process that runs at all
-/// has one, and X11 is the one that can take over the screen.
+/// A non-empty `XDG_SESSION_TYPE` decides alone, because the login manager sets it for the whole
+/// session: `x11` or `wayland` (any case) name the display server, anything else is
+/// [`Session::Other`]. When it is missing or empty, a set `WAYLAND_DISPLAY` means Wayland. A
+/// Wayland session with XWayland also sets `DISPLAY`, so `DISPLAY` cannot tell the two apart and
+/// is not read. When nothing says Wayland the answer is X11: Tolon is a GTK app and cannot start
+/// without a display, so a process that runs at all has one, and X11 is the one that can take
+/// over the screen.
 pub fn detect_session(xdg_session_type: Option<&str>, wayland_display: Option<&str>) -> Session {
     let wayland_display_set = wayland_display.is_some_and(|s| !s.trim().is_empty());
-    match xdg_session_type
-        .map(|s| s.trim().to_ascii_lowercase())
-        .as_deref()
-    {
+    let xdg = xdg_session_type.map(|s| s.trim().to_ascii_lowercase());
+    match xdg.as_deref() {
         Some("wayland") => Session::Wayland,
         Some("x11") => Session::X11,
+        Some(other) if !other.is_empty() => Session::Other,
         _ if wayland_display_set => Session::Wayland,
         _ => Session::X11,
     }
@@ -41,11 +44,13 @@ pub fn session_of_handle(raw: RawWindowHandle) -> Option<Session> {
     }
 }
 
-/// What a session allows (AC4.1, AC4.5): X11 takes over, Wayland does not.
+/// What a session allows (AC4.1, AC4.5): X11 takes over, Wayland does not, and an unknown
+/// session type promises nothing.
 pub fn takeover_for(session: Session) -> Takeover {
     match session {
         Session::X11 => Takeover::Full,
         Session::Wayland => Takeover::Degraded(Reason::WaylandNoTakeover),
+        Session::Other => Takeover::Degraded(Reason::Unsupported),
     }
 }
 
@@ -64,18 +69,24 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_wayland_display() {
+    fn falls_back_to_wayland_display_when_xdg_is_missing_or_empty() {
         assert_eq!(d(None, Some("wayland-0")), Session::Wayland);
-        assert_eq!(d(Some("tty"), Some("wayland-1")), Session::Wayland);
-        assert_eq!(d(Some("unspecified"), Some("wayland-1")), Session::Wayland);
+        assert_eq!(d(Some(""), Some("wayland-1")), Session::Wayland);
+        assert_eq!(d(Some("  "), Some("wayland-1")), Session::Wayland);
     }
 
     #[test]
     fn nothing_detected_is_x11() {
         assert_eq!(d(None, None), Session::X11);
         assert_eq!(d(Some(""), Some("  ")), Session::X11);
-        assert_eq!(d(Some("tty"), None), Session::X11);
-        assert_eq!(d(Some("mir"), None), Session::X11);
+    }
+
+    #[test]
+    fn other_session_types_are_unknown_whatever_wayland_display_says() {
+        for kind in ["mir", "tty", "unspecified", "MIR"] {
+            assert_eq!(d(Some(kind), None), Session::Other, "{kind}");
+            assert_eq!(d(Some(kind), Some("wayland-0")), Session::Other, "{kind}");
+        }
     }
 
     #[test]
@@ -101,5 +112,17 @@ mod tests {
             Takeover::Degraded(Reason::WaylandNoTakeover)
         );
         assert_eq!(takeover_for(Session::X11), Takeover::Full);
+    }
+
+    #[test]
+    fn unknown_session_type_degrades_as_unsupported() {
+        assert_eq!(
+            takeover_for(d(Some("mir"), None)),
+            Takeover::Degraded(Reason::Unsupported)
+        );
+        assert_eq!(
+            takeover_for(d(Some("tty"), None)),
+            Takeover::Degraded(Reason::Unsupported)
+        );
     }
 }
