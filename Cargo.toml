@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tolon-core",
+    "crates/tolon-store",
+    "crates/tolon-sync",
+    "crates/tolon-platform",
+    "crates/tolon-app",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0-beta.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
