@@ -34,7 +34,11 @@
       "end": "2026-10-23T09:45:00+02:00",
       "event": "fixture:weekly-standup@example.com",
       "join": {
-        "link": "https://meet.example.com/xyz-standup"
+        "link": {
+          "host": "meet.example.com",
+          "recognised": true,
+          "url": "https://meet.example.com/xyz-standup"
+        }
       },
       "key": {
         "event": "fixture:weekly-standup@example.com",
@@ -75,7 +79,11 @@
       "end": "2026-10-26T09:45:00+01:00",
       "event": "fixture:weekly-standup@example.com",
       "join": {
-        "link": "https://meet.example.com/xyz-standup"
+        "link": {
+          "host": "meet.example.com",
+          "recognised": true,
+          "url": "https://meet.example.com/xyz-standup"
+        }
       },
       "key": {
         "event": "fixture:weekly-standup@example.com",
@@ -90,7 +98,11 @@
       "end": "2026-10-28T09:45:00+01:00",
       "event": "fixture:weekly-standup@example.com",
       "join": {
-        "link": "https://meet.example.com/xyz-standup"
+        "link": {
+          "host": "meet.example.com",
+          "recognised": true,
+          "url": "https://meet.example.com/xyz-standup"
+        }
       },
       "key": {
         "event": "fixture:weekly-standup@example.com",

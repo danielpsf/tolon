@@ -23,25 +23,35 @@ pub fn detect_join(event: &Event) -> JoinTarget {
         .as_deref()
         .and_then(|t| links_in(t).into_iter().next())
     {
-        return JoinTarget::Link(link);
+        return target(link, true);
     }
     if let Some(link) = event
         .location
         .as_deref()
         .and_then(|t| links_in(t).into_iter().next())
     {
-        return JoinTarget::Link(link);
+        return target(link.clone(), is_provider(&link));
     }
     if let Some(link) = event
         .description
         .as_deref()
         .and_then(|t| links_in(t).into_iter().find(|l| is_provider(l)))
     {
-        return JoinTarget::Link(link);
+        return target(link, true);
     }
     match event.html_link.as_deref().map(str::trim) {
         Some(page) if !page.is_empty() => JoinTarget::EventPage(page.to_string()),
         _ => JoinTarget::None,
+    }
+}
+
+/// `link` has passed `host_of`, so the host is always there.
+fn target(url: String, recognised: bool) -> JoinTarget {
+    let host = host_of(&url).unwrap_or_default();
+    JoinTarget::Link {
+        url,
+        host,
+        recognised,
     }
 }
 
@@ -182,7 +192,7 @@ mod tests {
     }
 
     fn link(s: &str) -> JoinTarget {
-        JoinTarget::Link(s.into())
+        target(s.into(), is_provider(s))
     }
 
     #[test]
@@ -373,5 +383,35 @@ mod tests {
         e.location = Some("http://zoom.us/j/1".into());
         e.description = Some("https://zoom.us/j/2".into());
         assert_eq!(detect_join(&e), link("https://zoom.us/j/2"));
+    }
+
+    #[test]
+    fn the_link_carries_its_host_and_whether_it_was_recognised() {
+        assert_eq!(
+            in_field("location", "https://Room.Example.com:8443/x"),
+            JoinTarget::Link {
+                url: "https://Room.Example.com:8443/x".into(),
+                host: "room.example.com".into(),
+                recognised: false
+            }
+        );
+        assert_eq!(
+            in_field("description", "https://us02web.zoom.us/j/1"),
+            JoinTarget::Link {
+                url: "https://us02web.zoom.us/j/1".into(),
+                host: "us02web.zoom.us".into(),
+                recognised: true
+            }
+        );
+        let mut e = event();
+        e.conference = Some("https://xn--mnich-kva.example/x".into());
+        assert_eq!(
+            detect_join(&e),
+            JoinTarget::Link {
+                url: "https://xn--mnich-kva.example/x".into(),
+                host: "xn--mnich-kva.example".into(),
+                recognised: true
+            }
+        );
     }
 }
