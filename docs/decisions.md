@@ -89,3 +89,10 @@ Every piece of UI copy is translated, starting with en-US, en-GB, pt-BR and pt-P
 - Anything else falls back to en-US. The override (later a setting in Appearance) wins over the system list.
 - Times: 2-digit hours ("09:05") everywhere except en-US ("9:05 AM").
 - HTTP failures render "Sync failed: N"; 401, 403, 429 and 5xx add a short hint ("Sync failed: 401, link expired" per mockup 03); 404 has none, per S1.3. Unknown codes render a generic "Sync failed.".
+
+## 2026-10-20 Join links are treated as untrusted (L-013)
+A calendar feed controls every field the join link comes from, and Tolon opens that link. So:
+- Only `https://` links whose host is plain ASCII letters, digits, dots and hyphens (optional numeric port) are accepted; userinfo, backslashes, IPv6 literals, control and invisible characters are refused, in every field including provider conference data.
+- At most 8 KB of each field is scanned, and the link is detected once per event.
+- `JoinTarget::Link` carries `host` and `recognised` (the host is a known provider: Meet, Zoom incl. zoomgov, Teams, Webex, Jitsi). Per AC5.1 any https link in the location is still used, but the interrupt (L-010) must show the host next to the join button when `recognised` is false, and never open a link without a key press or click.
+- The Teams `X-MICROSOFT-SKYPETEAMSMEETINGURL` property counts as conference data.
