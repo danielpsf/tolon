@@ -101,7 +101,7 @@ create table calendars (id text primary key, kind text not null, name text not n
 create table events (id text primary key, calendar_id text not null references calendars(id) on delete cascade,
   uid text not null, payload text not null, updated_at text not null, unique(calendar_id, uid));          -- payload: canonical JSON of Event
 create table alarms (occurrence_key text not null, kind text not null, at text not null, state text not null,
-  state_at text not null, until text, primary key(occurrence_key, kind));
+  state_at text not null, until text, start text, primary key(occurrence_key, kind));     -- start: V2, the meeting start
 create table settings (key text primary key, value text not null);                                            -- JSON values
 create table sync_log (id integer primary key, calendar_id text, at text not null, outcome text not null, detail text);
 ```
