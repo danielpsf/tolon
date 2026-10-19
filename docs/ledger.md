@@ -10,7 +10,7 @@ Conventions: ids are `L-NNN` in creation order. The orchestrator creates rows; t
 | L-002 | M0 | Tauri 2 app boots on macOS, Windows, Linux with an empty Swiss Moss page | ui | todo | | |
 | L-003 | M0 | Vendor Swiss Moss into `ui/` as an npm dependency and bundle Inter + Inter Tight | ui | todo | | |
 | L-004 | M0 | SQLite store with migrations V1, `settings` repo, startup migration check | core | todo | | |
-| L-005 | M0 | `xtask ci`, `layers`, `check-scenario-ids`; `.github/workflows/ci.yml` green on 3 OS | release | todo | | |
+| L-005 | M0 | `xtask ci`, `layers`, `check-scenario-ids`; `.github/workflows/ci.yml` green on 3 OS | release | review | 7003b0a, 1f20759 | `cargo xtask ci` green on macOS (ui steps print a loud skip while `ui/package.json` is absent; mandatory once L-002 lands); `layers` and `check-scenario-ids` proven to fail on bad input; `cargo deny check` and `actionlint` clean. Follow-ups: orchestrator proves "green on 3 OS" after merge (act on Linux, GitHub on Windows); `release.yml` has a shellcheck SC2035 note at line 66 (L-020); `e2e` job gated on `ui/e2e` existing (L-023); `deny.toml` allows wildcard path deps because the crates are not marked `publish = false`. |
 | L-023 | M0 | WebDriver smoke suite (`npm --prefix ui run e2e`): the app boots and shows the Swiss Moss paper background; the `e2e` CI job is green on Linux and Windows | qa | todo | | |
 | L-024 | M0 | Close M0: `cargo xtask ci` green on macOS, Windows, Linux in CI on `main`; empty Swiss Moss paper window opens | orchestrator | todo | | |
 | L-006 | M1 | ICS fetcher with ETag, timeout, size cap, redacted logging (S1.1 to S1.5) | core | todo | | |
