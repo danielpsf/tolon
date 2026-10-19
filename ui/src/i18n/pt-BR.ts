@@ -14,7 +14,7 @@ export const ptBR: Messages = {
     appearance: "Aparência",
     startup: "Inicialização",
     about: "Sobre",
-    comingSoon: "Esta página ainda não foi criada.",
+    comingSoon: "Disponível em uma versão futura.",
   },
   calendars: {
     title: "Calendários",

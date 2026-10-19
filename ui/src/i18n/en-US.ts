@@ -14,7 +14,7 @@ export const enUS = {
     appearance: "Appearance",
     startup: "Startup",
     about: "About",
-    comingSoon: "This page is not built yet.",
+    comingSoon: "Coming in a later version.",
   },
   calendars: {
     title: "Calendars",

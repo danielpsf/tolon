@@ -14,7 +14,7 @@ export const ptPT: Messages = {
     appearance: "Aspeto",
     startup: "Arranque",
     about: "Acerca de",
-    comingSoon: "Esta página ainda não foi criada.",
+    comingSoon: "Disponível numa versão futura.",
   },
   calendars: {
     title: "Calendários",
