@@ -35,14 +35,20 @@ pub type NativePlatform = StubPlatform;
 
 /// One connected display.
 ///
-/// Both coordinate sets put the primary screen's top-left corner at `(0, 0)` with `y` growing
-/// downward.
+/// **Do not pick coordinates yourself: call [`Screen::placement`]**, which returns the right
+/// kind for the OS. The rule differs per OS:
+/// - macOS: one logical space shared by all screens. Place with `LogicalPosition(x, y)` and
+///   `LogicalSize(width, height)`. A physical position would be converted with the scale of the
+///   window's *current* screen (tao does this), so a window on a 2x primary placed at the
+///   physical x of a 1x screen to its right would land at half that x, still on the primary.
+/// - Windows: no shared logical space, each screen is divided by its own `scale_factor`, so the
+///   logical `x` and `y` of screens with different scales cannot be compared. Place with the
+///   `physical_*` fields through `PhysicalPosition` and `PhysicalSize`.
+/// - Linux: [`Platform::screens`] is unsupported there; the app uses Tauri's monitors.
 ///
-/// **Place windows with the `physical_*` fields**, through Tauri's `PhysicalPosition` and
-/// `PhysicalSize`. They are exact on every OS. `x`, `y`, `width` and `height` are logical
-/// points, for display and size maths. Only macOS has one logical space shared by all screens;
-/// on Windows each screen is divided by its own `scale_factor`, so the logical `x` and `y` of
-/// two screens with different scales cannot be compared with each other.
+/// Both coordinate sets put the primary screen's top-left corner at `(0, 0)` with `y` growing
+/// downward. The physical fields are exact data on every OS even where they are not used for
+/// placement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Screen {
     /// Stable while the display stays connected (macOS: `CGDirectDisplayID`).
@@ -63,6 +69,57 @@ pub struct Screen {
     pub scale_factor: f64,
     /// The primary screen (macOS: the one with the menu bar). Exactly one screen has it set.
     pub is_main: bool,
+}
+
+/// Where and how large to put a window so it covers a [`Screen`]; see [`Screen::placement`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Placement {
+    /// Logical points: Tauri `LogicalPosition(x, y)` and `LogicalSize(width, height)`.
+    Logical {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
+    /// Physical pixels: Tauri `PhysicalPosition(x, y)` and `PhysicalSize(width, height)`.
+    Physical {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
+}
+
+impl Screen {
+    /// The placement that is right for the OS this build targets: logical on macOS, physical
+    /// everywhere else (Windows; the other OSes only see the stub).
+    pub fn placement(&self) -> Placement {
+        if cfg!(target_os = "macos") {
+            self.logical_placement()
+        } else {
+            self.physical_placement()
+        }
+    }
+
+    /// The logical rectangle, whatever the OS.
+    pub fn logical_placement(&self) -> Placement {
+        Placement::Logical {
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+        }
+    }
+
+    /// The physical rectangle, whatever the OS.
+    pub fn physical_placement(&self) -> Placement {
+        Placement::Physical {
+            x: self.physical_x,
+            y: self.physical_y,
+            width: self.physical_width,
+            height: self.physical_height,
+        }
+    }
 }
 
 /// A platform call failed. The app logs it and uses the F4.5 fallback; it never crashes.
@@ -344,6 +401,69 @@ mod tests {
             e.to_string(),
             "SetWindowPos failed with OS error 0x80070005"
         );
+    }
+
+    /// A 1x external screen to the right of a 2x Retina primary, as macOS reports them.
+    fn external_right_of_retina() -> Screen {
+        Screen {
+            id: 2,
+            x: 1440.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+            physical_x: 1440,
+            physical_y: 0,
+            physical_width: 1920,
+            physical_height: 1080,
+            scale_factor: 1.0,
+            is_main: false,
+        }
+    }
+
+    #[test]
+    fn s4_2_logical_placement_keeps_the_shared_logical_origin() {
+        assert_eq!(
+            external_right_of_retina().logical_placement(),
+            Placement::Logical {
+                x: 1440.0,
+                y: 0.0,
+                width: 1920.0,
+                height: 1080.0
+            }
+        );
+    }
+
+    #[test]
+    fn s4_2_physical_placement_uses_the_physical_fields() {
+        let mut s = external_right_of_retina();
+        s.physical_x = -1920;
+        s.physical_y = 40;
+        assert_eq!(
+            s.physical_placement(),
+            Placement::Physical {
+                x: -1920,
+                y: 40,
+                width: 1920,
+                height: 1080
+            }
+        );
+    }
+
+    #[test]
+    fn placement_picks_logical_on_macos_and_physical_elsewhere() {
+        let s = external_right_of_retina();
+        let expected = if cfg!(target_os = "macos") {
+            s.logical_placement()
+        } else {
+            s.physical_placement()
+        };
+        assert_eq!(s.placement(), expected);
+        // The stub is what CI and unknown OSes place with.
+        let stub = StubPlatform.screens().unwrap_or_default();
+        assert!(stub.iter().all(|s| matches!(
+            (s.placement(), cfg!(target_os = "macos")),
+            (Placement::Logical { .. }, true) | (Placement::Physical { .. }, false)
+        )));
     }
 
     #[test]

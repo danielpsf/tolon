@@ -149,6 +149,15 @@ mod tests {
         // The logical origin is not 1920: using it as a physical position would land on the
         // primary monitor.
         assert_eq!(s[1].x, 960.0);
+        assert_eq!(
+            s[1].physical_placement(),
+            crate::Placement::Physical {
+                x: 1920,
+                y: 0,
+                width: 3840,
+                height: 2160
+            }
+        );
 
         let inside = |scr: &Screen, px: i64, py: i64| {
             px >= i64::from(scr.physical_x)
