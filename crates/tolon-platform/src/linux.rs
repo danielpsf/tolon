@@ -47,7 +47,6 @@ impl Platform for LinuxPlatform {
         takeover_for(detect_session(
             env("XDG_SESSION_TYPE").as_deref(),
             env("WAYLAND_DISPLAY").as_deref(),
-            env("DISPLAY").as_deref(),
         ))
     }
 }

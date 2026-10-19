@@ -2,7 +2,7 @@
 
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
-use crate::{ns_view_of, Platform, PlatformError, Raised, Screen};
+use crate::{ns_view_of, Platform, PlatformError, Raised, Screen, Takeover};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSView, NSWindow, NSWindowCollectionBehavior};
@@ -74,6 +74,10 @@ impl Platform for MacPlatform {
             focused: ns_window.isKeyWindow(),
         })
     }
+
+    fn takeover_support(&self) -> Takeover {
+        Takeover::Full
+    }
 }
 
 #[cfg(test)]
@@ -92,6 +96,11 @@ mod tests {
                 | NSWindowCollectionBehavior::Stationary)
                 .0
         );
+    }
+
+    #[test]
+    fn takeover_is_full() {
+        assert_eq!(MacPlatform.takeover_support(), Takeover::Full);
     }
 
     #[test]

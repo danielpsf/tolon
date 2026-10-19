@@ -9,31 +9,26 @@ use raw_window_handle::RawWindowHandle;
 pub enum Session {
     X11,
     Wayland,
-    /// No display variable says anything: a console login or an SSH session.
-    None,
 }
 
-/// Decide the session from `XDG_SESSION_TYPE`, `WAYLAND_DISPLAY` and `DISPLAY`.
+/// Decide the session from `XDG_SESSION_TYPE` and `WAYLAND_DISPLAY`.
 ///
 /// `XDG_SESSION_TYPE` (`x11` or `wayland`, any case) wins because the login manager sets it
 /// for the whole session. When it is missing, empty, `tty` or `unspecified`, a set
-/// `WAYLAND_DISPLAY` means Wayland and a set `DISPLAY` means X11. Wayland is checked first
-/// because a Wayland session with XWayland sets both, and the compositor decides stacking.
-pub fn detect_session(
-    xdg_session_type: Option<&str>,
-    wayland_display: Option<&str>,
-    display: Option<&str>,
-) -> Session {
-    let set = |v: Option<&str>| v.is_some_and(|s| !s.trim().is_empty());
+/// `WAYLAND_DISPLAY` means Wayland; a Wayland session with XWayland also sets `DISPLAY`, so
+/// `DISPLAY` cannot tell the two apart and is not read. When nothing says Wayland the answer
+/// is X11: Tolon is a GTK app and cannot start without a display, so a process that runs at all
+/// has one, and X11 is the one that can take over the screen.
+pub fn detect_session(xdg_session_type: Option<&str>, wayland_display: Option<&str>) -> Session {
+    let wayland_display_set = wayland_display.is_some_and(|s| !s.trim().is_empty());
     match xdg_session_type
         .map(|s| s.trim().to_ascii_lowercase())
         .as_deref()
     {
         Some("wayland") => Session::Wayland,
         Some("x11") => Session::X11,
-        _ if set(wayland_display) => Session::Wayland,
-        _ if set(display) => Session::X11,
-        _ => Session::None,
+        _ if wayland_display_set => Session::Wayland,
+        _ => Session::X11,
     }
 }
 
@@ -46,12 +41,11 @@ pub fn session_of_handle(raw: RawWindowHandle) -> Option<Session> {
     }
 }
 
-/// What a session allows (AC4.1, AC4.5): X11 takes over, Wayland does not, no display cannot show anything.
+/// What a session allows (AC4.1, AC4.5): X11 takes over, Wayland does not.
 pub fn takeover_for(session: Session) -> Takeover {
     match session {
         Session::X11 => Takeover::Full,
         Session::Wayland => Takeover::Degraded(Reason::WaylandNoTakeover),
-        Session::None => Takeover::Degraded(Reason::NoDisplayServer),
     }
 }
 
@@ -59,39 +53,29 @@ pub fn takeover_for(session: Session) -> Takeover {
 mod tests {
     use super::*;
 
-    fn d(xdg: Option<&str>, wl: Option<&str>, x: Option<&str>) -> Session {
-        detect_session(xdg, wl, x)
-    }
+    use detect_session as d;
 
     #[test]
     fn xdg_session_type_decides_first() {
-        assert_eq!(d(Some("wayland"), None, Some(":0")), Session::Wayland);
-        assert_eq!(d(Some("x11"), Some("wayland-0"), None), Session::X11);
-        assert_eq!(d(Some("Wayland"), None, None), Session::Wayland);
-        assert_eq!(d(Some(" X11 "), None, None), Session::X11);
+        assert_eq!(d(Some("wayland"), None), Session::Wayland);
+        assert_eq!(d(Some("x11"), Some("wayland-0")), Session::X11);
+        assert_eq!(d(Some("Wayland"), None), Session::Wayland);
+        assert_eq!(d(Some(" X11 "), None), Session::X11);
     }
 
     #[test]
-    fn falls_back_to_display_variables() {
-        assert_eq!(d(None, Some("wayland-0"), None), Session::Wayland);
-        assert_eq!(d(None, None, Some(":0")), Session::X11);
-        assert_eq!(d(Some("tty"), None, Some(":1")), Session::X11);
-        assert_eq!(
-            d(Some("unspecified"), Some("wayland-1"), None),
-            Session::Wayland
-        );
+    fn falls_back_to_wayland_display() {
+        assert_eq!(d(None, Some("wayland-0")), Session::Wayland);
+        assert_eq!(d(Some("tty"), Some("wayland-1")), Session::Wayland);
+        assert_eq!(d(Some("unspecified"), Some("wayland-1")), Session::Wayland);
     }
 
     #[test]
-    fn wayland_with_xwayland_is_still_wayland() {
-        assert_eq!(d(None, Some("wayland-0"), Some(":0")), Session::Wayland);
-    }
-
-    #[test]
-    fn empty_values_count_as_unset() {
-        assert_eq!(d(Some(""), Some(""), Some("  ")), Session::None);
-        assert_eq!(d(None, None, None), Session::None);
-        assert_eq!(d(Some("mir"), None, None), Session::None);
+    fn nothing_detected_is_x11() {
+        assert_eq!(d(None, None), Session::X11);
+        assert_eq!(d(Some(""), Some("  ")), Session::X11);
+        assert_eq!(d(Some("tty"), None), Session::X11);
+        assert_eq!(d(Some("mir"), None), Session::X11);
     }
 
     #[test]
@@ -117,9 +101,5 @@ mod tests {
             Takeover::Degraded(Reason::WaylandNoTakeover)
         );
         assert_eq!(takeover_for(Session::X11), Takeover::Full);
-        assert_eq!(
-            takeover_for(Session::None),
-            Takeover::Degraded(Reason::NoDisplayServer)
-        );
     }
 }

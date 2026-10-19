@@ -100,8 +100,8 @@ pub enum Takeover {
 pub enum Reason {
     /// A Wayland session: compositors ignore always-on-top requests from ordinary windows.
     WaylandNoTakeover,
-    /// Neither `WAYLAND_DISPLAY` nor `DISPLAY` is set, so no window can open at all.
-    NoDisplayServer,
+    /// No implementation for this OS ([`StubPlatform`]): nothing can cover the screen.
+    Unsupported,
 }
 
 impl Reason {
@@ -109,7 +109,7 @@ impl Reason {
     pub fn code(self) -> &'static str {
         match self {
             Reason::WaylandNoTakeover => "wayland_no_takeover",
-            Reason::NoDisplayServer => "no_display_server",
+            Reason::Unsupported => "unsupported",
         }
     }
 }
@@ -146,14 +146,14 @@ pub trait Platform: Send + Sync {
         -> Result<Raised, PlatformError>;
 
     /// Whether [`Platform::raise_above_everything`] can really cover other windows here. The app
-    /// asks once before an alarm and runs the F4.5 fallback on [`Takeover::Degraded`]. The
-    /// default is [`Takeover::Full`]; only Linux overrides it.
-    fn takeover_support(&self) -> Takeover {
-        Takeover::Full
-    }
+    /// asks once before an alarm and runs the F4.5 fallback on [`Takeover::Degraded`]. Every
+    /// implementation answers for itself; there is no default.
+    fn takeover_support(&self) -> Takeover;
 }
 
-/// Implementation for CI and tests: one fixed 1440x900 primary screen; raising does nothing.
+/// Implementation for CI and tests: one fixed 1440x900 primary screen at 2x; raising does
+/// nothing and reports no focus. It is also what unknown OSes get, so it reports
+/// `Degraded(Unsupported)`: nothing here can cover the screen.
 pub struct StubPlatform;
 
 impl Platform for StubPlatform {
@@ -182,6 +182,10 @@ impl Platform for StubPlatform {
         _window: &dyn HasWindowHandle,
     ) -> Result<Raised, PlatformError> {
         Ok(Raised { focused: false })
+    }
+
+    fn takeover_support(&self) -> Takeover {
+        Takeover::Degraded(Reason::Unsupported)
     }
 }
 
@@ -330,14 +334,17 @@ mod tests {
     }
 
     #[test]
-    fn stub_takeover_is_full() {
-        assert_eq!(StubPlatform.takeover_support(), Takeover::Full);
+    fn stub_takeover_is_degraded_as_unsupported() {
+        assert_eq!(
+            StubPlatform.takeover_support(),
+            Takeover::Degraded(Reason::Unsupported)
+        );
     }
 
     #[test]
     fn reason_codes_are_stable() {
         assert_eq!(Reason::WaylandNoTakeover.code(), "wayland_no_takeover");
-        assert_eq!(Reason::NoDisplayServer.code(), "no_display_server");
+        assert_eq!(Reason::Unsupported.code(), "unsupported");
     }
 
     #[test]

@@ -14,7 +14,7 @@
 //! `Raised { focused: false }`; the app decides whether to add the F4.5 notification.
 
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
-use crate::{hwnd_of, Platform, PlatformError, Raised, Screen};
+use crate::{hwnd_of, Platform, PlatformError, Raised, Screen, Takeover};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
 use windows::core::BOOL;
@@ -175,6 +175,10 @@ impl Platform for WindowsPlatform {
         Ok(Raised {
             focused: take_foreground(hwnd),
         })
+    }
+
+    fn takeover_support(&self) -> Takeover {
+        Takeover::Full
     }
 }
 
