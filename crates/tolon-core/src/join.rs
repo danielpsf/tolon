@@ -56,7 +56,7 @@ fn is_https(s: &str) -> bool {
 fn links_in(text: &str) -> Vec<String> {
     let text = ["&quot;", "&lt;", "&gt;", "&#39;", "&apos;"]
         .iter()
-        .fold(text.to_string(), |t, e| t.replace(e, " "))
+        .fold(capped(text).to_string(), |t, e| t.replace(e, " "))
         .replace("&amp;", "&");
     text.split(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '\'' | '`'))
         .map(|tok| tok.trim_start_matches(['(', '[', '{', '*']))
@@ -70,20 +70,40 @@ fn links_in(text: &str) -> Vec<String> {
 /// Drops sentence punctuation after a link, and a closing bracket only when the link has no
 /// opener for it, so `https://x/a_(b)` keeps its `)` and `(see https://x/a).` loses it.
 fn trim_end(mut s: &str) -> &str {
+    const PAIRS: [(char, char); 3] = [('(', ')'), ('[', ']'), ('{', '}')];
+    // Counted once and updated as we trim, so the whole pass is linear.
+    let open = PAIRS.map(|(o, _)| s.matches(o).count());
+    let mut close = PAIRS.map(|(_, c)| s.matches(c).count());
     while let Some(last) = s.chars().next_back() {
-        let opener = match last {
-            '.' | ',' | ';' | ':' | '!' | '?' | '*' => None,
-            ')' => Some('('),
-            ']' => Some('['),
-            '}' => Some('{'),
-            _ => break,
-        };
-        if opener.is_some_and(|o| s.matches(o).count() >= s.matches(last).count()) {
+        if let Some(i) = PAIRS.iter().position(|&(_, c)| c == last) {
+            if open[i] >= close[i] {
+                break;
+            }
+            close[i] -= 1;
+        } else if !matches!(last, '.' | ',' | ';' | ':' | '!' | '?' | '*') {
             break;
         }
         s = &s[..s.len() - last.len_utf8()];
     }
     s
+}
+
+/// shortcut: only the first 8 KB of a field is scanned, so a hostile feed cannot make a
+/// join lookup expensive; raise it if real descriptions put the join link further down.
+const MAX_SCAN: usize = 8 * 1024;
+
+/// `text` cut to `MAX_SCAN` bytes, dropping a link the cut would split in half.
+fn capped(text: &str) -> &str {
+    if text.len() <= MAX_SCAN {
+        return text;
+    }
+    let mut n = MAX_SCAN;
+    while !text.is_char_boundary(n) {
+        n -= 1;
+    }
+    let head = &text[..n];
+    head.rfind(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '\'' | '`'))
+        .map_or("", |i| &head[..i])
 }
 
 /// The lower-cased host of an `https://` link, without port or trailing dot. `None` when it
@@ -277,5 +297,31 @@ mod tests {
             in_field("description", "Link: https://meet.jit.si/Room_(a), thanks!"),
             link("https://meet.jit.si/Room_(a)")
         );
+    }
+
+    #[test]
+    fn hostile_input_is_fast() {
+        let fast = std::time::Duration::from_millis(100);
+        for tail in [")".repeat(200_000), ").".repeat(100_000)] {
+            let text = format!("https://zoom.us/j/1{tail}");
+            let t = std::time::Instant::now();
+            assert_eq!(trim_end(&text), "https://zoom.us/j/1");
+            for field in ["location", "description"] {
+                assert_eq!(in_field(field, &text), JoinTarget::None, "over the cap");
+            }
+            assert!(t.elapsed() < fast, "{:?}", t.elapsed());
+        }
+        let text = format!("https://zoom.us/j/1{}", ")".repeat(MAX_SCAN - 100));
+        let t = std::time::Instant::now();
+        assert_eq!(in_field("description", &text), link("https://zoom.us/j/1"));
+        assert!(t.elapsed() < fast, "{:?}", t.elapsed());
+    }
+
+    #[test]
+    fn a_link_past_the_scan_cap_is_ignored() {
+        let text = format!("{} https://zoom.us/j/1", "x ".repeat(MAX_SCAN));
+        assert_eq!(in_field("description", &text), JoinTarget::None);
+        let cut = format!("{} https://zoom.us/j/1", "x ".repeat(MAX_SCAN / 2 - 8));
+        assert_eq!(in_field("description", &cut), JoinTarget::None);
     }
 }
