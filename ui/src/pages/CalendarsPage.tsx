@@ -119,7 +119,7 @@ function ConfirmRemove({
 export function CalendarsPage() {
   const c = copy();
   const { calendars: t } = c.t;
-  const { calendars, loaded, loadError, refresh } = useCalendars();
+  const { calendars, loaded, loadError } = useCalendars();
   const now = useNow();
 
   const [adding, setAdding] = useState(false);
@@ -148,7 +148,6 @@ export function CalendarsPage() {
       setAddError(errorText(err, c));
     } finally {
       setPending(false);
-      void refresh();
     }
   }
 
@@ -159,7 +158,6 @@ export function CalendarsPage() {
     } catch (err) {
       setActionError(errorText(err, c));
     }
-    void refresh();
   }
 
   async function confirmRemove() {
@@ -173,7 +171,8 @@ export function CalendarsPage() {
     }
     setRemoveBusy(false);
     setRemoving(null);
-    void refresh();
+    // The dialog hands focus back to the Remove button it came from, which is gone by then.
+    requestAnimationFrame(() => addButton.current?.focus());
   }
 
   const open = () => setAdding(true);
