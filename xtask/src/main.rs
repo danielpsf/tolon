@@ -1,6 +1,7 @@
 //! Repo automation: `cargo xtask <command>`.
 
 mod ci;
+mod fixtures;
 mod fsutil;
 mod ids;
 mod layers;
@@ -14,7 +15,7 @@ const USAGE: &str = "usage: cargo xtask <command>\n\n\
 commands:\n  ci                   fmt, clippy, tests, layers, scenario ids, ui lint and tests\n  \
 layers               check crate dependency direction and target_os confinement\n  \
 check-scenario-ids   check scenario and AC ids against docs/plan.md\n  \
-fixtures             not implemented yet (L-007)\n  \
+fixtures             rewrite fixtures/ics/*.expected.json (review the diff)\n  \
 bump                 not implemented yet (L-019)";
 
 fn repo_root() -> Result<PathBuf> {
@@ -31,10 +32,7 @@ fn run(command: &str) -> Result<ExitCode> {
         "ci" => ci::run(&root)?,
         "layers" => layers::run(&root)?,
         "check-scenario-ids" => scenario_ids::run(&root)?,
-        "fixtures" => {
-            eprintln!("fixtures: not implemented yet (L-007)");
-            return Ok(ExitCode::FAILURE);
-        }
+        "fixtures" => fixtures::run(&root)?,
         "bump" => {
             eprintln!("bump: not implemented yet (L-019)");
             return Ok(ExitCode::FAILURE);

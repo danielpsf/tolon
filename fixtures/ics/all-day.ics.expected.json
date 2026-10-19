@@ -1,0 +1,100 @@
+{
+  "calendar_name": "Company Calendar",
+  "events": 6,
+  "now": "2026-10-22T08:00:00Z",
+  "occurrences": [
+    {
+      "all_day": true,
+      "end": "2026-10-23T00:00:00+02:00",
+      "event": "fixture:allday-until-date@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-until-date@example.com",
+        "original_start": "2026-10-21T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T00:00:00+02:00",
+      "title": "Training week (daily, UNTIL as a date)"
+    },
+    {
+      "all_day": true,
+      "end": "2026-10-24T00:00:00+02:00",
+      "event": "fixture:allday-single@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-single@example.com",
+        "original_start": "2026-10-22T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T00:00:00+02:00",
+      "title": "Company day off"
+    },
+    {
+      "all_day": true,
+      "end": "2026-10-24T00:00:00+02:00",
+      "event": "fixture:allday-until-date@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-until-date@example.com",
+        "original_start": "2026-10-22T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T00:00:00+02:00",
+      "title": "Training week (daily, UNTIL as a date)"
+    },
+    {
+      "all_day": false,
+      "end": "2026-10-23T12:30:00+02:00",
+      "event": "fixture:allday-timed-neighbour@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-timed-neighbour@example.com",
+        "original_start": "2026-10-23T10:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T12:00:00+02:00",
+      "title": "Normal meeting on the day off"
+    },
+    {
+      "all_day": true,
+      "end": "2026-10-25T00:00:00+02:00",
+      "event": "fixture:allday-weekly@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-weekly@example.com",
+        "original_start": "2026-10-23T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-24T00:00:00+02:00",
+      "title": "Weekend on-call (Sunday 25 Oct excluded)"
+    },
+    {
+      "all_day": true,
+      "end": "2026-10-26T00:00:00+01:00",
+      "event": "fixture:allday-no-dtend@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-no-dtend@example.com",
+        "original_start": "2026-10-24T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-25T00:00:00+02:00",
+      "title": "Clocks go back (no DTEND)"
+    },
+    {
+      "all_day": true,
+      "end": "2026-10-29T00:00:00+01:00",
+      "event": "fixture:allday-multi@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-multi@example.com",
+        "original_start": "2026-10-25T23:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-26T00:00:00+01:00",
+      "title": "Conference week (3 days)"
+    }
+  ],
+  "skipped_components": 0,
+  "zone": "Europe/Berlin"
+}

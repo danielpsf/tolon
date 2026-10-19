@@ -1,6 +1,18 @@
 //! Domain types and pure functions: events, occurrences, expansion, ignore rules,
 //! the alarm state machine and join-link detection. No I/O, no async runtime.
 
+mod expand;
+mod model;
+mod parse;
+mod tzid;
+
+pub use expand::{expand, expand_window, ExpandOptions, WINDOW_DAYS};
+pub use model::{
+    wall_clock, CalendarId, Event, EventId, EventStatus, EventTime, JoinTarget, Occurrence,
+    OccurrenceKey, Override, Response,
+};
+pub use parse::{parse_ics, ParseOptions, ParsedCalendar};
+
 /// Crate name, a placeholder export until the real API lands.
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
