@@ -318,6 +318,76 @@ fn ac2_2_exdate_and_recurrence_id_overrides() -> TestResult {
     Ok(())
 }
 
+/// One recurring event with the given DTSTART line and RRULE, over the fixed clock's window.
+fn until_case(dtstart: &str, rule: &str) -> TestResult<Vec<String>> {
+    let feed = wrap(&format!(
+        "BEGIN:VEVENT\nUID:u@example.com\nSUMMARY:u\n{dtstart}\nRRULE:{rule}\nEND:VEVENT\n"
+    ));
+    let parsed = parse_ics(&feed, &cal(), &ParseOptions::default());
+    assert_eq!(parsed.skipped_components, 0, "{dtstart} {rule}");
+    let opts = ExpandOptions {
+        include_all_day: true,
+        ..ExpandOptions::default()
+    };
+    Ok(starts(&expand(&parsed.events, now()?, LOCAL, &opts)))
+}
+
+#[test]
+fn ac2_2_until_in_any_form_expands() -> TestResult {
+    // DATE start, DATE until: inclusive through that day.
+    assert_eq!(
+        until_case("DTSTART;VALUE=DATE:20261020", "FREQ=DAILY;UNTIL=20261025")?,
+        [
+            "2026-10-22 00:00 +02:00",
+            "2026-10-23 00:00 +02:00",
+            "2026-10-24 00:00 +02:00",
+            "2026-10-25 00:00 +02:00"
+        ]
+    );
+    // DATE start, weekly BYDAY, DATE until (Google all-day series).
+    assert_eq!(
+        until_case(
+            "DTSTART;VALUE=DATE:20261003",
+            "FREQ=WEEKLY;BYDAY=SA,SU;UNTIL=20261025"
+        )?,
+        ["2026-10-24 00:00 +02:00", "2026-10-25 00:00 +02:00"]
+    );
+    // TZID start, floating until: read in the event's zone, so 25 Oct 00:00 Berlin ends the series.
+    assert_eq!(
+        until_case(
+            "DTSTART;TZID=Europe/Berlin:20261020T090000",
+            "FREQ=DAILY;UNTIL=20261025T000000"
+        )?,
+        ["2026-10-23 09:00 +02:00", "2026-10-24 09:00 +02:00"]
+    );
+    // Floating start, floating until: both in the machine's zone, until inclusive.
+    assert_eq!(
+        until_case(
+            "DTSTART:20261020T090000",
+            "FREQ=DAILY;UNTIL=20261024T090000"
+        )?,
+        ["2026-10-23 09:00 +02:00", "2026-10-24 09:00 +02:00"]
+    );
+    // UTC start, date until: inclusive through that day in UTC.
+    assert_eq!(
+        until_case("DTSTART:20261020T090000Z", "FREQ=DAILY;UNTIL=20261024")?,
+        [
+            "2026-10-22 11:00 +02:00",
+            "2026-10-23 11:00 +02:00",
+            "2026-10-24 11:00 +02:00"
+        ]
+    );
+    // Control: the form RFC 5545 asks for still works.
+    assert_eq!(
+        until_case(
+            "DTSTART;TZID=Europe/Berlin:20261020T090000",
+            "FREQ=DAILY;UNTIL=20261024T070000Z"
+        )?,
+        ["2026-10-23 09:00 +02:00", "2026-10-24 09:00 +02:00"]
+    );
+    Ok(())
+}
+
 #[test]
 fn ac2_3_cancelled_events_are_excluded() -> TestResult {
     let feed = |method: &str, status: &str| {
@@ -412,8 +482,8 @@ fn ac2_4_all_day_events_are_excluded_by_default_and_included_on_request() -> Tes
             ..ExpandOptions::default()
         },
     );
-    assert_eq!(all.len(), 5);
-    assert_eq!(all.iter().filter(|o| o.all_day).count(), 4);
+    assert_eq!(all.len(), 7);
+    assert_eq!(all.iter().filter(|o| o.all_day).count(), 6);
     Ok(())
 }
 
@@ -439,6 +509,14 @@ fn ac2_5_parsing_never_panics_and_skips_bad_components() -> TestResult {
         "BEGIN:VEVENT\nDTSTART;;;:\nATTENDEE;=:\nEND:VEVENT",
         "BEGIN:VEVENT\nDTSTART:20261022T090000Z\nRECURRENCE-ID:garbage\nEND:VEVENT",
         "BEGIN:VEVENT\nDTSTART:2026\u{1F600}\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART;VALUE=DATE:20261020\nRRULE:FREQ=DAILY;UNTIL=20261025\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART;TZID=Europe/Berlin:20261020T090000\nRRULE:FREQ=DAILY;UNTIL=20261025T000000\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART:20261020T090000Z\nRRULE:FREQ=DAILY;UNTIL=20261024\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART:20261020T090000\nRRULE:FREQ=DAILY;UNTIL=garbage\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART:20261020T090000\nRRULE:FREQ=DAILY;UNTIL=99999999\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART:20261020T090000\nRRULE:FREQ=DAILY;UNTIL=20190101\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART:20261020T090000\nRRULE:FREQ=DAILY;UNTIL=;UNTIL=\nEND:VEVENT",
+        "BEGIN:VEVENT\nDTSTART:20261020T090000\nRRULE:UNTIL=20261024;FREQ=DAILY;;\nEND:VEVENT",
     ];
     let (n, opts) = (now()?, ExpandOptions::default());
     for text in hostile {

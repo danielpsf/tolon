@@ -1,6 +1,6 @@
 //! Expansion: events to the concrete occurrences inside a window, in the machine's zone.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc};
 use chrono_tz::Tz;
 use rrule::{RRule, RRuleSet, Tz as RTz, Unvalidated};
 use std::collections::HashSet;
@@ -76,7 +76,7 @@ pub(crate) fn rrule_set(
     let zone = start.zone_or(local);
     let rtz = RTz::from(zone);
     let dt_start = start.resolve(zone)?.with_timezone(&rtz);
-    let rule: RRule<Unvalidated> = rrule.parse().ok()?;
+    let rule: RRule<Unvalidated> = normalise_until(rrule, zone).parse().ok()?;
     let mut set = rule.build(dt_start).ok()?.limit();
     for ex in exdates {
         if let Some(x) = ex.resolve(zone) {
@@ -84,6 +84,38 @@ pub(crate) fn rrule_set(
         }
     }
     Some(set)
+}
+
+/// Rewrite UNTIL to UTC, the one form rrule accepts next to a zoned DTSTART. RFC 5545 asks for
+/// UNTIL in DTSTART's form; feeds differ, so a DATE reads as inclusive through that day in the
+/// event's zone and a floating value reads in the event's zone (the machine's, for a floating event).
+fn normalise_until(rule: &str, zone: Tz) -> String {
+    let convert = |value: &str| -> Option<String> {
+        if value.ends_with(['Z', 'z']) {
+            return None;
+        }
+        let naive = if value.len() == 8 {
+            NaiveDate::parse_from_str(value, "%Y%m%d")
+                .ok()?
+                .and_hms_opt(23, 59, 59)?
+        } else {
+            NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S").ok()?
+        };
+        let utc = wall_clock(naive, zone)?.with_timezone(&Utc);
+        Some(utc.format("%Y%m%dT%H%M%SZ").to_string())
+    };
+    rule.split(';')
+        .map(|part| match part.split_once('=') {
+            Some((key, value)) if key.eq_ignore_ascii_case("UNTIL") => {
+                format!(
+                    "UNTIL={}",
+                    convert(value.trim()).unwrap_or_else(|| value.to_string())
+                )
+            }
+            _ => part.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 /// How long an instance lasts: whole local days for all-day events, an exact span otherwise.

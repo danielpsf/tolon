@@ -1,8 +1,21 @@
 {
   "calendar_name": "Company Calendar",
-  "events": 5,
+  "events": 6,
   "now": "2026-10-22T08:00:00Z",
   "occurrences": [
+    {
+      "all_day": true,
+      "end": "2026-10-23T00:00:00+02:00",
+      "event": "fixture:allday-until-date@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-until-date@example.com",
+        "original_start": "2026-10-21T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-22T00:00:00+02:00",
+      "title": "Training week (daily, UNTIL as a date)"
+    },
     {
       "all_day": true,
       "end": "2026-10-24T00:00:00+02:00",
@@ -15,6 +28,19 @@
       "people": 0,
       "start": "2026-10-23T00:00:00+02:00",
       "title": "Company day off"
+    },
+    {
+      "all_day": true,
+      "end": "2026-10-24T00:00:00+02:00",
+      "event": "fixture:allday-until-date@example.com",
+      "join": "none",
+      "key": {
+        "event": "fixture:allday-until-date@example.com",
+        "original_start": "2026-10-22T22:00:00Z"
+      },
+      "people": 0,
+      "start": "2026-10-23T00:00:00+02:00",
+      "title": "Training week (daily, UNTIL as a date)"
     },
     {
       "all_day": false,
