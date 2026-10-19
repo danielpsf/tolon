@@ -51,5 +51,8 @@ sha256sum -c SHA256SUMS --ignore-missing
 ## Known limits
 
 - macOS: the first launch needs the Open Anyway step above.
+- macOS Spaces: the interrupt joins every Space and sits above full-screen apps, so it stays up when you switch Space. Join, snooze or dismiss it to close it on all screens.
+- Windows focus: Windows stops background apps from taking keyboard focus. Tolon always puts the interrupt above every other window, but Windows may refuse it focus. Then Enter, Esc, D and Space do nothing until you click the interrupt or press Alt+Tab to it; the buttons still work. An app in exclusive full-screen mode, such as some games, may still draw over it.
 - Linux on Wayland: the compositor may not let Tolon cover the whole screen. Tolon then shows a notification with Join and Snooze and plays the alarm sound instead. X11 sessions get the full takeover.
+- Linux: Tolon needs a graphical session.
 - Google Calendar sign-in (beta 2) uses a test client; refresh tokens expire after 7 days unless you paste your own client ID from a Google Workspace Internal app.

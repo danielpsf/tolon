@@ -4166,6 +4166,7 @@ dependencies = [
  "raw-window-handle",
  "thiserror 2.0.21",
  "tolon-core",
+ "windows",
 ]
 
 [[package]]

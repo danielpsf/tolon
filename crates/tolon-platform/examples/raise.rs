@@ -131,10 +131,11 @@ fn main() {
             };
             let view = View(NonNull::from(&*content).cast());
             match MacPlatform.raise_above_everything(&view) {
-                Ok(()) => println!(
-                    "raised: level={} behavior={:#x}",
+                Ok(raised) => println!(
+                    "raised: level={} behavior={:#x} focus={:?}",
                     window.level(),
-                    window.collectionBehavior().0
+                    window.collectionBehavior().0,
+                    raised.focus
                 ),
                 Err(e) => eprintln!("raise failed: {e}"),
             }

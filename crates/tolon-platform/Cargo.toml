@@ -19,6 +19,11 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSColor", "NSRunningApplication", "NSGraphics", "NSResponder", "NSScreen", "NSText", "NSTextField", "NSControl", "NSView", "NSWindow"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSGeometry", "NSString", "NSValue"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Same 0.62 that wry and tauri already pull in, so the lockfile gains an edge, not a crate.
+# Only the Win32 areas used: monitors (Gdi), DPI (HiDpi), topmost and foreground (WindowsAndMessaging), AttachThreadInput (Threading).
+windows = { version = "0.62", default-features = false, features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
+
 # AppKit needs the main thread and libtest runs tests on workers, so this test has no harness.
 [[test]]
 name = "macos_screens"

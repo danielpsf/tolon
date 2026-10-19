@@ -1,7 +1,8 @@
 //! macOS implementation on AppKit. Every call needs the main thread.
 
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
-use crate::{ns_view_of, Platform, PlatformError, Screen};
+use crate::monitors::{to_physical_i32, to_physical_u32};
+use crate::{ns_view_of, Focus, Platform, PlatformError, Raised, Screen, Takeover};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSView, NSWindow, NSWindowCollectionBehavior};
@@ -37,20 +38,29 @@ impl Platform for MacPlatform {
             .enumerate()
             .map(|(i, s)| {
                 let f = s.frame();
+                let scale = s.backingScaleFactor();
+                let y = top_left_y(f.origin.y, f.size.height, primary_height);
                 Screen {
                     id: display_id(&s, u32::try_from(i).unwrap_or(u32::MAX)),
                     x: f.origin.x,
-                    y: top_left_y(f.origin.y, f.size.height, primary_height),
+                    y,
                     width: f.size.width,
                     height: f.size.height,
-                    scale_factor: s.backingScaleFactor(),
+                    physical_x: to_physical_i32(f.origin.x, scale),
+                    physical_y: to_physical_i32(y, scale),
+                    physical_width: to_physical_u32(f.size.width, scale),
+                    physical_height: to_physical_u32(f.size.height, scale),
+                    scale_factor: scale,
                     is_main: i == 0,
                 }
             })
             .collect())
     }
 
-    fn raise_above_everything(&self, window: &dyn HasWindowHandle) -> Result<(), PlatformError> {
+    fn raise_above_everything(
+        &self,
+        window: &dyn HasWindowHandle,
+    ) -> Result<Raised, PlatformError> {
         let _mtm = main_thread()?;
         let view = ns_view_of(window)?;
         // SAFETY: an AppKit handle carries a live NSView. `window` is borrowed for this call and
@@ -60,7 +70,17 @@ impl Platform for MacPlatform {
         ns_window.setLevel(INTERRUPT_WINDOW_LEVEL);
         ns_window.setCollectionBehavior(NSWindowCollectionBehavior(INTERRUPT_COLLECTION_BEHAVIOR));
         ns_window.makeKeyAndOrderFront(None);
-        Ok(())
+        // Not yet key is not a refusal: a tray app often becomes key a moment later.
+        let focus = if ns_window.isKeyWindow() {
+            Focus::Yes
+        } else {
+            Focus::Unknown
+        };
+        Ok(Raised { focus })
+    }
+
+    fn takeover_support(&self) -> Takeover {
+        Takeover::Full
     }
 }
 
@@ -80,6 +100,11 @@ mod tests {
                 | NSWindowCollectionBehavior::Stationary)
                 .0
         );
+    }
+
+    #[test]
+    fn takeover_is_full() {
+        assert_eq!(MacPlatform.takeover_support(), Takeover::Full);
     }
 
     #[test]
