@@ -77,6 +77,36 @@ unsafe extern "system" fn collect(
     BOOL::from(true)
 }
 
+/// Our input queue joined to another thread's; dropping it detaches again, so no exit path
+/// leaves the two queues attached.
+struct InputAttach {
+    this_thread: u32,
+    other_thread: u32,
+}
+
+impl InputAttach {
+    /// `None` when the threads are the same or Windows refuses to attach.
+    fn new(this_thread: u32, other_thread: u32) -> Option<Self> {
+        if other_thread == 0 || other_thread == this_thread {
+            return None;
+        }
+        // SAFETY: plain Win32 call on thread ids; Windows rejects ids that do not exist.
+        unsafe { AttachThreadInput(this_thread, other_thread, true) }
+            .as_bool()
+            .then_some(Self {
+                this_thread,
+                other_thread,
+            })
+    }
+}
+
+impl Drop for InputAttach {
+    fn drop(&mut self) {
+        // SAFETY: same ids that were attached in `new`.
+        let _ = unsafe { AttachThreadInput(self.this_thread, self.other_thread, false) };
+    }
+}
+
 /// Try to make `hwnd` the foreground window; `false` when Windows refuses.
 fn take_foreground(hwnd: HWND) -> bool {
     // SAFETY: plain Win32 calls on handles that may be stale; Windows rejects stale handles.
@@ -85,21 +115,14 @@ fn take_foreground(hwnd: HWND) -> bool {
         if foreground == hwnd {
             return true;
         }
-        let this_thread = GetCurrentThreadId();
         let foreground_thread = if foreground.0.is_null() {
             0
         } else {
             GetWindowThreadProcessId(foreground, None)
         };
-        let attached = foreground_thread != 0
-            && foreground_thread != this_thread
-            && AttachThreadInput(this_thread, foreground_thread, true).as_bool();
+        let _attached = InputAttach::new(GetCurrentThreadId(), foreground_thread);
         let _ = BringWindowToTop(hwnd);
-        let granted = SetForegroundWindow(hwnd).as_bool();
-        if attached {
-            let _ = AttachThreadInput(this_thread, foreground_thread, false);
-        }
-        granted
+        SetForegroundWindow(hwnd).as_bool()
     }
 }
 
