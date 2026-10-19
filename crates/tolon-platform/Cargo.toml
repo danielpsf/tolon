@@ -9,3 +9,17 @@ workspace = true
 
 [dependencies]
 tolon-core = { path = "../tolon-core" }
+# Parameter type of `raise_above_everything`; Tauri windows implement it, so no `tauri` dependency here.
+raw-window-handle = "0.6"
+thiserror = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+# Only the AppKit classes used, to keep compile time and the lockfile small.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSColor", "NSRunningApplication", "NSGraphics", "NSResponder", "NSScreen", "NSView", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSGeometry", "NSString", "NSValue"] }
+
+# AppKit needs the main thread and libtest runs tests on workers, so this test has no harness.
+[[test]]
+name = "macos_screens"
+harness = false
