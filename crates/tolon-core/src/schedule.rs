@@ -130,8 +130,12 @@ pub fn plan(
             }
         }
     }
+    // Read through `known`, so a repeated identity gives the same row (the last) as above.
     for old in existing {
-        if old.state.is_final() && planned.insert((&old.occurrence, old.kind)) {
+        let is_row = known
+            .get(&(&old.occurrence, old.kind))
+            .is_some_and(|row| std::ptr::eq(*row, old));
+        if is_row && old.state.is_final() && planned.insert((&old.occurrence, old.kind)) {
             out.push(old.clone());
         }
     }

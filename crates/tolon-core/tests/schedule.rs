@@ -455,6 +455,44 @@ fn ac3_3_a_joined_meeting_stays_closed_when_it_moves_later() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn ac3_3_joined_alarm_of_a_gone_occurrence_stays_joined() -> TestResult {
+    let meeting = occ("gone", at(14, 0)?, 3);
+    let s = settings(2, true);
+    let (lead_at, start) = (at(13, 58)?, at(14, 0)?);
+    let row = |kind, state| Alarm {
+        occurrence: meeting.key.clone(),
+        at: lead_at,
+        start,
+        kind,
+        state,
+    };
+    let joined = row(AlarmKind::Lead, AlarmState::Joined);
+    let kept = plan(&[], &s, std::slice::from_ref(&joined), at(14, 1)?);
+    assert_eq!(kept, vec![joined.clone()]);
+
+    // Two rows for one identity (the store's primary key forbids it, but a caller can pass them):
+    // the last one wins, the same rule `plan` applies when the occurrence is present, so a
+    // Joined row never turns into the Dismissed row that came before it, nor the reverse.
+    let dismissed = row(AlarmKind::Lead, AlarmState::Dismissed);
+    for (first, last) in [(&dismissed, &joined), (&joined, &dismissed)] {
+        let rows = [first.clone(), last.clone()];
+        assert_eq!(plan(&[], &s, &rows, at(14, 1)?), vec![last.clone()]);
+        assert_eq!(
+            plan(std::slice::from_ref(&meeting), &s, &rows, at(14, 1)?)
+                .iter()
+                .find(|a| a.kind == AlarmKind::Lead)
+                .map(|a| a.state),
+            Some(last.state)
+        );
+    }
+    // A final row followed by a Firing one for the same identity: the Firing one is the row.
+    let firing_row = row(AlarmKind::Lead, firing(at(13, 58)?));
+    let rows = [joined, firing_row];
+    assert!(plan(&[], &s, &rows, at(14, 1)?).is_empty());
+    Ok(())
+}
+
 fn firing_count(alarms: &[Alarm]) -> usize {
     alarms.iter().filter(|a| a.state.since().is_some()).count()
 }

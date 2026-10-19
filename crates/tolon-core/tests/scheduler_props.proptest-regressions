@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d569ab1308c1e1b16e37bf992a31e4b4d1774f741113d3ed3e2f676d5830aed0 # shrinks to occs = [], settings = AlarmSettings { lead_minutes: 0, again_at_start: false }, stored_settings = AlarmSettings { lead_minutes: 0, again_at_start: false }, states = [], shifts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], strays = [Alarm { occurrence: OccurrenceKey { event: EventId("cal:gone"), original_start: 2026-10-22T12:00:00Z }, at: 2026-10-22T12:00:00Z, start: 2026-10-22T12:00:00Z, kind: Lead, state: Dismissed }, Alarm { occurrence: OccurrenceKey { event: EventId("cal:gone"), original_start: 2026-10-22T12:00:00Z }, at: 2026-10-22T12:00:00Z, start: 2026-10-22T12:00:00Z, kind: Lead, state: Joined }], now = 0
