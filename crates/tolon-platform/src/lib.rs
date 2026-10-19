@@ -68,7 +68,7 @@ pub struct Screen {
 /// A platform call failed. The app logs it and uses the F4.5 fallback; it never crashes.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PlatformError {
-    /// The call needs the main thread (AppKit). Run it through `AppHandle::run_on_main_thread`.
+    /// The call needs the main thread (macOS checks). Run it through `AppHandle::run_on_main_thread`.
     #[error("must be called on the main thread")]
     NotMainThread,
     /// The window cannot give out a native handle, for example because it is already closed.
@@ -131,8 +131,12 @@ pub struct Raised {
 
 /// What the app needs from the operating system.
 ///
-/// Every call returns `Result`; a failure is reported, never fatal. On macOS every call must run
-/// on the main thread and returns [`PlatformError::NotMainThread`] anywhere else.
+/// Every call returns `Result`; a failure is reported, never fatal.
+///
+/// **Threading:** on every OS, call every method from the main (UI) thread; in Tauri, through
+/// `AppHandle::run_on_main_thread`. macOS checks it and returns [`PlatformError::NotMainThread`]
+/// anywhere else. Windows and Linux do not check, but the windows belong to the UI thread there
+/// too, so a call from another thread can block or race with it.
 pub trait Platform: Send + Sync {
     /// Short implementation name, for logs and diagnostics.
     fn name(&self) -> &'static str;
