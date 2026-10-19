@@ -9,8 +9,9 @@
 //! [`Platform::takeover_support`] reports [`Takeover::Degraded`] and the app runs the F4.5
 //! fallback (notification with Join and Snooze, alarm sound).
 //!
-//! `screens` returns an empty list: GDK and XRandR are the only sources, both need GTK or a new
-//! X11 dependency, and Tauri's `available_monitors` already reads them.
+//! `screens` returns `Err(Unsupported)`: GDK and XRandR are the only sources, both need GTK or a
+//! new X11 dependency, and Tauri's `available_monitors` already reads them. An error, not an
+//! empty list, so a successful result always has exactly one main screen.
 
 use crate::session::{detect_session, session_of_handle, takeover_for};
 use crate::{Platform, PlatformError, Raised, Screen, Takeover};
@@ -28,7 +29,7 @@ impl Platform for LinuxPlatform {
     }
 
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
-        Ok(Vec::new())
+        Err(PlatformError::Unsupported)
     }
 
     fn raise_above_everything(
@@ -60,7 +61,7 @@ mod tests {
 
     #[test]
     fn screens_are_left_to_tauri() {
-        assert_eq!(LinuxPlatform.screens(), Ok(Vec::new()));
+        assert_eq!(LinuxPlatform.screens(), Err(PlatformError::Unsupported));
     }
 
     #[test]

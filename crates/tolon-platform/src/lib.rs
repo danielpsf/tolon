@@ -80,6 +80,9 @@ pub enum PlatformError {
     /// The native view is not attached to a native window.
     #[error("the view has no window")]
     NoWindow,
+    /// This implementation cannot do the call (Linux `screens`); the app asks Tauri instead.
+    #[error("not supported on this platform")]
+    Unsupported,
     /// An OS call failed. `code` is the Win32 error or `HRESULT` it reported.
     #[error("{call} failed with OS error {code:#010x}")]
     Os { call: &'static str, code: u32 },
@@ -134,8 +137,8 @@ pub trait Platform: Send + Sync {
     /// Short implementation name, for logs and diagnostics.
     fn name(&self) -> &'static str;
 
-    /// Connected screens, primary first. An empty list means this platform cannot enumerate
-    /// screens (Linux today); the app then uses Tauri's `available_monitors`.
+    /// Connected screens, primary first; on success exactly one has `is_main`. Linux returns
+    /// [`PlatformError::Unsupported`]: the app then asks Tauri (`available_monitors`).
     fn screens(&self) -> Result<Vec<Screen>, PlatformError>;
 
     /// Put `window` above every other window, including full-screen apps, on all Spaces, and
@@ -338,6 +341,14 @@ mod tests {
         assert_eq!(
             StubPlatform.takeover_support(),
             Takeover::Degraded(Reason::Unsupported)
+        );
+    }
+
+    #[test]
+    fn unsupported_has_a_readable_message() {
+        assert_eq!(
+            PlatformError::Unsupported.to_string(),
+            "not supported on this platform"
         );
     }
 
