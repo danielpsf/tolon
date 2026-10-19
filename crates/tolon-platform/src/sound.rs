@@ -11,19 +11,25 @@
 //! **Threading:** [`SoundPlayer`] can be used from any thread, including the UI thread. The
 //! output stream is owned by a dedicated audio thread (CoreAudio streams must not move between
 //! threads); callers only send it messages. [`SoundPlayer::play`] waits at most a few seconds for
-//! the thread to open the device and start the sound.
+//! the thread to open the device and start the sound. A sound that starts after the caller gave
+//! up is stopped at once.
+//!
+//! **Device loss:** when the output stream reports an error (headphones pulled, device removed),
+//! the audio thread marks it dead. The next [`SoundPlayer::play`] drops the dead stream and the
+//! sounds still tied to it, and opens the default device again. Sounds also age out after their
+//! length plus a margin, so a stream that stops draining cannot block the reopen.
 //!
 //! **No device:** on a machine without audio output (a CI runner), [`SoundPlayer::play`] returns
 //! [`PlatformError::Audio`]. The app ignores it and shows the alarm without sound.
 
 use crate::PlatformError;
 use rodio::stream::MixerDeviceSink;
-use rodio::{Decoder, Player};
+use rodio::{Decoder, Player, Source};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc};
+use std::time::{Duration, Instant};
 
 /// The alarm sound a user can pick. Serialised in `snake_case`: `soft_bell`, `chime`, `none`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,37 +64,74 @@ enum Command {
     Play {
         id: u64,
         wav: &'static [u8],
+        /// Set by the caller when it stopped waiting; the sound must then not start.
+        cancelled: Arc<AtomicBool>,
         reply: mpsc::Sender<Result<(), PlatformError>>,
     },
     Stop(u64),
+    #[cfg(test)]
+    Live(mpsc::Sender<usize>),
 }
 
-type Opener = Box<dyn Fn() -> Result<MixerDeviceSink, PlatformError> + Send>;
+/// An open output the audio thread plays through. The real one wraps a rodio device sink.
+trait Output {
+    fn player(&self) -> Player;
+    /// The stream reported an error since it was opened; it must be replaced.
+    fn is_dead(&self) -> bool;
+}
+
+struct Device {
+    sink: MixerDeviceSink,
+    dead: Arc<AtomicBool>,
+}
+
+impl Output for Device {
+    fn player(&self) -> Player {
+        Player::connect_new(self.sink.mixer())
+    }
+
+    fn is_dead(&self) -> bool {
+        self.dead.load(Ordering::SeqCst)
+    }
+}
+
+type Opener = Box<dyn Fn() -> Result<Box<dyn Output>, PlatformError> + Send>;
 
 /// How long [`SoundPlayer::play`] waits for the audio thread before giving up.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(3);
+/// A sound is dropped this long after it should have ended, drained or not.
+const AGE_MARGIN: Duration = Duration::from_secs(2);
+/// Used when a file reports no length; the bundled sounds are all shorter.
+const FALLBACK_LENGTH: Duration = Duration::from_secs(10);
 
 /// Plays [`Sound`]s on the default output device. Dropping it stops everything.
 pub struct SoundPlayer {
     commands: mpsc::Sender<Command>,
     next_id: AtomicU64,
+    timeout: Duration,
 }
 
 impl SoundPlayer {
     /// Start the audio thread. It does not open the device until the first sound plays.
     pub fn new() -> Result<Self, PlatformError> {
-        Self::with_opener(Box::new(open_default))
+        Self::with_opener(Box::new(open_default), REPLY_TIMEOUT)
     }
 
-    fn with_opener(open: Opener) -> Result<Self, PlatformError> {
+    fn with_opener(open: Opener, timeout: Duration) -> Result<Self, PlatformError> {
         let (commands, inbox) = mpsc::channel();
         std::thread::Builder::new()
             .name("tolon-audio".into())
-            .spawn(move || audio_thread(inbox, open))
+            .spawn(move || {
+                let mut state = State::new(open);
+                for command in inbox {
+                    state.handle(command, Instant::now());
+                }
+            })
             .map_err(|e| PlatformError::Audio(format!("cannot start the audio thread: {e}")))?;
         Ok(Self {
             commands,
             next_id: AtomicU64::new(0),
+            timeout,
         })
     }
 
@@ -101,12 +144,26 @@ impl SoundPlayer {
             return Ok(Playback { id });
         };
         let (reply, answer) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
         self.commands
-            .send(Command::Play { id, wav, reply })
+            .send(Command::Play {
+                id,
+                wav,
+                cancelled: Arc::clone(&cancelled),
+                reply,
+            })
             .map_err(|_| gone())?;
-        answer
-            .recv_timeout(REPLY_TIMEOUT)
-            .map_err(|_| PlatformError::Audio("the audio thread did not answer".into()))??;
+        match answer.recv_timeout(self.timeout) {
+            Ok(started) => started?,
+            Err(_) => {
+                // The caller has no handle, so nothing could stop a late start: cancel it.
+                cancelled.store(true, Ordering::SeqCst);
+                let _ = self.commands.send(Command::Stop(id));
+                return Err(PlatformError::Audio(
+                    "the audio thread did not answer".into(),
+                ));
+            }
+        }
         Ok(Playback { id })
     }
 
@@ -116,73 +173,233 @@ impl SoundPlayer {
             .send(Command::Stop(playback.id))
             .map_err(|_| gone())
     }
+
+    /// How many sounds the audio thread still tracks, after all earlier commands ran.
+    #[cfg(test)]
+    fn live(&self) -> Option<usize> {
+        let (reply, answer) = mpsc::channel();
+        self.commands.send(Command::Live(reply)).ok()?;
+        answer.recv_timeout(Duration::from_secs(5)).ok()
+    }
 }
 
 fn gone() -> PlatformError {
     PlatformError::Audio("the audio thread has stopped".into())
 }
 
-fn open_default() -> Result<MixerDeviceSink, PlatformError> {
-    let mut sink = rodio::DeviceSinkBuilder::open_default_sink()
+fn open_default() -> Result<Box<dyn Output>, PlatformError> {
+    let dead = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&dead);
+    let mut sink = rodio::DeviceSinkBuilder::from_default_device()
+        .map_err(|e| PlatformError::Audio(format!("no audio output: {e}")))?
+        .with_error_callback(move |e| {
+            tracing::warn!("audio stream error, the next sound reopens the device: {e}");
+            flag.store(true, Ordering::SeqCst);
+        })
+        .open_stream()
         .map_err(|e| PlatformError::Audio(format!("no audio output: {e}")))?;
     sink.log_on_drop(false);
-    Ok(sink)
+    Ok(Box::new(Device { sink, dead }))
 }
 
-fn audio_thread(inbox: mpsc::Receiver<Command>, open: Opener) {
-    let mut sink: Option<MixerDeviceSink> = None;
-    let mut playing: Vec<(u64, Player)> = Vec::new();
-    for command in inbox {
-        playing.retain(|(_, p)| !p.empty());
-        match command {
-            Command::Play { id, wav, reply } => {
-                // With nothing playing, reopen so a changed default device is picked up.
-                if playing.is_empty() {
-                    sink = None;
-                }
-                let started = start(&mut sink, &open, wav);
-                let _ = reply.send(started.map(|player| playing.push((id, player))));
-            }
-            Command::Stop(id) => playing.retain(|(i, p)| {
-                if *i == id {
-                    p.stop();
-                }
-                *i != id
-            }),
+struct Entry {
+    id: u64,
+    player: Player,
+    /// Sound length plus [`AGE_MARGIN`]; past it the entry is dropped even if it never drained.
+    deadline: Instant,
+}
+
+/// What the audio thread owns. Driven by a loop in production and called directly in tests.
+struct State {
+    open: Opener,
+    output: Option<Box<dyn Output>>,
+    playing: Vec<Entry>,
+}
+
+impl State {
+    fn new(open: Opener) -> Self {
+        Self {
+            open,
+            output: None,
+            playing: Vec::new(),
         }
     }
-}
 
-fn start(
-    sink: &mut Option<MixerDeviceSink>,
-    open: &Opener,
-    wav: &'static [u8],
-) -> Result<Player, PlatformError> {
-    if sink.is_none() {
-        *sink = Some(open()?);
+    fn handle(&mut self, command: Command, now: Instant) {
+        self.prune(now);
+        match command {
+            Command::Play {
+                id,
+                wav,
+                cancelled,
+                reply,
+            } => {
+                if cancelled.load(Ordering::SeqCst) {
+                    return;
+                }
+                match self.start(id, wav, now) {
+                    Ok(entry) => {
+                        // A failed send or the flag means the caller stopped waiting.
+                        if reply.send(Ok(())).is_err() || cancelled.load(Ordering::SeqCst) {
+                            entry.player.stop();
+                        } else {
+                            self.playing.push(entry);
+                        }
+                    }
+                    Err(e) => {
+                        let _ = reply.send(Err(e));
+                    }
+                }
+            }
+            Command::Stop(id) => self.playing.retain(|e| {
+                if e.id == id {
+                    e.player.stop();
+                }
+                e.id != id
+            }),
+            #[cfg(test)]
+            Command::Live(reply) => {
+                let _ = reply.send(self.playing.len());
+            }
+        }
     }
-    let Some(sink) = sink.as_ref() else {
-        return Err(gone());
-    };
-    let decoder = Decoder::new_wav(Cursor::new(wav))
-        .map_err(|e| PlatformError::Audio(format!("cannot decode the sound: {e}")))?;
-    let player = Player::connect_new(sink.mixer());
-    player.append(decoder);
-    Ok(player)
+
+    /// Drop sounds that ended or outlived their length plus margin.
+    fn prune(&mut self, now: Instant) {
+        self.playing.retain(|e| {
+            let keep = !e.player.empty() && now < e.deadline;
+            if !keep {
+                e.player.stop();
+            }
+            keep
+        });
+    }
+
+    fn start(&mut self, id: u64, wav: &'static [u8], now: Instant) -> Result<Entry, PlatformError> {
+        if self.output.as_ref().is_some_and(|o| o.is_dead()) {
+            for e in self.playing.drain(..) {
+                e.player.stop();
+            }
+            self.output = None;
+        } else if self.playing.is_empty() {
+            // Nothing playing: reopen so a changed default device is picked up.
+            self.output = None;
+        }
+        if self.output.is_none() {
+            self.output = Some((self.open)()?);
+        }
+        let Some(output) = self.output.as_ref() else {
+            return Err(gone());
+        };
+        let decoder = Decoder::new_wav(Cursor::new(wav))
+            .map_err(|e| PlatformError::Audio(format!("cannot decode the sound: {e}")))?;
+        let deadline = now + decoder.total_duration().unwrap_or(FALLBACK_LENGTH) + AGE_MARGIN;
+        let player = output.player();
+        player.append(decoder);
+        Ok(Entry {
+            id,
+            player,
+            deadline,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rodio::Source;
     use std::sync::atomic::AtomicUsize;
-    use std::sync::Arc;
+    use std::sync::Mutex;
 
     /// Duration of a bundled WAV from its decoded samples; opens no device.
     fn decoded_seconds(wav: &'static [u8]) -> Result<f64, String> {
         let d = Decoder::new_wav(Cursor::new(wav)).map_err(|e| e.to_string())?;
         let per_second = f64::from(d.sample_rate().get()) * f64::from(d.channels().get());
         Ok(d.count() as f64 / per_second)
+    }
+
+    /// An output without a device: players queue sources that nothing ever drains.
+    struct Fake {
+        dead: Arc<AtomicBool>,
+        queues: Mutex<Vec<rodio::queue::SourcesQueueOutput>>,
+    }
+
+    impl Output for Fake {
+        fn player(&self) -> Player {
+            let (player, queue) = Player::new();
+            if let Ok(mut queues) = self.queues.lock() {
+                queues.push(queue);
+            }
+            player
+        }
+
+        fn is_dead(&self) -> bool {
+            self.dead.load(Ordering::SeqCst)
+        }
+    }
+
+    /// An opener that counts its calls and hands the latest output's dead flag to the test.
+    struct Counting {
+        opens: Arc<AtomicUsize>,
+        latest_dead: Arc<Mutex<Option<Arc<AtomicBool>>>>,
+    }
+
+    impl Counting {
+        fn new() -> Self {
+            Self {
+                opens: Arc::new(AtomicUsize::new(0)),
+                latest_dead: Arc::new(Mutex::new(None)),
+            }
+        }
+
+        fn opener(&self, delay: Duration) -> Opener {
+            let opens = Arc::clone(&self.opens);
+            let latest = Arc::clone(&self.latest_dead);
+            Box::new(move || {
+                std::thread::sleep(delay);
+                opens.fetch_add(1, Ordering::SeqCst);
+                let dead = Arc::new(AtomicBool::new(false));
+                if let Ok(mut slot) = latest.lock() {
+                    *slot = Some(Arc::clone(&dead));
+                }
+                Ok(Box::new(Fake {
+                    dead,
+                    queues: Mutex::new(Vec::new()),
+                }))
+            })
+        }
+
+        fn opens(&self) -> usize {
+            self.opens.load(Ordering::SeqCst)
+        }
+
+        /// Report a stream error on the output opened last.
+        fn kill_latest(&self) {
+            if let Ok(slot) = self.latest_dead.lock() {
+                if let Some(dead) = slot.as_ref() {
+                    dead.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+    }
+
+    /// A play command and the receiver of its answer.
+    fn play_command(
+        id: u64,
+        cancelled: &Arc<AtomicBool>,
+    ) -> (Command, mpsc::Receiver<Result<(), PlatformError>>) {
+        let (reply, answer) = mpsc::channel();
+        let wav = Sound::SoftBell.wav().unwrap_or_default();
+        let cmd = Command::Play {
+            id,
+            wav,
+            cancelled: Arc::clone(cancelled),
+            reply,
+        };
+        (cmd, answer)
+    }
+
+    fn not_cancelled() -> Arc<AtomicBool> {
+        Arc::new(AtomicBool::new(false))
     }
 
     #[test]
@@ -233,9 +450,10 @@ mod tests {
 
     #[test]
     fn ac6_1_no_device_is_an_error_not_a_panic() {
-        let player = SoundPlayer::with_opener(Box::new(|| {
-            Err(PlatformError::Audio("no audio output: test".into()))
-        }));
+        let player = SoundPlayer::with_opener(
+            Box::new(|| Err(PlatformError::Audio("no audio output: test".into()))),
+            REPLY_TIMEOUT,
+        );
         let player = player.ok();
         let result = player.as_ref().map(|p| p.play(Sound::SoftBell));
         assert_eq!(
@@ -246,24 +464,20 @@ mod tests {
 
     #[test]
     fn ac6_1_none_never_opens_the_device() {
-        let opens = Arc::new(AtomicUsize::new(0));
-        let counter = Arc::clone(&opens);
-        let player = SoundPlayer::with_opener(Box::new(move || {
-            counter.fetch_add(1, Ordering::SeqCst);
-            Err(PlatformError::Audio("must not open".into()))
-        }));
+        let counting = Counting::new();
+        let player = SoundPlayer::with_opener(counting.opener(Duration::ZERO), REPLY_TIMEOUT);
         let played = player.ok().map(|p| {
             let playback = p.play(Sound::None);
             let stopped = playback.as_ref().map(|pb| p.stop(pb).is_ok());
             (playback.is_ok(), stopped.unwrap_or(false))
         });
         assert_eq!(played, Some((true, true)));
-        assert_eq!(opens.load(Ordering::SeqCst), 0);
+        assert_eq!(counting.opens(), 0);
     }
 
     #[test]
     fn ac6_1_each_play_gets_its_own_handle() {
-        let Ok(player) = SoundPlayer::with_opener(Box::new(|| Err(gone()))) else {
+        let Ok(player) = SoundPlayer::with_opener(Box::new(|| Err(gone())), REPLY_TIMEOUT) else {
             return;
         };
         let a = player.play(Sound::None);
@@ -273,21 +487,132 @@ mod tests {
     }
 
     #[test]
-    fn ac6_2_source_calls_no_volume_or_mute_api() {
-        let source = include_str!("sound.rs");
+    fn ac6_1_a_stream_error_makes_the_next_play_reopen_and_succeed() {
+        let counting = Counting::new();
+        let mut state = State::new(counting.opener(Duration::ZERO));
+        let now = Instant::now();
+        let (first, first_answer) = play_command(1, &not_cancelled());
+        state.handle(first, now);
+        assert_eq!(first_answer.try_recv(), Ok(Ok(())));
+        // A second play while the stream is healthy reuses it.
+        let (second, _second_answer) = play_command(2, &not_cancelled());
+        state.handle(second, now);
+        assert_eq!((counting.opens(), state.playing.len()), (1, 2));
+
+        counting.kill_latest();
+        let (third, third_answer) = play_command(3, &not_cancelled());
+        state.handle(third, now);
+        assert_eq!(third_answer.try_recv(), Ok(Ok(())));
+        // Reopened, and only the new sound is tracked: the stale ones went with the dead stream.
+        assert_eq!(counting.opens(), 2);
+        assert_eq!(
+            state.playing.iter().map(|e| e.id).collect::<Vec<_>>(),
+            vec![3]
+        );
+    }
+
+    #[test]
+    fn ac6_1_a_sound_that_never_drains_ages_out_and_the_device_reopens() {
+        let counting = Counting::new();
+        let mut state = State::new(counting.opener(Duration::ZERO));
+        let now = Instant::now();
+        let (first, _first_answer) = play_command(1, &not_cancelled());
+        state.handle(first, now);
+
+        // Inside length plus margin the sound is still tracked and the stream is reused.
+        let (second, _second_answer) = play_command(2, &not_cancelled());
+        state.handle(second, now + Duration::from_secs(1));
+        assert_eq!((counting.opens(), state.playing.len()), (1, 2));
+
+        // Both outlived 1.5 s + 2 s; the pruned list is empty, so the next play reopens.
+        let (third, third_answer) = play_command(3, &not_cancelled());
+        state.handle(third, now + Duration::from_secs(3600));
+        assert_eq!(third_answer.try_recv(), Ok(Ok(())));
+        assert_eq!(counting.opens(), 2);
+        assert_eq!(
+            state.playing.iter().map(|e| e.id).collect::<Vec<_>>(),
+            vec![3]
+        );
+    }
+
+    #[test]
+    fn ac6_1_a_play_nobody_waits_for_is_stopped_at_once() {
+        let counting = Counting::new();
+        let mut state = State::new(counting.opener(Duration::ZERO));
+        let (command, answer) = play_command(1, &not_cancelled());
+        drop(answer);
+        state.handle(command, Instant::now());
+        assert!(state.playing.is_empty());
+    }
+
+    #[test]
+    fn ac6_1_a_cancelled_play_does_not_start() {
+        let counting = Counting::new();
+        let mut state = State::new(counting.opener(Duration::ZERO));
+        let cancelled = Arc::new(AtomicBool::new(true));
+        let (command, _answer) = play_command(1, &cancelled);
+        state.handle(command, Instant::now());
+        assert_eq!((counting.opens(), state.playing.len()), (0, 0));
+    }
+
+    #[test]
+    fn ac6_1_a_play_that_times_out_is_not_left_playing() {
+        let counting = Counting::new();
+        let Ok(player) = SoundPlayer::with_opener(
+            counting.opener(Duration::from_millis(300)),
+            Duration::from_millis(30),
+        ) else {
+            return;
+        };
+        let started = Instant::now();
+        let result = player.play(Sound::SoftBell);
+        assert_eq!(
+            result,
+            Err(PlatformError::Audio(
+                "the audio thread did not answer".into()
+            ))
+        );
+        assert!(started.elapsed() < Duration::from_millis(250));
+        // The command queue is ordered: this answer comes after the late start was handled.
+        assert_eq!(player.live(), Some(0));
+    }
+
+    #[test]
+    fn ac6_2_player_volume_stays_at_full_scale() {
+        let counting = Counting::new();
+        let mut state = State::new(counting.opener(Duration::ZERO));
+        let (command, _answer) = play_command(1, &not_cancelled());
+        state.handle(command, Instant::now());
+        assert_eq!(state.playing.len(), 1);
+        for entry in &state.playing {
+            assert!((entry.player.volume() - 1.0).abs() < f32::EPSILON);
+        }
+    }
+
+    #[test]
+    fn ac6_2_no_source_calls_a_volume_or_mute_api() {
         // Needles are split so this test does not match itself.
         let banned = [
             ["set_", "volume"].concat(),
             ["Master", "Volume"].concat(),
             ["Endpoint", "Volume"].concat(),
+            ["AudioObject", "SetPropertyData"].concat(),
             ["osa", "script"].concat(),
             ["set ", "volume"].concat(),
             ["amix", "er"].concat(),
             ["pac", "tl"].concat(),
             ["amplify", "("].concat(),
         ];
-        for needle in banned {
-            assert!(!source.contains(&needle), "sound.rs mentions {needle}");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let files: Vec<_> = std::fs::read_dir(&dir)
+            .map(|d| d.flatten().map(|e| e.path()).collect())
+            .unwrap_or_default();
+        assert!(files.len() >= 5, "found only {files:?}");
+        for path in files {
+            let source = std::fs::read_to_string(&path).unwrap_or_default();
+            for needle in &banned {
+                assert!(!source.contains(needle), "{path:?} mentions {needle}");
+            }
         }
     }
 }
