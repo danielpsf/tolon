@@ -15,7 +15,13 @@ use tolon_core::{
     AlarmSettings, AlarmState, Occurrence, OccurrenceKey, QuietHours,
 };
 
-const CASES: u32 = 512;
+/// 512 cases per property; `PROPTEST_CASES` raises it (with_cases would otherwise ignore the variable).
+fn cases() -> u32 {
+    std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(512)
+}
 
 fn base() -> DateTime<Utc> {
     at(12, 0).unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
@@ -93,7 +99,7 @@ fn id(a: &Alarm) -> Id {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(CASES))]
+    #![proptest_config(ProptestConfig::with_cases(cases()))]
 
     /// Ticks alone, in any order, with repeated and backwards `now`: each alarm gets at most one
     /// Scheduled-to-Firing transition, and no tick reports an alarm twice.
@@ -273,16 +279,20 @@ fn state() -> impl Strategy<Value = AlarmState> {
 
 /// A stored alarm of an occurrence no feed has any more (the key names no generated meeting).
 fn stray_alarm() -> impl Strategy<Value = Alarm> {
-    (0i64..7200, any::<bool>(), state()).prop_map(|(start, is_lead, state)| Alarm {
-        occurrence: occ("gone", secs(start), 2).key,
-        at: secs(start),
-        start: secs(start),
-        kind: if is_lead {
-            AlarmKind::Lead
-        } else {
-            AlarmKind::Start
-        },
-        state,
+    // Few distinct starts, so two strays often share an identity with different states.
+    (0i64..3, any::<bool>(), state()).prop_map(|(slot, is_lead, state)| {
+        let start = slot * 1800;
+        Alarm {
+            occurrence: occ("gone", secs(start), 2).key,
+            at: secs(start),
+            start: secs(start),
+            kind: if is_lead {
+                AlarmKind::Lead
+            } else {
+                AlarmKind::Start
+            },
+            state,
+        }
     })
 }
 
