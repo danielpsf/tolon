@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -71,27 +71,28 @@ impl Fetch for IcsFetcher {
     }
 }
 
-fn lock(db: &Db) -> anyhow::Result<MutexGuard<'_, Store>> {
-    db.lock()
-        .map_err(|_| anyhow!("Tolon's database is busy. Please try again."))
+/// A panic elsewhere must not lock the person out of their calendars: SQLite keeps its own
+/// consistency, so a poisoned lock is taken over.
+fn lock(db: &Db) -> MutexGuard<'_, Store> {
+    db.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 pub fn list(db: &Db) -> anyhow::Result<Vec<CalendarDto>> {
-    let cals = lock(db)?.calendars().list()?;
+    let cals = lock(db).calendars().list()?;
     Ok(cals.into_iter().map(CalendarDto::from).collect())
 }
 
 pub fn calendars(db: &Db) -> anyhow::Result<Vec<Calendar>> {
-    Ok(lock(db)?.calendars().list()?)
+    Ok(lock(db).calendars().list()?)
 }
 
 pub fn remove(db: &Db, id: &str) -> anyhow::Result<()> {
-    lock(db)?.calendars().remove(id)?;
+    lock(db).calendars().remove(id)?;
     Ok(())
 }
 
 pub fn set_enabled(db: &Db, id: &str, enabled: bool) -> anyhow::Result<()> {
-    lock(db)?.calendars().set_enabled(id, enabled)?;
+    lock(db).calendars().set_enabled(id, enabled)?;
     Ok(())
 }
 
@@ -117,11 +118,11 @@ pub async fn add_ics(
         .map(|n| n.trim().to_owned())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| host_of(&url));
-    let cal = lock(db)?
+    let cal = lock(db)
         .calendars()
         .insert("ics", &name, Some(&url), true, &now.to_rfc3339())?;
     apply(db, &cal.id, result, now)?;
-    let fresh = lock(db)?
+    let fresh = lock(db)
         .calendars()
         .get(&cal.id)?
         .ok_or_else(|| anyhow!("Tolon could not find that calendar."))?;
@@ -135,7 +136,7 @@ pub async fn sync_one(
     id: &str,
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
-    let cal = lock(db)?
+    let cal = lock(db)
         .calendars()
         .get(id)?
         .ok_or_else(|| anyhow!("Tolon could not find that calendar."))?;
@@ -168,7 +169,7 @@ fn apply(
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     let at = now.to_rfc3339();
-    let store = lock(db)?;
+    let store = lock(db);
     // Removed while the fetch was in flight: nothing to write.
     let Some(cal) = store.calendars().get(id)? else {
         return Ok(());
@@ -302,10 +303,13 @@ fn expand_options(store: &Store) -> anyhow::Result<ExpandOptions> {
 /// Today's occurrences from the enabled calendars, in the machine's zone, after the ignore rules.
 pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occurrence>> {
     let (from, to) = today_window(now, local)?;
-    let store = lock(db)?;
-    let opts = expand_options(&store)?;
+    // The store guard is released before the (CPU-bound) expansion.
+    let (opts, stored) = {
+        let store = lock(db);
+        (expand_options(&store)?, store.events().list_enabled()?)
+    };
     let mut events = Vec::new();
-    for stored in store.events().list_enabled()? {
+    for stored in stored {
         match serde_json::from_str::<Event>(&stored.payload) {
             Ok(e) => events.push(e),
             // Titles are personal data, so only the ids are logged.

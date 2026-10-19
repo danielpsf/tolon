@@ -110,7 +110,7 @@ fn titles(occurrences: &[Occurrence]) -> Vec<&str> {
 }
 
 fn stored_uids(db: &Db, id: &str) -> anyhow::Result<Vec<String>> {
-    Ok(lock(db)?
+    Ok(lock(db)
         .events()
         .list_by_calendar(id)?
         .into_iter()
@@ -230,7 +230,7 @@ async fn s1_5_not_modified_keeps_events_and_clears_error() -> TestResult {
         Ok(FetchOutcome::NotModified),
     ]);
     let dto = add_ics(&db, &fake, SECRET_URL, now()).await?;
-    let before = lock(&db)?.events().list_by_calendar(&dto.id)?;
+    let before = lock(&db).events().list_by_calendar(&dto.id)?;
 
     let later = now() + Duration::minutes(5);
     sync_one(&db, &fake, &dto.id, later).await?;
@@ -251,8 +251,8 @@ async fn s1_5_not_modified_keeps_events_and_clears_error() -> TestResult {
         after[0].last_sync_at.as_deref(),
         Some(latest.to_rfc3339().as_str())
     );
-    assert_eq!(lock(&db)?.events().list_by_calendar(&dto.id)?, before);
-    let etag = lock(&db)?.calendars().get(&dto.id)?.and_then(|c| c.etag);
+    assert_eq!(lock(&db).events().list_by_calendar(&dto.id)?, before);
+    let etag = lock(&db).calendars().get(&dto.id)?.and_then(|c| c.etag);
     assert_eq!(etag.as_deref(), Some("v1"));
     // The second and third refresh both carried the stored etag.
     let calls = fake.calls();
@@ -280,7 +280,7 @@ async fn s2_3_skipped_component_goes_to_sync_log() -> TestResult {
     .await?;
 
     assert_eq!(stored_uids(&db, &dto.id)?, ["ok"]);
-    let log = lock(&db)?.sync_log().list_recent(10)?;
+    let log = lock(&db).sync_log().list_recent(10)?;
     assert_eq!(log.len(), 1);
     assert_eq!(log[0].detail.as_deref(), Some("1 component skipped"));
     assert_eq!(log[0].calendar_id.as_deref(), Some(dto.id.as_str()));
@@ -415,7 +415,7 @@ async fn ac8_2_settings_turn_each_rule_off() -> TestResult {
     add_ics(&db, &fake, SECRET_URL, now()).await?;
 
     let set = |key: &str, on: bool| -> TestResult {
-        lock(&db)?.settings().set(key, &json!(on))?;
+        lock(&db).settings().set(key, &json!(on))?;
         Ok(())
     };
     set(IGNORE_ALL_DAY, false)?;
@@ -428,7 +428,7 @@ async fn ac8_2_settings_turn_each_rule_off() -> TestResult {
     set(IGNORE_DECLINED, false)?;
     assert_eq!(today(&db, now(), Tz::UTC)?.len(), 4);
     // A value that is not a bool counts as missing, so the default applies again.
-    lock(&db)?.settings().set(IGNORE_ALL_DAY, &json!("yes"))?;
+    lock(&db).settings().set(IGNORE_ALL_DAY, &json!("yes"))?;
     assert_eq!(today(&db, now(), Tz::UTC)?.len(), 3);
     Ok(())
 }
@@ -498,7 +498,7 @@ fn assert_secret_free(db: &Db, logs: &Sink, secret: &str) -> TestResult {
     let out = logs.text();
     assert!(!out.is_empty(), "the failure was logged");
     assert!(!out.contains(secret), "log output leaked the secret: {out}");
-    let rows = lock(db)?.sync_log().list_recent(100)?;
+    let rows = lock(db).sync_log().list_recent(100)?;
     assert!(!rows.is_empty());
     for row in rows {
         let text = format!("{} {} {:?}", row.at, row.outcome, row.detail);
@@ -543,4 +543,21 @@ async fn ac1_3_real_fetcher_failure_keeps_the_secret_out_too() -> TestResult {
     let dto = add_ics(&db, &fetcher, url, now()).await?;
     assert!(dto.last_error.is_some());
     assert_secret_free(&db, &logs, "private-123")
+}
+
+#[tokio::test]
+async fn a_poisoned_store_lock_is_recovered() -> TestResult {
+    let db = db()?;
+    let _ = std::thread::scope(|s| {
+        s.spawn(|| {
+            let _held = db.lock();
+            std::panic::resume_unwind(Box::new("poison the lock"));
+        })
+        .join()
+    });
+    assert!(db.is_poisoned());
+    let fake = Fake::new(vec![modified(basic_feed(Some("Team")), None)]);
+    add_ics(&db, &fake, SECRET_URL, now()).await?;
+    assert_eq!(list(&db)?.len(), 1);
+    Ok(())
 }
