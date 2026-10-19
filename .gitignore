@@ -1,0 +1,11 @@
+target/
+ui/node_modules/
+ui/dist/
+*.db
+*.log
+.DS_Store
+
+# updater signing key: never commit
+*.key
+*.key.pub
+.tauri/

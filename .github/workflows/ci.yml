@@ -1,0 +1,67 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gate:
+    name: gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux build deps (Tauri 2)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libssl-dev libgtk-3-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm --prefix ui ci
+      - name: Gate
+        run: cargo xtask ci
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        if: runner.os == 'Linux'
+  e2e:
+    name: e2e (${{ matrix.os }})
+    needs: gate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev webkit2gtk-driver xvfb
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: cargo install tauri-driver --locked
+      - run: npm --prefix ui ci
+      - name: Build debug app
+        run: npm --prefix ui run tauri build -- --debug --no-bundle
+      - name: Run WebDriver suite (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm --prefix ui run e2e
+      - name: Run WebDriver suite (Windows)
+        if: runner.os == 'Windows'
+        run: npm --prefix ui run e2e
