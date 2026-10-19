@@ -1,0 +1,5 @@
+/*
+ * The only place for Tolon-specific styles (AGENTS.md rule 5).
+ * Every change needs a reviewer's sign-off. Use --sm-* tokens only, no hex colours.
+ * Fonts are not declared here: main.tsx imports them from @fontsource (see decisions).
+ */

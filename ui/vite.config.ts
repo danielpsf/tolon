@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 // Port must match build.devUrl in crates/tolon-app/tauri.conf.json.
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   clearScreen: false,
   server: { port: 1420, strictPort: true },
