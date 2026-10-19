@@ -17,8 +17,26 @@ tolon-sync = { path = "../tolon-sync" }
 tolon-platform = { path = "../tolon-platform" }
 tauri = { version = "2", features = [] }
 anyhow = "1"
-# tauri::generate_context!() expands to serde_json calls.
+# tauri::generate_context!() expands to serde_json calls; also encodes the stored event payloads.
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+# Same versions as tolon-core: local midnight and the machine's zone.
+chrono = "0.4.45"
+chrono-tz = "0.10.4"
+# Machine IANA zone name for "today"; already in the tree through chrono.
+iana-time-zone = "0.1.65"
+tracing = "0.1"
+# Without a subscriber the warn lines are dropped; stderr only, level info.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# Sleep in the refresh loop; Tauri's async runtime is tokio.
+tokio = { version = "1", features = ["time"] }
+# Blocking error dialog when the database cannot be opened or migrated.
+tauri-plugin-dialog = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+# Temp dirs for the store-opening tests; already in the tree through tolon-store.
+tempfile = "3.27.0"
 
 [features]
 # Set by the Tauri CLI for builds: serve the embedded ui/dist instead of devUrl.
