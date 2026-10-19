@@ -77,7 +77,7 @@ describe("catalogues", () => {
 
   it("keeps the mockup 03 sentence in en-US", () => {
     expect(catalogues["en-US"].calendars.changesSave).toBe("Changes save as you make them.");
-    expect(catalogues["en-GB"].calendars.changesSave).toBe("Changes save automatically.");
+    expect(catalogues["en-GB"].calendars.changesSave).toBe("Changes save as you make them.");
   });
 });
 

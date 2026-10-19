@@ -30,7 +30,7 @@ export const enGB: Messages = {
     ignoreDeclined: "Events I declined",
     ignoreSolo: "Events without other people",
     ignoreMatching: (keywords) => `Events matching: ${keywords}`,
-    changesSave: "Changes save automatically.",
+    changesSave: "Changes save as you make them.",
   },
   relative: {
     neverSynced: "Not synced yet",
