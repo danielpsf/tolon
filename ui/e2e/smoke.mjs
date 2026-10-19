@@ -136,6 +136,25 @@ async function waitForRow() {
   }
 }
 
+/** What the page looks like now, for a failure message: Windows cannot be debugged from here. */
+function snapshot() {
+  return driver.executeScript(() => ({
+    openDialogs: [...document.querySelectorAll("dialog[open]")].map((d) => d.innerText),
+    active: `${document.activeElement?.tagName}:${document.activeElement?.textContent}`,
+    rows: [...document.querySelectorAll(".tl-row .tl-name")].map((n) => n.textContent),
+    body: document.body.innerText,
+  }));
+}
+
+/** `driver.wait` that says which step timed out and what the page showed. */
+async function waitFor(step, condition) {
+  try {
+    return await driver.wait(condition, WAIT);
+  } catch (e) {
+    throw new Error(`timed out waiting for: ${step}; page: ${JSON.stringify(await snapshot())}`, { cause: e });
+  }
+}
+
 async function openAddForm() {
   await (await find('button[aria-controls="add-calendar"]')).click();
   return find("#calendar-url");
@@ -187,14 +206,15 @@ test("removing a calendar asks first and then removes it", async () => {
 
   const cancel = await dialog.findElement(By.css(".sm-dialog-actions button"));
   await cancel.click();
-  await driver.wait(async () => (await driver.findElements(By.css("dialog[open]"))).length === 0, WAIT);
+  await waitFor("the dialog to close after Cancel", async () => (await driver.findElements(By.css("dialog[open]"))).length === 0);
   assert.ok(await rowForTestCalendar(), "Cancel keeps the calendar");
 
   await (await waitForRow()).findElement(By.css(".tl-remove button")).click();
   await (await find("dialog[open] .sm-btn.danger")).click();
-  await driver.wait(async () => !(await rowForTestCalendar()), WAIT, "the calendar is still listed");
+  await waitFor("the calendar to leave the list", async () => !(await rowForTestCalendar()));
+  await waitFor("the dialog to close after Remove calendar", async () => (await driver.findElements(By.css("dialog[open]"))).length === 0);
   // The dialog's own Remove button is gone by now, so focus lands on Add calendar, not on the page body.
-  await driver.wait(async () => (await driver.executeScript("return document.activeElement?.textContent ?? \"\"")) === "Add calendar", WAIT);
+  await waitFor("focus on Add calendar", async () => (await driver.executeScript("return document.activeElement?.textContent ?? \"\"")) === "Add calendar");
 });
 
 test("the app keeps its data in the temp dir", { skip: process.platform !== "linux" }, () => {
