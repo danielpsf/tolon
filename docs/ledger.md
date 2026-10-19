@@ -25,11 +25,14 @@ Conventions: ids are `L-NNN` in creation order. The orchestrator creates rows; t
 | L-029 | M1 | Wire M1 in `tolon-app`: commands `calendars.list`, `calendars.add_ics`, `calendars.remove`, `calendars.set_enabled`, `calendars.sync_now`, `occurrences.today`; fetch, parse, upsert, staggered 5-minute refresh, `calendars:changed` / `occurrences:changed` events (S1.1, S1.2, S1.3, S1.5 end to end; AC1.3 test: the URL secret is absent from logs, `sync_log` and `last_error`); depends on L-006, L-007, L-028 | ui | todo | | |
 | L-030 | M1 | Close M1: F1 and F2 scenarios pass in CI (S1.x WebDriver on Linux and Windows), 12 fixtures green, ledger and status updated | orchestrator | todo | | |
 | L-009 | M2 | Alarm planning and state machine with proptest (S3.1 to S3.6) | core | todo | | |
-| L-010 | M2 | Interrupt window: creation per screen, keyboard, close-all (S4.2, S4.3, S4.6) | ui | todo | | |
+| L-010 | M2 | Interrupt window per mockup 01: page, countdown (AC4.7), keyboard (S4.3, AC4.4), creation per screen and close-all (S4.2, AC4.6), WebDriver test for keys; depends on L-029 | ui | todo | | |
 | L-011 | M2 | macOS window level above full-screen apps via objc2 (S4.1) | platform | todo | | manual checklist |
 | L-012 | M2 | Windows topmost and Linux X11 / Wayland fallback (S4.4) | platform | todo | | |
-| L-013 | M2 | Join link detection and opener (S5.1, S5.2) | core | todo | | |
+| L-013 | M2 | Join link detection `detect_join` in `tolon-core` (S5.1, S5.2, AC5.1, AC5.2); the opener lands with L-032; after L-009 (same crate) | core | todo | | |
 | L-014 | M2 | Alarm sound with repeat and preview (F6) | platform | todo | | |
+| L-031 | M2 | `tolon-store` `AlarmsRepo` on the V1 `alarms` table: upsert, list, prune past alarms; state round-trips across a restart (AC3.3, S3.3 at the store level) | core | todo | | |
+| L-032 | M2 | Wire the scheduler in `tolon-app`: `SchedulerLoop` every 15 s and on wake (tick-gap over 60 s), plan and tick from core, persist alarms, open the interrupt per screen through `tolon-platform`, commands `alarms.snooze/dismiss/join/already_there/test`, events `alarm:show` / `alarm:hide` (S3.1 to S3.6 end to end, AC3.4, AC3.5); depends on L-009, L-010, L-031 | ui | todo | | |
+| L-033 | M2 | Close M2: F3 to F6 pass in CI, manual checklist (S4.1, S4.2, S4.3, S4.4) signed per OS in the ledger, status updated | orchestrator | todo | | |
 | L-015 | M3 | Tray icon, panel per mockup 02, pause, quit semantics (S7.1, S7.2) | ui | todo | | |
 | L-016 | M3 | Quiet hours and ignore rules with live re-plan (S8.1, S8.2) | core | todo | | |
 | L-017 | M3 | Alarms, Quiet hours, Appearance, Startup settings pages (F9) | ui | todo | | |
