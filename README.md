@@ -45,6 +45,12 @@ Tolon does not slide in. Two minutes before a meeting it fills every screen with
 
 <img src="docs/images/01-interrupt-dark.png" width="100%" alt="The full-screen reminder in the dark theme.">
 
+<sub>These are the design mockups. Tolon's screens are being built to match them.</sub>
+
+## Design
+
+Every screen is designed in [FigCraft](https://github.com/storytold/figcraft), an open-source interface design tool written in Rust. The working file is in this repository at [`mockups/mockups.figcraft`](mockups/mockups.figcraft). It is a work in progress, kept up to date as the design changes, and anyone can open it in FigCraft to explore it, take ideas from it, or propose changes. Colours and type come from [Swiss Moss](https://danielpsf.github.io/swiss-moss/).
+
 ## Private by design
 
 - **Read only.** Tolon never writes to your calendars. No RSVPs, no edits.
@@ -117,6 +123,14 @@ cargo xtask ci               # the full check that every change must pass
 Bug reports, real-world calendar feeds that break the parser (anonymised, please), and pull requests are all welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md): it covers the setup, the checks, commit conventions and the rules every change follows.
 
 Much of Tolon is built by coding agents working from a written plan, with a human deciding what ships. If you are curious how that works, or want to use your own agent on the project, read [docs/agents/README.md](docs/agents/README.md).
+
+## Built with
+
+- [Tauri 2](https://tauri.app) and Rust, for a small native app on every system.
+- [Swiss Moss](https://github.com/danielpsf/swiss-moss), the design system behind every pixel.
+- [FigCraft](https://github.com/storytold/figcraft), where the screens are designed.
+
+Thank you to the people who build and maintain these projects in the open.
 
 ## License
 
