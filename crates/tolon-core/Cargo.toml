@@ -15,4 +15,6 @@ rrule = "0.14.0"
 serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
+# Property tests for the scheduler (docs/agents/core.md): at-most-once firing, a dismissed alarm never fires, plan is idempotent.
+proptest = "1.12.0"
 serde_json = "1.0.154"
