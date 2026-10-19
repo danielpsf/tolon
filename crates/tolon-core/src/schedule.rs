@@ -140,6 +140,9 @@ impl Transition {
 ///   open, otherwise it expires. Expiry is not suppressed.
 /// - A Joined alarm closes the other alarms of its occurrence, so joining at the lead alarm
 ///   silences "again at the start". Dismissing does not: that is what the second alarm is for.
+/// - One interrupt per meeting: a Start alarm that would fire while the Lead alarm of the same
+///   occurrence is Firing or Snoozed, or fires in this same tick (a wake after sleep, the end of a
+///   pause), expires silently instead.
 pub fn tick(
     alarms: &[Alarm],
     now: DateTime<Utc>,
@@ -153,10 +156,38 @@ pub fn tick(
         .filter(|a| a.state == AlarmState::Joined)
         .map(|a| &a.occurrence)
         .collect();
+    let next: Vec<Option<AlarmState>> = alarms
+        .iter()
+        .map(|a| next_state(a, now, muted, joined.contains(&a.occurrence)))
+        .collect();
+    // Occurrences whose Lead alarm is, or is about to be, on screen or waiting out a snooze.
+    let lead_busy: HashSet<&OccurrenceKey> = alarms
+        .iter()
+        .zip(&next)
+        .filter(|(a, to)| {
+            a.kind == AlarmKind::Lead
+                && match to {
+                    Some(to) => to.since().is_some(),
+                    None => matches!(
+                        a.state,
+                        AlarmState::Firing { .. } | AlarmState::Snoozed { .. }
+                    ),
+                }
+        })
+        .map(|(a, _)| &a.occurrence)
+        .collect();
     alarms
         .iter()
-        .filter_map(|a| {
-            let to = next_state(a, now, muted, joined.contains(&a.occurrence))?;
+        .zip(next)
+        .filter_map(|(a, to)| {
+            let to = match to {
+                Some(AlarmState::Firing { .. })
+                    if a.kind == AlarmKind::Start && lead_busy.contains(&a.occurrence) =>
+                {
+                    AlarmState::Expired
+                }
+                other => other?,
+            };
             Some(Transition {
                 occurrence: a.occurrence.clone(),
                 kind: a.kind,

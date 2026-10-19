@@ -320,6 +320,55 @@ fn plan_adds_no_alarm_for_a_meeting_whose_window_closed() -> TestResult {
     Ok(())
 }
 
+fn firing_count(alarms: &[Alarm]) -> usize {
+    alarms.iter().filter(|a| a.state.since().is_some()).count()
+}
+
+#[test]
+fn ac3_1_lead_and_start_never_put_two_interrupts_up_for_one_meeting() -> TestResult {
+    let meeting = occ("review", at(14, 0)?, 3);
+    let s = settings(2, true);
+
+    // Both due in the same tick (wake at 14:03): the lead one fires, the start one expires.
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(13, 50)?);
+    let t = step(&mut alarms, at(14, 3)?);
+    assert_eq!(t.len(), 2);
+    assert_eq!(
+        states(&alarms),
+        [firing(at(14, 3)?), AlarmState::Expired],
+        "lead fires, start is skipped"
+    );
+
+    // The start alarm comes due while the lead one is still showing.
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(9, 0)?);
+    step(&mut alarms, at(13, 58)?);
+    let t = step(&mut alarms, at(14, 0)?);
+    assert_eq!(firing_count(&alarms), 1);
+    assert!(t.iter().all(|t| !t.fires()));
+    assert_eq!(alarms[1].state, AlarmState::Expired);
+
+    // ... or while the lead one is snoozed past the start.
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(9, 0)?);
+    step(&mut alarms, at(13, 58)?);
+    assert!(snooze(&mut alarms[0], 5, at(13, 58)?));
+    step(&mut alarms, at(14, 0)?);
+    assert_eq!(alarms[1].state, AlarmState::Expired);
+    step(&mut alarms, at(14, 3)?);
+    assert_eq!(
+        alarms[0].state,
+        firing(at(14, 3)?),
+        "the snoozed lead still returns"
+    );
+
+    // Once the lead alarm was dismissed, the start alarm is the second chance and fires.
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(9, 0)?);
+    step(&mut alarms, at(13, 58)?);
+    assert!(dismiss(&mut alarms[0]));
+    step(&mut alarms, at(14, 0)?);
+    assert_eq!(alarms[1].state, firing(at(14, 0)?));
+    Ok(())
+}
+
 fn quiet(start: (u32, u32), end: (u32, u32), weekends: bool) -> TestResult<QuietHours> {
     let time = |(h, m): (u32, u32)| NaiveTime::from_hms_opt(h, m, 0).ok_or("bad time");
     Ok(QuietHours {
