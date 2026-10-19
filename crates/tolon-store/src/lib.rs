@@ -5,9 +5,15 @@ use std::path::Path;
 use refinery::Runner;
 use rusqlite::Connection;
 
+mod calendars;
+mod events;
 mod settings;
+mod sync_log;
 
+pub use calendars::{Calendar, CalendarsRepo};
+pub use events::{Event, EventsRepo, FeedEvent};
 pub use settings::SettingsRepo;
+pub use sync_log::{SyncLogEntry, SyncLogRepo};
 
 mod embedded {
     refinery::embed_migrations!("migrations");
@@ -23,6 +29,8 @@ pub enum StoreError {
     Database(#[from] rusqlite::Error),
     #[error("A saved setting is not valid JSON.")]
     Json(#[from] serde_json::Error),
+    #[error("Tolon could not find that calendar.")]
+    NotFound,
 }
 
 /// Applied versus expected migrations, for the startup check.
@@ -90,6 +98,18 @@ impl Store {
 
     pub fn settings(&self) -> SettingsRepo<'_> {
         SettingsRepo::new(&self.conn)
+    }
+
+    pub fn calendars(&self) -> CalendarsRepo<'_> {
+        CalendarsRepo::new(&self.conn)
+    }
+
+    pub fn events(&self) -> EventsRepo<'_> {
+        EventsRepo::new(&self.conn)
+    }
+
+    pub fn sync_log(&self) -> SyncLogRepo<'_> {
+        SyncLogRepo::new(&self.conn)
     }
 }
 
