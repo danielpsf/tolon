@@ -58,12 +58,18 @@ impl QuietHours {
 }
 
 /// One alarm per occurrence and kind (AC3.1), in `(at, occurrence, kind)` order. `occurrences`
-/// are the ones that passed the ignore rules; an alarm whose occurrence is not in the list is
-/// dropped, which covers a deleted event and a newly ignored one.
+/// are the ones that passed the ignore rules.
 ///
+/// - An alarm whose occurrence is not in the list is dropped, which covers a deleted event and a
+///   newly ignored one, except a final one (Dismissed, Joined, Expired): it stays as stored, so
+///   a keyword or "again at the start" switched off and on again does not bring a dismissed
+///   meeting back (AC3.3). The store prunes final alarms once their meeting is past.
 /// - An alarm already in `existing` keeps a Firing, Snoozed, Dismissed, Joined or Expired state
 ///   (AC3.3); a Scheduled one is re-timed from the settings. `at` and `start` follow the
 ///   occurrence either way.
+/// - The one exception: an Expired alarm whose meeting moved later, to a window that is still
+///   open, is Scheduled again, so a moved instance of a series fires at its new time. Not when
+///   the meeting was joined: that Expired is the join closing the sibling alarm.
 /// - A new alarm is not created once its meeting's window has closed (start + 10 min <= `now`),
 ///   so a feed read after the fact adds no stale alarms. One created inside the window with
 ///   `at` already past fires at the next tick.
@@ -79,10 +85,16 @@ pub fn plan(
             .lead_minutes
             .clamp(MIN_LEAD_MINUTES, MAX_LEAD_MINUTES),
     ));
-    let known: HashMap<(&OccurrenceKey, AlarmKind), AlarmState> = existing
+    let known: HashMap<(&OccurrenceKey, AlarmKind), &Alarm> = existing
         .iter()
-        .map(|a| ((&a.occurrence, a.kind), a.state))
+        .map(|a| ((&a.occurrence, a.kind), a))
         .collect();
+    let joined: HashSet<&OccurrenceKey> = existing
+        .iter()
+        .filter(|a| a.state == AlarmState::Joined)
+        .map(|a| &a.occurrence)
+        .collect();
+    let mut planned: HashSet<(&OccurrenceKey, AlarmKind)> = HashSet::new();
 
     let mut out = Vec::new();
     for occ in occurrences {
@@ -101,11 +113,26 @@ pub fn plan(
                 state: AlarmState::Scheduled,
             };
             match known.get(&(&occ.key, kind)) {
-                Some(state) => alarm.state = *state,
+                Some(old) => {
+                    let moved_later = old.state == AlarmState::Expired
+                        && start > old.start
+                        && alarm.expires_at() > now
+                        && !joined.contains(&occ.key);
+                    if !moved_later {
+                        alarm.state = old.state;
+                    }
+                }
                 None if alarm.expires_at() <= now => continue,
                 None => {}
             }
-            out.push(alarm);
+            if planned.insert((&occ.key, kind)) {
+                out.push(alarm);
+            }
+        }
+    }
+    for old in existing {
+        if old.state.is_final() && planned.insert((&old.occurrence, old.kind)) {
+            out.push(old.clone());
         }
     }
     out.sort_by(|a, b| (a.at, &a.occurrence, a.kind).cmp(&(b.at, &b.occurrence, b.kind)));

@@ -195,9 +195,9 @@ proptest! {
         let moved = plan(&occs, &settings, &once, later);
         prop_assert_eq!(&moved, &plan(&occs, &settings, &moved, later));
 
-        // Every alarm planned belongs to a given occurrence.
+        // Every alarm planned belongs to a given occurrence, or is a final one kept as stored.
         for a in &once {
-            prop_assert!(occs.iter().any(|o| o.key == a.occurrence));
+            prop_assert!(a.state.is_final() || occs.iter().any(|o| o.key == a.occurrence));
         }
     }
 }

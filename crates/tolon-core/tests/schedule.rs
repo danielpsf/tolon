@@ -4,7 +4,7 @@ mod common;
 
 use chrono::{DateTime, Duration, NaiveTime, Utc};
 use chrono_tz::Tz;
-use common::{at, occ, utc, TestResult};
+use common::{at, occ, utc, TestResult, LOCAL};
 use tolon_core::{
     apply_transitions, countdown, dismiss, group_firing, join, plan, snooze, tick, Alarm,
     AlarmKind, AlarmSettings, AlarmState, Countdown, JoinTarget, QuietHours, Transition,
@@ -317,6 +317,105 @@ fn plan_adds_no_alarm_for_a_meeting_whose_window_closed() -> TestResult {
     )
     .is_empty());
     assert_eq!(plan(&[old], &settings(2, true), &[], at(14, 9)?).len(), 2);
+    Ok(())
+}
+
+#[test]
+fn ac3_3_final_alarms_survive_their_occurrence_being_filtered_out_and_back() -> TestResult {
+    let meeting = occ("review", at(14, 0)?, 3);
+    let one = std::slice::from_ref(&meeting);
+    let s = settings(2, true);
+    let mut alarms = plan(one, &s, &[], at(9, 0)?);
+    step(&mut alarms, at(13, 58)?);
+    assert!(dismiss(&mut alarms[0]));
+    step(&mut alarms, at(14, 0)?);
+    assert!(join(&mut alarms[1]));
+
+    // A keyword rule switched on: the occurrence leaves the input, the final alarms stay.
+    let hidden = plan(&[], &s, &alarms, at(14, 1)?);
+    assert_eq!(states(&hidden), [AlarmState::Dismissed, AlarmState::Joined]);
+    assert_eq!(
+        plan(&[], &s, &hidden, at(14, 1)?),
+        hidden,
+        "and it is stable"
+    );
+
+    // Switched off again: nothing is re-created as Scheduled, so nothing fires.
+    let mut back = plan(one, &s, &hidden, at(14, 2)?);
+    assert_eq!(states(&back), [AlarmState::Dismissed, AlarmState::Joined]);
+    for minutes in 0..=12 {
+        assert!(step(&mut back, at(14, 0)? + Duration::minutes(minutes))
+            .iter()
+            .all(|t| !t.fires()));
+    }
+
+    // "Again at the start" switched off and on: the start alarm keeps its state.
+    let mut alarms = plan(one, &s, &[], at(9, 0)?);
+    step(&mut alarms, at(13, 58)?);
+    assert!(dismiss(&mut alarms[0]));
+    step(&mut alarms, at(14, 0)?);
+    assert!(dismiss(&mut alarms[1]));
+    let off = plan(one, &settings(2, false), &alarms, at(14, 1)?);
+    assert_eq!(states(&off), [AlarmState::Dismissed, AlarmState::Dismissed]);
+    let on = plan(one, &s, &off, at(14, 1)?);
+    assert_eq!(states(&on), [AlarmState::Dismissed, AlarmState::Dismissed]);
+
+    // A Scheduled alarm is not kept when its occurrence goes.
+    let fresh = plan(one, &s, &[], at(9, 0)?);
+    assert!(plan(&[], &s, &fresh, at(9, 0)?).is_empty());
+    Ok(())
+}
+
+#[test]
+fn ac3_3_a_series_instance_moved_later_after_expiry_fires_at_the_new_time() -> TestResult {
+    let meeting = occ("review", at(14, 0)?, 3);
+    let s = settings(2, false);
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(13, 0)?);
+    step(&mut alarms, at(14, 12)?);
+    assert_eq!(states(&alarms), [AlarmState::Expired]);
+
+    // The same instance (same key) is moved to 15:00 while 14:20 is "now".
+    let mut moved = meeting.clone();
+    moved.start = at(15, 0)?.with_timezone(&LOCAL);
+    let mut alarms = plan(std::slice::from_ref(&moved), &s, &alarms, at(14, 20)?);
+    assert_eq!(states(&alarms), [AlarmState::Scheduled]);
+    assert_eq!(alarms[0].at, at(14, 58)?);
+    assert!(step(&mut alarms, at(14, 57)?).is_empty());
+    assert!(step(&mut alarms, at(14, 58)?)[0].fires());
+
+    // Moved later but into a window that is already closed: stays Expired.
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(13, 0)?);
+    step(&mut alarms, at(14, 12)?);
+    moved.start = at(14, 5)?.with_timezone(&LOCAL);
+    let alarms = plan(std::slice::from_ref(&moved), &s, &alarms, at(14, 20)?);
+    assert_eq!(states(&alarms), [AlarmState::Expired]);
+
+    // Dismissed and Joined stay final when the meeting moves.
+    moved.start = at(15, 0)?.with_timezone(&LOCAL);
+    for done in [dismiss as fn(&mut Alarm) -> bool, join] {
+        let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(13, 0)?);
+        assert!(done(&mut alarms[0]));
+        let kept = plan(std::slice::from_ref(&moved), &s, &alarms, at(14, 20)?);
+        assert_eq!(kept[0].state, alarms[0].state);
+        assert_eq!(kept[0].at, at(14, 58)?, "re-timed, still final");
+    }
+    Ok(())
+}
+
+#[test]
+fn ac3_3_a_joined_meeting_stays_closed_when_it_moves_later() -> TestResult {
+    // The Expired start alarm here is the join closing it, not a missed meeting.
+    let meeting = occ("review", at(14, 0)?, 3);
+    let s = settings(2, true);
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(9, 0)?);
+    step(&mut alarms, at(13, 58)?);
+    assert!(join(&mut alarms[0]));
+    step(&mut alarms, at(13, 59)?);
+    assert_eq!(states(&alarms), [AlarmState::Joined, AlarmState::Expired]);
+    let mut moved = meeting;
+    moved.start = at(14, 30)?.with_timezone(&LOCAL);
+    let kept = plan(&[moved], &s, &alarms, at(14, 0)?);
+    assert_eq!(states(&kept), [AlarmState::Joined, AlarmState::Expired]);
     Ok(())
 }
 
