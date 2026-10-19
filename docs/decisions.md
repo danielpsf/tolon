@@ -82,3 +82,10 @@ Every piece of UI copy is translated, starting with en-US, en-GB, pt-BR and pt-P
 - `plan` keeps Dismissed and Joined alarms even while their meeting is filtered out, so toggling a rule cannot revive them; an Expired alarm re-arms when its meeting moved later and the window is open.
 - "Events without other attendees" means no ATTENDEE line at all (`people == 0`): Outlook lists the organiser outside ATTENDEE, so one attendee is a real two-person meeting.
 - Default lead time 2 minutes (from S3.1), clamped to 1 to 60; to be confirmed against mockup 04.
+
+## 2026-10-20 Locale fallback rules (L-034)
+- Portuguese: PT, AO, MZ, CV, GW, ST, TL and MO resolve to pt-PT; Brazil, bare `pt` and every other region to pt-BR.
+- English: US, CA, PH and bare `en` resolve to en-US; every other English region (GB, IE, IN, ZA, AU, NZ, SG ...) to en-GB.
+- Anything else falls back to en-US. The override (later a setting in Appearance) wins over the system list.
+- Times: 2-digit hours ("09:05") everywhere except en-US ("9:05 AM").
+- HTTP failures render "Sync failed: N"; 401, 403, 429 and 5xx add a short hint ("Sync failed: 401, link expired" per mockup 03); 404 has none, per S1.3. Unknown codes render a generic "Sync failed.".
