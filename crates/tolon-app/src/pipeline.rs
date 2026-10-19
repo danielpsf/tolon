@@ -26,14 +26,15 @@ const IGNORE_ALL_DAY: &str = "ignore_all_day";
 const IGNORE_DECLINED: &str = "ignore_declined";
 const IGNORE_CANCELLED: &str = "ignore_cancelled";
 
-/// What the UI sees of a calendar. `url` is shown on the settings page; it is never logged.
+/// What the UI sees of a calendar. The full URL never leaves the core (AC1.3): `display_url` is
+/// scheme and host only, from `redact_url`.
 #[derive(Serialize)]
 pub struct CalendarDto {
     pub id: String,
     pub name: String,
     pub kind: String,
     pub enabled: bool,
-    pub url: Option<String>,
+    pub display_url: Option<String>,
     pub last_sync_at: Option<String>,
     /// `{ kind, status? }`, for example `{ "kind": "http", "status": 404 }`; the UI localises it.
     pub last_error: Option<SyncErrorDto>,
@@ -46,7 +47,7 @@ impl From<Calendar> for CalendarDto {
             name: c.name,
             kind: c.kind,
             enabled: c.enabled,
-            url: c.url,
+            display_url: c.url.as_deref().map(redact_url),
             last_sync_at: c.last_sync_at,
             last_error: c.last_error.as_deref().map(SyncErrorDto::from_code),
         }

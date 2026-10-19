@@ -38,8 +38,8 @@ export interface CalendarDto {
   name: string;
   kind: string;
   enabled: boolean;
-  /** Shown on the settings page; never logged. */
-  url: string | null;
+  /** Scheme and host only, already redacted by the core: the full URL never reaches the webview (AC1.3). */
+  display_url: string | null;
   /** RFC 3339 timestamp, or null when the calendar never synced. */
   last_sync_at: string | null;
   last_error: SyncError | null;

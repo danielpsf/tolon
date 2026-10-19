@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { asCommandError } from "./api";
 import type { CalendarDto } from "./api-types";
 import { createCopy } from "./copy";
-import { displayUrl, errorText, statusOf, titleOf } from "./view";
+import { errorText, statusOf, titleOf } from "./view";
 
 const en = createCopy("en-US");
 const now = Date.parse("2026-10-20T10:00:00Z");
@@ -12,40 +12,10 @@ const calendar = (over: Partial<CalendarDto> = {}): CalendarDto => ({
   name: "Work",
   kind: "ics",
   enabled: true,
-  url: "https://calendar.google.com/calendar/ical/me%40example.com/private-123/basic.ics",
+  display_url: "https://calendar.google.com",
   last_sync_at: "2026-10-20T09:59:00Z",
   last_error: null,
   ...over,
-});
-
-describe("displayUrl", () => {
-  // AC1.3: only scheme and host may reach the page. Each shape hides its token somewhere different.
-  const shapes: [string, string, string][] = [
-    ["Google", "https://calendar.google.com/calendar/ical/me%40example.com/private-SECRET/basic.ics", "https://calendar.google.com"],
-    ["Outlook", "https://outlook.office365.com/owa/calendar/SECRET@example.com/SECRET/calendar.ics", "https://outlook.office365.com"],
-    ["iCloud", "https://p42-caldav.icloud.com/published/2/SECRET", "https://p42-caldav.icloud.com"],
-    ["Nextcloud", "https://cloud.example.com/remote.php/dav/public-calendars/SECRET?export", "https://cloud.example.com"],
-    ["a token-named file", "https://example.com/SECRET.ics", "https://example.com"],
-    ["a query token", "https://example.com/feed.ics?token=SECRET", "https://example.com"],
-    ["a fragment", "https://example.com/feed.ics#SECRET", "https://example.com"],
-    ["user info", "https://user:SECRET@example.com/feed.ics", "https://example.com"],
-    ["a port", "https://example.com:8443/SECRET/feed.ics", "https://example.com"],
-  ];
-
-  it.each(shapes)("shows scheme and host only for %s", (_name, raw, shown) => {
-    expect(displayUrl(raw)).toBe(shown);
-    expect(displayUrl(raw)).not.toContain("SECRET");
-  });
-
-  it("keeps the host of an IP address", () => {
-    expect(displayUrl("https://127.0.0.1:4444/a/b.ics")).toBe("https://127.0.0.1");
-  });
-
-  it("shows nothing for a missing or malformed URL", () => {
-    expect(displayUrl(null)).toBe("");
-    expect(displayUrl("")).toBe("");
-    expect(displayUrl("not a url")).toBe("");
-  });
 });
 
 describe("statusOf", () => {

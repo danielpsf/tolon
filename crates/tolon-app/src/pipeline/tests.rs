@@ -138,7 +138,10 @@ async fn s1_1_add_names_calendar_from_x_wr_calname() -> TestResult {
     assert_eq!(dto.name, "Team calendar");
     assert_eq!(dto.kind, "ics");
     assert!(dto.enabled);
-    assert_eq!(dto.url.as_deref(), Some(SECRET_URL));
+    assert_eq!(
+        dto.display_url.as_deref(),
+        Some("https://calendar.example.com")
+    );
     assert_eq!(
         dto.last_sync_at.as_deref(),
         Some(now().to_rfc3339().as_str())
@@ -167,7 +170,7 @@ async fn s1_2_webcal_stored_as_https() -> TestResult {
     let fake = Fake::new(vec![modified(basic_feed(None), None)]);
     let dto = add_ics(&db, &fake, "webcal://example.com/team.ics", now()).await?;
 
-    assert_eq!(dto.url.as_deref(), Some("https://example.com/team.ics"));
+    assert_eq!(dto.display_url.as_deref(), Some("https://example.com"));
     assert_eq!(
         fake.calls(),
         [("https://example.com/team.ics".to_owned(), None)]
@@ -361,7 +364,8 @@ async fn sync_all_skips_disabled_calendars() -> TestResult {
     sync_all(&db, &fake, now() + Duration::minutes(5)).await?;
     let calls = fake.calls();
     assert_eq!(calls.len(), 3, "two adds and one refresh");
-    assert_eq!(calls[2].0, one.url.unwrap_or_default());
+    assert_eq!(calls[2].0, "https://one.example.com/a.ics");
+    assert_eq!(one.display_url.as_deref(), Some("https://one.example.com"));
     Ok(())
 }
 
@@ -557,8 +561,10 @@ async fn ac1_3_secret_absent_from_logs_sync_log_and_last_error() -> TestResult {
         "the redacted host is logged"
     );
     assert_secret_free(&db, &logs, "private-123")?;
-    // The stored URL is the one place the secret lives, and the UI gets it for the settings page.
-    assert_eq!(dto.url.as_deref(), Some(SECRET_URL));
+    assert_eq!(
+        dto.display_url.as_deref(),
+        Some("https://calendar.example.com")
+    );
     Ok(())
 }
 
@@ -622,4 +628,39 @@ async fn a_poisoned_store_lock_is_recovered() -> TestResult {
     add_ics(&db, &fake, SECRET_URL, now()).await?;
     assert_eq!(list(&db)?.len(), 1);
     Ok(())
+}
+
+fn calendar_row(url: &str) -> Calendar {
+    Calendar {
+        id: "c1".into(),
+        name: "Work".into(),
+        kind: "ics".into(),
+        enabled: true,
+        url: Some(url.into()),
+        account: None,
+        color: None,
+        etag: None,
+        last_sync_at: None,
+        last_error: None,
+        created_at: "2026-10-20T08:00:00Z".into(),
+    }
+}
+
+#[test]
+fn ac1_3_dto_json_never_carries_the_secret() -> TestResult {
+    let url = "https://user-private-123:pw-private-123@host.example.com:8443/private-123/feed.ics?token=private-123#private-123";
+    let json = serde_json::to_string(&CalendarDto::from(calendar_row(url)))?;
+    assert!(!json.contains("private-123"), "{json}");
+    assert!(!json.contains("\"url\""), "{json}");
+    assert!(
+        json.contains("\"display_url\":\"https://host.example.com\""),
+        "{json}"
+    );
+    Ok(())
+}
+
+#[test]
+fn ac1_3_display_url_is_redact_url() {
+    let dto = CalendarDto::from(calendar_row(SECRET_URL));
+    assert_eq!(dto.display_url, Some(redact_url(SECRET_URL)));
 }

@@ -3,7 +3,7 @@ import { api } from "../api";
 import type { CalendarDto } from "../api-types";
 import { copy } from "../copy";
 import { useCalendars } from "../store";
-import { displayUrl, errorText, statusOf, titleOf } from "../view";
+import { errorText, statusOf, titleOf } from "../view";
 
 const TICK_MS = 30_000;
 
@@ -32,13 +32,12 @@ function Row({
   const { calendars: t } = c.t;
   const status = statusOf(calendar, c, now);
   const dot = status.failed ? "signal" : calendar.enabled ? "" : "muted";
-  const url = displayUrl(calendar.url);
   return (
     <li className="sm-card tl-row">
       <span className={`sm-badge dot ${dot}`} aria-hidden="true" />
       <span className="tl-text">
         <span className="tl-name">{titleOf(calendar, c)}</span>
-        {url && <span className="sm-caption">{url}</span>}
+        {calendar.display_url && <span className="sm-caption">{calendar.display_url}</span>}
       </span>
       <span className={`tl-status${status.failed ? " failed" : ""}`}>{status.text}</span>
       <span className="tl-remove">
