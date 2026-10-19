@@ -41,3 +41,6 @@ The e2e jobs (Linux, Windows) run with `continue-on-error` so `main` is not red 
 
 ## 2026-10-19 What counts as a calendar response
 A feed is accepted when the response is `text/calendar`, or when the body starts with `BEGIN:VCALENDAR` whatever the content type, because several hosts serve `.ics` as `text/plain`. Redirects are followed only to `https` and for at most 10 requests; the 30 s timeout covers the body too. `redact_url()` keeps scheme and host only, dropping the port.
+
+## 2026-10-19 Apache License 2.0 only
+Tolon is licensed under Apache-2.0 alone, not the Rust-usual "MIT OR Apache-2.0". Why: the explicit patent grant protects users and contributors. `LICENSE` holds the full text; every crate inherits `license = "Apache-2.0"` from the workspace.

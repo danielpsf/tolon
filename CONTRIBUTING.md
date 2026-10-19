@@ -83,4 +83,4 @@ Tolon is set up so that coding agents can do much of the work from the plan, and
 
 ## License
 
-By contributing, you agree that your work is dual-licensed under the MIT and Apache 2.0 licences, the same as Tolon.
+By contributing, you agree that your work is licensed under the [Apache License 2.0](LICENSE), the same as Tolon.

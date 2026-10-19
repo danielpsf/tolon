@@ -134,4 +134,4 @@ Thank you to the people who build and maintain these projects in the open.
 
 ## License
 
-Tolon is dual-licensed under the MIT and Apache 2.0 licences, at your option.
+Tolon is licensed under the [Apache License 2.0](LICENSE).
