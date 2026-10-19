@@ -56,3 +56,9 @@ The plan asks for 12 real-world `.ics` files. The 12 in `fixtures/ics/` are synt
 - "Declined by the owner": the owner is the account addresses the caller passes; failing that, a calendar name containing `@` (Google's primary calendar); failing that, nobody, and nothing is dropped as declined.
 - A `RECURRENCE-ID` without its series in the feed is kept as a standalone event with uid `<uid>#<recurrence-id>`, so `unique(calendar_id, uid)` holds. `Event.id` is `<calendar id>:<uid>`.
 - Unknown `TZID`s fall back to floating time; IANA names and the common Windows zone names are mapped.
+
+## 2026-10-20 Platform trait shape
+- `Platform::raise_above_everything(&dyn HasWindowHandle)` takes a `raw-window-handle` window, so `tolon-platform` does not depend on `tauri`; Tauri's `WebviewWindow` implements the trait. This is the public entry the architecture's `macos::raise_above_everything(&window)` refers to.
+- macOS calls need the main thread, checked with `MainThreadMarker`; off the main thread they return `PlatformError::NotMainThread`. The app calls them through `run_on_main_thread`.
+- `Screen` uses logical points, top-left origin, primary screen at (0, 0), y down. `is_main` is the menu-bar screen (`NSScreen.screens[0]`), not the focused one.
+- Windows and Linux return stubs until L-012.
