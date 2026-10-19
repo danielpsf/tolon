@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Tolon",
+  "version": "0.1.0-beta.1",
+  "identifier": "dev.tolon.desktop",
+  "build": {
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tolon",
+        "width": 960,
+        "height": 640
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzQzVFQkYyQ0U2QTg0MkIKUldRcmhHck84dXZGMCt4N1NpWUIzL20rQVRHWE5aNzJzMm1DMjRCaTNJdHVxdFdXOXo2K1Y5U1oK",
+      "endpoints": [
+        "https://github.com/danielpsf/tolon/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
