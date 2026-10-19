@@ -41,8 +41,10 @@ pub enum Verdict {
 /// Judge each occurrence, keeping the input order. The panel lists the ignored ones with a muted
 /// tag (S8.1); only the `Keep` ones go to `plan`.
 ///
-/// `people` is the attendee count the feed gave. A solo event lists at most the owner, so "no
-/// other attendees" is `people <= 1`.
+/// `people` counts ATTENDEE lines only, never the ORGANIZER (parse.rs). Google leaves ATTENDEE out of a
+/// solo event and Outlook lists the organizer separately, so "no other attendees" is `people == 0`.
+/// shortcut: a feed that lists the owner as an ATTENDEE on a solo event is not ignored; add the
+/// account addresses (as the declined rule has) if that bites.
 pub fn apply_rules(
     occurrences: Vec<Occurrence>,
     rules: &IgnoreRules,
@@ -60,7 +62,7 @@ pub fn apply_rules(
             let verdict =
                 if let Some(k) = keywords.iter().find(|k| title.contains(&k.to_lowercase())) {
                     Verdict::Ignored(IgnoreReason::Keyword((*k).to_string()))
-                } else if rules.without_other_attendees && occ.people <= 1 {
+                } else if rules.without_other_attendees && occ.people == 0 {
                     Verdict::Ignored(IgnoreReason::NoOtherAttendees)
                 } else {
                     Verdict::Keep

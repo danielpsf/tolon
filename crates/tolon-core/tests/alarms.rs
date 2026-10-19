@@ -2,10 +2,11 @@
 
 mod common;
 
+use chrono::Duration;
 use common::{at, occ, TestResult};
 use tolon_core::{
-    already_there, apply_rules, dismiss, join, snooze, Alarm, AlarmKind, AlarmState, EventId,
-    IgnoreReason, IgnoreRules, OccurrenceKey, Verdict,
+    already_there, apply_rules, dismiss, expand_window, join, snooze, Alarm, AlarmKind, AlarmState,
+    EventId, ExpandOptions, IgnoreReason, IgnoreRules, OccurrenceKey, Verdict,
 };
 
 fn key(event: &str) -> TestResult<OccurrenceKey> {
@@ -169,7 +170,7 @@ fn ac8_2_keywords_are_case_insensitive_and_comma_separated() -> TestResult {
 
 #[test]
 fn ac8_2_events_without_other_attendees_default_off() -> TestResult {
-    let titles = [("Solo", 0), ("Just me", 1), ("Pair", 2)];
+    let titles = [("Solo", 0), ("One invitee", 1), ("Pair", 2)];
     assert_eq!(
         verdicts(&IgnoreRules::default(), &titles)?,
         [Verdict::Keep, Verdict::Keep, Verdict::Keep]
@@ -181,7 +182,38 @@ fn ac8_2_events_without_other_attendees_default_off() -> TestResult {
     let no_others = Verdict::Ignored(IgnoreReason::NoOtherAttendees);
     assert_eq!(
         verdicts(&on, &titles)?,
-        [no_others.clone(), no_others, Verdict::Keep]
+        [no_others, Verdict::Keep, Verdict::Keep],
+        "one ATTENDEE line is someone else; only none at all is a solo event"
     );
+    Ok(())
+}
+
+#[test]
+fn ac8_2_outlook_organizer_plus_one_invitee_is_kept() -> TestResult {
+    // "Design review": ORGANIZER Pat and one ATTENDEE, Casey. The organizer is not counted.
+    let events = common::parse_fixture("outlook-published.ics")?.events;
+    let from = common::utc(2026, 9, 1, 0, 0)?;
+    let occurrences = expand_window(
+        &events,
+        from,
+        from + Duration::days(7),
+        common::LOCAL,
+        &ExpandOptions::default(),
+    );
+    let design: Vec<_> = occurrences
+        .into_iter()
+        .filter(|o| o.title == "Design review")
+        .collect();
+    assert!(!design.is_empty());
+    assert_eq!(design[0].people, 1);
+    let on = IgnoreRules {
+        without_other_attendees: true,
+        ..IgnoreRules::default()
+    };
+    let verdicts: Vec<_> = apply_rules(design, &on)
+        .into_iter()
+        .map(|(_, v)| v)
+        .collect();
+    assert!(verdicts.iter().all(|v| *v == Verdict::Keep), "{verdicts:?}");
     Ok(())
 }
