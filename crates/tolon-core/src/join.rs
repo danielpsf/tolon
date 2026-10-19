@@ -18,10 +18,12 @@ const PROVIDER_HOSTS: &[&str] = &[
 /// `description`. With no link, the event page if the source has one (AC5.2), else `None`.
 /// Only `https://` links are ever returned.
 pub fn detect_join(event: &Event) -> JoinTarget {
-    if let Some(c) = event.conference.as_deref().map(str::trim) {
-        if is_https(c) {
-            return JoinTarget::Link(c.to_string());
-        }
+    if let Some(link) = event
+        .conference
+        .as_deref()
+        .and_then(|t| links_in(t).into_iter().next())
+    {
+        return JoinTarget::Link(link);
     }
     if let Some(link) = event
         .location
@@ -62,7 +64,7 @@ fn links_in(text: &str) -> Vec<String> {
         .map(|tok| tok.trim_start_matches(['(', '[', '{', '*']))
         .filter(|tok| is_https(tok))
         .map(trim_end)
-        .filter(|l| is_https(l) && host_of(l).is_some())
+        .filter(|l| is_https(l) && !l.chars().any(unsafe_char) && host_of(l).is_some())
         .map(str::to_string)
         .collect()
 }
@@ -106,19 +108,28 @@ fn capped(text: &str) -> &str {
         .map_or("", |i| &head[..i])
 }
 
-/// The lower-cased host of an `https://` link, without port or trailing dot. `None` when it
-/// has user info (`meet.google.com@evil.example`) or no host.
+/// Control and invisible format characters: never part of a link we hand to a browser.
+fn unsafe_char(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{ad}' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{feff}')
+}
+
+/// The lower-cased host of an `https://` link, without port or trailing dot. Only
+/// `[a-z0-9.-]` hosts with an optional digits-only port pass, so user info
+/// (`meet.google.com@evil.example`), a backslash (`evil.example\.zoom.us`, which browsers read
+/// as a path) and `evil.example:80.zoom.us` are all refused. Punycode stays as `xn--`.
 fn host_of(link: &str) -> Option<String> {
     let authority = link.get(8..)?.split(['/', '?', '#']).next()?;
-    if authority.contains('@') {
-        return None;
-    }
     let host = match authority.rsplit_once(':') {
-        Some((h, port)) if port.bytes().all(|b| b.is_ascii_digit()) => h,
+        Some((h, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => h,
         _ => authority,
     };
     let host = host.trim_end_matches('.').to_ascii_lowercase();
-    (!host.is_empty()).then_some(host)
+    let ok = host
+        .split('.')
+        .all(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'));
+    ok.then_some(host)
 }
 
 fn is_provider(link: &str) -> bool {
@@ -270,6 +281,10 @@ mod tests {
             "https://zoom.us@evil.example/j/1",
             "https://evilzoom.us/j/1",
             "see http://x/?u=https://zoom.us/j/1",
+            r"https://evil.example\.zoom.us/j/1",
+            "https://evil.example:80.zoom.us/j/1",
+            "https://zoom.us\u{200b}/j/1",
+            "https://zoom.us/j/1\u{0}",
         ] {
             assert_eq!(in_field("description", text), JoinTarget::None, "{text}");
         }
@@ -280,6 +295,12 @@ mod tests {
             detect_join(&e),
             JoinTarget::EventPage("https://calendar.example.com/e".into())
         );
+        for text in [
+            r"https://evil.example\.zoom.us/j/1",
+            "https://evil.example:80.zoom.us/j/1",
+        ] {
+            assert_eq!(in_field("location", text), JoinTarget::None, "{text}");
+        }
         assert_eq!(
             in_field("location", "javascript:alert(1)"),
             JoinTarget::None
@@ -323,5 +344,34 @@ mod tests {
         assert_eq!(in_field("description", &text), JoinTarget::None);
         let cut = format!("{} https://zoom.us/j/1", "x ".repeat(MAX_SCAN / 2 - 8));
         assert_eq!(in_field("description", &cut), JoinTarget::None);
+    }
+
+    #[test]
+    fn conference_data_is_sanitised_like_any_link() {
+        for c in [
+            "https://meet.google.com@evil.example/x",
+            "https://zoom.us/j/1\u{0}x",
+            "https://zoom.us/j/1\u{200b}",
+            r"https://evil.example\.zoom.us/j/1",
+            "http://meet.google.com/x",
+        ] {
+            let mut e = event();
+            e.conference = Some(c.into());
+            assert_eq!(detect_join(&e), JoinTarget::None, "{c:?}");
+        }
+        let mut e = event();
+        e.conference = Some("https://zoom.us/j/1 https://evil.example".into());
+        assert_eq!(detect_join(&e), link("https://zoom.us/j/1"));
+        e.conference =
+            Some("https://meet.google.com@evil.example/x\nhttps://meet.google.com/ok".into());
+        assert_eq!(detect_join(&e), link("https://meet.google.com/ok"));
+    }
+
+    #[test]
+    fn an_http_location_falls_through_to_a_zoom_description() {
+        let mut e = event();
+        e.location = Some("http://zoom.us/j/1".into());
+        e.description = Some("https://zoom.us/j/2".into());
+        assert_eq!(detect_join(&e), link("https://zoom.us/j/2"));
     }
 }
