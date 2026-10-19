@@ -1,6 +1,6 @@
 //! S2.1: every fixture parses and expands to its committed snapshot.
 //!
-//! `cargo xtask fixtures` runs this with TOLON_UPDATE_FIXTURES=1, which rewrites the
+//! `cargo xtask fixtures` runs this with TOLON_UPDATE_FIXTURES=1 (exactly "1"), which rewrites the
 //! `<file>.expected.json` files instead of comparing. Read the diff before committing.
 
 mod common;
@@ -34,7 +34,7 @@ fn snapshot(name: &str) -> TestResult<String> {
 
 #[test]
 fn s2_1_fixtures_match_their_snapshots() -> TestResult {
-    let update = std::env::var_os("TOLON_UPDATE_FIXTURES").is_some();
+    let update = std::env::var("TOLON_UPDATE_FIXTURES").is_ok_and(|v| v == "1");
     let mut failures = Vec::new();
     for name in FIXTURE_FILES {
         let actual = snapshot(name)?;
