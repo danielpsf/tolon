@@ -62,3 +62,11 @@ The plan asks for 12 real-world `.ics` files. The 12 in `fixtures/ics/` are synt
 - macOS calls need the main thread, checked with `MainThreadMarker`; off the main thread they return `PlatformError::NotMainThread`. The app calls them through `run_on_main_thread`.
 - `Screen` uses logical points, top-left origin, primary screen at (0, 0), y down. `is_main` is the menu-bar screen (`NSScreen.screens[0]`), not the focused one.
 - Windows and Linux return stubs until L-012.
+
+## 2026-10-20 Tolon is translated from beta 1
+Every piece of UI copy is translated, starting with en-US, en-GB, pt-BR and pt-PT; more locales follow (list to be confirmed by the maintainer). Rules:
+- The core and the app never send finished sentences to the UI. Errors and statuses travel as codes (`http:404`, `timeout`, `unsupported_scheme` ...) and the view turns them into copy.
+- `ui/src/copy.ts` becomes one message catalogue per locale under `ui/src/i18n/`, with en-US as the source and a typed key set, so a missing key fails the build. Dates, times and plurals use `Intl` (`DateTimeFormat`, `RelativeTimeFormat`, `PluralRules`).
+- The locale follows the system language, with an override in Settings, Appearance. Unknown locales fall back by language (pt-AO to pt-PT, en-IE to en-GB), then to en-US.
+- The writing rules in `AGENTS.md` apply in every language. pt-BR and pt-PT are separate catalogues, not one with tweaks; each needs a native reviewer before a release.
+- Logs stay in English.
