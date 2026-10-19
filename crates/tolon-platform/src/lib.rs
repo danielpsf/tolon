@@ -122,12 +122,22 @@ impl Reason {
 /// whenever the call returns `Ok`; focus is separate and the OS may refuse it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Raised {
-    /// The window had keyboard focus when the call returned (AC4.4). macOS: the window is the key
-    /// window at that moment, read right after `makeKeyAndOrderFront`; an app that is not yet
-    /// active can report `false` and gain focus a moment later. Windows: `SetForegroundWindow`
-    /// succeeded. Linux: always `false`, because Tauri and the window manager handle focus
-    /// there; the app must check focus itself.
-    pub focused: bool,
+    /// Keyboard focus (AC4.4) as far as the call could tell.
+    pub focus: Focus,
+}
+
+/// Whether a raised window has keyboard focus, as known when the call returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+    /// The window has focus. macOS: it is the key window right after `makeKeyAndOrderFront`.
+    /// Windows: `SetForegroundWindow` succeeded.
+    Yes,
+    /// The OS refused focus. Windows: `SetForegroundWindow` failed.
+    No,
+    /// The call cannot tell yet. macOS: not the key window now, but a tray app often becomes key
+    /// a moment later. Linux and the stub: Tauri and the window manager handle focus, and the
+    /// platform layer does not look.
+    Unknown,
 }
 
 /// What the app needs from the operating system.
@@ -148,8 +158,10 @@ pub trait Platform: Send + Sync {
 
     /// Put `window` above every other window, including full-screen apps, on all Spaces, and
     /// try to focus it. Call it after Tauri has created the window; Tauri's `WebviewWindow` and
-    /// `Window` implement [`HasWindowHandle`]. [`Raised::focused`] says whether the window got
-    /// keyboard focus; when it did not, the app runs the F4.5 notification as well.
+    /// `Window` implement [`HasWindowHandle`]. [`Raised::focus`] reports focus at the moment of
+    /// the call. The app re-checks focus after about 500 ms and runs the F4.5 fallback only on a
+    /// confirmed [`Focus::No`], or when focus is still missing at that check; [`Focus::Unknown`]
+    /// alone is not a reason to fall back.
     fn raise_above_everything(&self, window: &dyn HasWindowHandle)
         -> Result<Raised, PlatformError>;
 
@@ -189,7 +201,9 @@ impl Platform for StubPlatform {
         &self,
         _window: &dyn HasWindowHandle,
     ) -> Result<Raised, PlatformError> {
-        Ok(Raised { focused: false })
+        Ok(Raised {
+            focus: Focus::Unknown,
+        })
     }
 
     fn takeover_support(&self) -> Takeover {
@@ -333,11 +347,13 @@ mod tests {
     }
 
     #[test]
-    fn stub_raise_reports_no_focus() {
+    fn stub_raise_does_not_know_about_focus() {
         let w = fake::Fake(RawWindowHandle::Xlib(XlibWindowHandle::new(1)));
         assert_eq!(
             StubPlatform.raise_above_everything(&w),
-            Ok(Raised { focused: false })
+            Ok(Raised {
+                focus: Focus::Unknown
+            })
         );
     }
 

@@ -2,7 +2,7 @@
 
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
-use crate::{ns_view_of, Platform, PlatformError, Raised, Screen, Takeover};
+use crate::{ns_view_of, Focus, Platform, PlatformError, Raised, Screen, Takeover};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSView, NSWindow, NSWindowCollectionBehavior};
@@ -70,9 +70,13 @@ impl Platform for MacPlatform {
         ns_window.setLevel(INTERRUPT_WINDOW_LEVEL);
         ns_window.setCollectionBehavior(NSWindowCollectionBehavior(INTERRUPT_COLLECTION_BEHAVIOR));
         ns_window.makeKeyAndOrderFront(None);
-        Ok(Raised {
-            focused: ns_window.isKeyWindow(),
-        })
+        // Not yet key is not a refusal: a tray app often becomes key a moment later.
+        let focus = if ns_window.isKeyWindow() {
+            Focus::Yes
+        } else {
+            Focus::Unknown
+        };
+        Ok(Raised { focus })
     }
 
     fn takeover_support(&self) -> Takeover {

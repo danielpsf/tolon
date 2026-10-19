@@ -11,10 +11,10 @@
 //!
 //! `HWND_TOPMOST` does not depend on the foreground lock, so the window covers other windows
 //! even when the OS refuses focus. In that case `raise_above_everything` still returns `Ok`, with
-//! `Raised { focused: false }`; the app decides whether to add the F4.5 notification.
+//! `Raised { focus: Focus::No }`; the app decides whether to add the F4.5 notification.
 
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
-use crate::{hwnd_of, Platform, PlatformError, Raised, Screen, Takeover};
+use crate::{hwnd_of, Focus, Platform, PlatformError, Raised, Screen, Takeover};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
 use windows::core::BOOL;
@@ -173,7 +173,11 @@ impl Platform for WindowsPlatform {
         }
         .map_err(|e| os_error("SetWindowPos", &e))?;
         Ok(Raised {
-            focused: take_foreground(hwnd),
+            focus: if take_foreground(hwnd) {
+                Focus::Yes
+            } else {
+                Focus::No
+            },
         })
     }
 

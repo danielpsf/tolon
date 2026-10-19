@@ -14,7 +14,7 @@
 //! empty list, so a successful result always has exactly one main screen.
 
 use crate::session::{detect_session, session_of_handle, takeover_for};
-use crate::{Platform, PlatformError, Raised, Screen, Takeover};
+use crate::{Focus, Platform, PlatformError, Raised, Screen, Takeover};
 use raw_window_handle::HasWindowHandle;
 
 pub struct LinuxPlatform;
@@ -40,7 +40,9 @@ impl Platform for LinuxPlatform {
             .window_handle()
             .map_err(|e| PlatformError::HandleUnavailable(e.to_string()))?;
         session_of_handle(handle.as_raw())
-            .map(|_| Raised { focused: false })
+            .map(|_| Raised {
+                focus: Focus::Unknown,
+            })
             .ok_or(PlatformError::WrongHandleKind("not X11 or Wayland"))
     }
 
@@ -69,7 +71,9 @@ mod tests {
         let w = Fake(RawWindowHandle::Xlib(XlibWindowHandle::new(1)));
         assert_eq!(
             LinuxPlatform.raise_above_everything(&w),
-            Ok(Raised { focused: false })
+            Ok(Raised {
+                focus: Focus::Unknown
+            })
         );
     }
 
