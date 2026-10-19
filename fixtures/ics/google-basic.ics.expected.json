@@ -22,9 +22,9 @@
       "event": "fixture:basic-0004@example.com",
       "join": {
         "link": {
-          "host": "meet.example.com",
+          "host": "meet.google.com",
           "recognised": true,
-          "url": "https://meet.example.com/abc-defg-hij"
+          "url": "https://meet.google.com/qzv-mtkp-lwe"
         }
       },
       "key": {

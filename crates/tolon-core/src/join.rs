@@ -23,21 +23,21 @@ pub fn detect_join(event: &Event) -> JoinTarget {
         .as_deref()
         .and_then(|t| links_in(t).into_iter().next())
     {
-        return target(link, true);
+        return target(link);
     }
     if let Some(link) = event
         .location
         .as_deref()
         .and_then(|t| links_in(t).into_iter().next())
     {
-        return target(link.clone(), is_provider(&link));
+        return target(link);
     }
     if let Some(link) = event
         .description
         .as_deref()
         .and_then(|t| links_in(t).into_iter().find(|l| is_provider(l)))
     {
-        return target(link, true);
+        return target(link);
     }
     match event.html_link.as_deref().map(str::trim) {
         Some(page) if !page.is_empty() => JoinTarget::EventPage(page.to_string()),
@@ -45,9 +45,11 @@ pub fn detect_join(event: &Event) -> JoinTarget {
     }
 }
 
-/// `link` has passed `host_of`, so the host is always there.
-fn target(url: String, recognised: bool) -> JoinTarget {
+/// `link` has passed `host_of`, so the host is always there. `recognised` is about the host
+/// alone, whatever field the link came from: a feed controls every field.
+fn target(url: String) -> JoinTarget {
     let host = host_of(&url).unwrap_or_default();
+    let recognised = is_provider(&url);
     JoinTarget::Link {
         url,
         host,
@@ -114,15 +116,28 @@ fn capped(text: &str) -> &str {
         n -= 1;
     }
     let head = &text[..n];
-    head.rfind(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '\'' | '`'))
-        .map_or("", |i| &head[..i])
+    if text[n..].starts_with(is_delimiter) {
+        return head;
+    }
+    head.rfind(is_delimiter).map_or("", |i| &head[..i])
+}
+
+fn is_delimiter(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '<' | '>' | '"' | '\'' | '`')
 }
 
 /// Control and invisible format characters: never part of a link we hand to a browser.
 fn unsafe_char(c: char) -> bool {
+    // The Cf (format) category, written out because std has no category lookup, then the
+    // fillers, private use and tags that render as nothing or as anything.
     c.is_control()
-        || matches!(c, '\u{ad}' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}'
-            | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{feff}')
+        || matches!(c,
+            '\u{ad}' | '\u{34f}' | '\u{600}'..='\u{605}' | '\u{61c}' | '\u{6dd}' | '\u{70f}'
+            | '\u{890}'..='\u{891}' | '\u{8e2}' | '\u{115f}' | '\u{1160}' | '\u{180e}'
+            | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{206f}'
+            | '\u{3164}' | '\u{e000}'..='\u{f8ff}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}'
+            | '\u{110bd}' | '\u{110cd}' | '\u{13430}'..='\u{1343f}' | '\u{1bca0}'..='\u{1bca3}'
+            | '\u{1d173}'..='\u{1d17a}' | '\u{e0000}'..='\u{e007f}')
 }
 
 /// The lower-cased host of an `https://` link, without port or trailing dot. Only
@@ -192,7 +207,7 @@ mod tests {
     }
 
     fn link(s: &str) -> JoinTarget {
-        target(s.into(), is_provider(s))
+        target(s.into())
     }
 
     #[test]
@@ -410,8 +425,40 @@ mod tests {
             JoinTarget::Link {
                 url: "https://xn--mnich-kva.example/x".into(),
                 host: "xn--mnich-kva.example".into(),
-                recognised: true
+                recognised: false
             }
         );
+        e.conference = Some("https://meet.google.com/abc-defg-hij".into());
+        assert!(matches!(
+            detect_join(&e),
+            JoinTarget::Link {
+                recognised: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn invisible_characters_are_refused() {
+        for c in [
+            '\u{34f}',
+            '\u{115f}',
+            '\u{180e}',
+            '\u{3164}',
+            '\u{e000}',
+            '\u{e0041}',
+            '\u{600}',
+            '\u{206a}',
+        ] {
+            let text = format!("https://zoom.us/j/1{c}2");
+            assert_eq!(in_field("description", &text), JoinTarget::None, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_link_ending_exactly_at_the_cap_is_kept() {
+        let link_text = "https://zoom.us/j/1";
+        let text = format!("{}{link_text} tail", " ".repeat(MAX_SCAN - link_text.len()));
+        assert_eq!(in_field("description", &text), link(link_text));
     }
 }

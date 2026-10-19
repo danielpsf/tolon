@@ -35,7 +35,7 @@ SEQUENCE:0
 STATUS:CONFIRMED
 SUMMARY:Stand-up
 TRANSP:OPAQUE
-X-GOOGLE-CONFERENCE:https://meet.example.com/xyz-standup
+X-GOOGLE-CONFERENCE:https://meet.google.com/rkd-pfhs-ycn
 END:VEVENT
 BEGIN:VEVENT
 DTSTART;TZID=Europe/Berlin:20261008T150000

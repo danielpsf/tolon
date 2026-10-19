@@ -35,9 +35,9 @@
       "event": "fixture:weekly-standup@example.com",
       "join": {
         "link": {
-          "host": "meet.example.com",
+          "host": "meet.google.com",
           "recognised": true,
-          "url": "https://meet.example.com/xyz-standup"
+          "url": "https://meet.google.com/rkd-pfhs-ycn"
         }
       },
       "key": {
@@ -80,9 +80,9 @@
       "event": "fixture:weekly-standup@example.com",
       "join": {
         "link": {
-          "host": "meet.example.com",
+          "host": "meet.google.com",
           "recognised": true,
-          "url": "https://meet.example.com/xyz-standup"
+          "url": "https://meet.google.com/rkd-pfhs-ycn"
         }
       },
       "key": {
@@ -99,9 +99,9 @@
       "event": "fixture:weekly-standup@example.com",
       "join": {
         "link": {
-          "host": "meet.example.com",
+          "host": "meet.google.com",
           "recognised": true,
-          "url": "https://meet.example.com/xyz-standup"
+          "url": "https://meet.google.com/rkd-pfhs-ycn"
         }
       },
       "key": {
