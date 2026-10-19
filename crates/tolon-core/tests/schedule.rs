@@ -487,6 +487,16 @@ fn ac3_1_lead_and_start_never_put_two_interrupts_up_for_one_meeting() -> TestRes
         "the snoozed lead still returns"
     );
 
+    // The start alarm snoozed from the panel before it was due fires early; the lead alarm,
+    // due later in the same minute or after, is then skipped.
+    let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(9, 0)?);
+    assert!(snooze(&mut alarms[1], 1, at(13, 0)?));
+    step(&mut alarms, at(13, 1)?);
+    assert_eq!(alarms[1].state, firing(at(13, 1)?));
+    step(&mut alarms, at(13, 58)?);
+    assert_eq!(firing_count(&alarms), 1);
+    assert_eq!(alarms[0].state, AlarmState::Expired);
+
     // Once the lead alarm was dismissed, the start alarm is the second chance and fires.
     let mut alarms = plan(std::slice::from_ref(&meeting), &s, &[], at(9, 0)?);
     step(&mut alarms, at(13, 58)?);

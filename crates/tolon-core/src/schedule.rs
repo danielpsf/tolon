@@ -169,7 +169,8 @@ impl Transition {
 ///   silences "again at the start". Dismissing does not: that is what the second alarm is for.
 /// - One interrupt per meeting: a Start alarm that would fire while the Lead alarm of the same
 ///   occurrence is Firing or Snoozed, or fires in this same tick (a wake after sleep, the end of a
-///   pause), expires silently instead.
+///   pause), expires silently instead. So does a Lead alarm that would fire while the Start alarm
+///   is Firing, which only happens when a person snoozed the Start alarm before it was due.
 pub fn tick(
     alarms: &[Alarm],
     now: DateTime<Utc>,
@@ -203,16 +204,21 @@ pub fn tick(
         })
         .map(|(a, _)| &a.occurrence)
         .collect();
+    let start_firing: HashSet<&OccurrenceKey> = alarms
+        .iter()
+        .filter(|a| a.kind == AlarmKind::Start && matches!(a.state, AlarmState::Firing { .. }))
+        .map(|a| &a.occurrence)
+        .collect();
     alarms
         .iter()
         .zip(next)
         .filter_map(|(a, to)| {
+            let blocked = match a.kind {
+                AlarmKind::Start => lead_busy.contains(&a.occurrence),
+                AlarmKind::Lead => start_firing.contains(&a.occurrence),
+            };
             let to = match to {
-                Some(AlarmState::Firing { .. })
-                    if a.kind == AlarmKind::Start && lead_busy.contains(&a.occurrence) =>
-                {
-                    AlarmState::Expired
-                }
+                Some(AlarmState::Firing { .. }) if blocked => AlarmState::Expired,
                 other => other?,
             };
             Some(Transition {
