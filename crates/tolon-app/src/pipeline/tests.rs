@@ -7,8 +7,16 @@ use chrono::TimeZone;
 use serde_json::json;
 
 use super::*;
+use crate::errors::{command_error, CommandError};
 
 type TestResult = anyhow::Result<()>;
+
+fn http(status: u16) -> SyncErrorDto {
+    SyncErrorDto {
+        kind: "http".to_owned(),
+        status: Some(status),
+    }
+}
 
 const SECRET_URL: &str = "https://calendar.example.com/ical/abc/private-123/basic.ics";
 
@@ -169,20 +177,19 @@ async fn s1_2_webcal_stored_as_https() -> TestResult {
 }
 
 #[tokio::test]
-async fn s1_2_other_schemes_and_junk_are_rejected_with_a_sentence() -> TestResult {
+async fn s1_2_other_schemes_and_junk_are_rejected_with_a_code() -> TestResult {
     let db = db()?;
     let fake = Fake::new(vec![]);
-    for bad in [
-        "http://example.com/a.ics",
-        "ftp://example.com/a.ics",
-        "not a link",
+    for (bad, code) in [
+        ("http://example.com/a.ics", "unsupported_scheme"),
+        ("ftp://example.com/a.ics", "unsupported_scheme"),
+        ("not a link", "invalid_url"),
     ] {
         let Err(e) = add_ics(&db, &fake, bad, now()).await else {
             return Err(anyhow!("{bad} should be rejected"));
         };
-        let text = e.to_string();
-        assert!(text.ends_with('.'), "not a sentence: {text}");
-        assert!(!text.contains(bad), "echoes the input: {text}");
+        assert_eq!(command_error(&e), CommandError { code }, "{bad}");
+        assert!(!e.to_string().contains(bad), "echoes the input");
     }
     assert!(
         fake.calls().is_empty(),
@@ -198,12 +205,22 @@ async fn s1_3_unreachable_link_is_added_with_status() -> TestResult {
     let fake = Fake::new(vec![Err(FetchError::Status(404))]);
     let dto = add_ics(&db, &fake, SECRET_URL, now()).await?;
 
-    assert_eq!(dto.last_error.as_deref(), Some("Sync failed: 404"));
+    assert_eq!(dto.last_error, Some(http(404)));
     assert_eq!(dto.last_sync_at, None);
     assert_eq!(dto.name, "calendar.example.com");
     let listed = list(&db)?;
     assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0].last_error.as_deref(), Some("Sync failed: 404"));
+    assert_eq!(listed[0].last_error, Some(http(404)));
+    // Stored as the stable code, not as a sentence.
+    assert_eq!(
+        lock(&db)
+            .calendars()
+            .get(&dto.id)?
+            .and_then(|c| c.last_error),
+        Some("http:404".to_owned())
+    );
+    let log = lock(&db).sync_log().list_recent(10)?;
+    assert_eq!(log[0].detail.as_deref(), Some("http:404"));
     assert!(stored_uids(&db, &dto.id)?.is_empty());
     assert!(
         today(&db, now(), Tz::UTC)?.is_empty(),
@@ -213,11 +230,25 @@ async fn s1_3_unreachable_link_is_added_with_status() -> TestResult {
 }
 
 #[tokio::test]
-async fn s1_3_non_http_failure_uses_the_error_kind_text() -> TestResult {
-    let db = db()?;
-    let fake = Fake::new(vec![Err(FetchError::Timeout)]);
-    let dto = add_ics(&db, &fake, SECRET_URL, now()).await?;
-    assert_eq!(dto.last_error.as_deref(), Some("request timed out"));
+async fn s1_3_non_http_failures_use_the_error_kind_code() -> TestResult {
+    let cases = [
+        (FetchError::Timeout, "timeout"),
+        (FetchError::Connect, "connect"),
+        (FetchError::NotCalendar, "not_calendar"),
+        (FetchError::TooLarge { limit: 5 }, "too_large"),
+        (FetchError::Network, "network"),
+    ];
+    for (err, kind) in cases {
+        let db = db()?;
+        let dto = add_ics(&db, &Fake::new(vec![Err(err)]), SECRET_URL, now()).await?;
+        assert_eq!(
+            dto.last_error,
+            Some(SyncErrorDto {
+                kind: kind.to_owned(),
+                status: None
+            })
+        );
+    }
     Ok(())
 }
 
@@ -235,8 +266,8 @@ async fn s1_5_not_modified_keeps_events_and_clears_error() -> TestResult {
     let later = now() + Duration::minutes(5);
     sync_one(&db, &fake, &dto.id, later).await?;
     assert_eq!(
-        list(&db)?[0].last_error.as_deref(),
-        Some("Sync failed: 500"),
+        list(&db)?[0].last_error,
+        Some(http(500)),
         "a failed refresh keeps the events and shows the error"
     );
 
@@ -282,7 +313,7 @@ async fn s2_3_skipped_component_goes_to_sync_log() -> TestResult {
     assert_eq!(stored_uids(&db, &dto.id)?, ["ok"]);
     let log = lock(&db).sync_log().list_recent(10)?;
     assert_eq!(log.len(), 1);
-    assert_eq!(log[0].detail.as_deref(), Some("1 component skipped"));
+    assert_eq!(log[0].detail.as_deref(), Some("skipped:1"));
     assert_eq!(log[0].calendar_id.as_deref(), Some(dto.id.as_str()));
     Ok(())
 }
@@ -505,7 +536,7 @@ fn assert_secret_free(db: &Db, logs: &Sink, secret: &str) -> TestResult {
         assert!(!text.contains(secret), "sync_log leaked the secret: {text}");
     }
     for cal in list(db)? {
-        let err = cal.last_error.unwrap_or_default();
+        let err = format!("{:?}", cal.last_error);
         assert!(!err.contains(secret), "last_error leaked the secret: {err}");
     }
     Ok(())
@@ -546,23 +577,6 @@ async fn ac1_3_real_fetcher_failure_keeps_the_secret_out_too() -> TestResult {
 }
 
 #[tokio::test]
-async fn a_poisoned_store_lock_is_recovered() -> TestResult {
-    let db = db()?;
-    let _ = std::thread::scope(|s| {
-        s.spawn(|| {
-            let _held = db.lock();
-            std::panic::resume_unwind(Box::new("poison the lock"));
-        })
-        .join()
-    });
-    assert!(db.is_poisoned());
-    let fake = Fake::new(vec![modified(basic_feed(Some("Team")), None)]);
-    add_ics(&db, &fake, SECRET_URL, now()).await?;
-    assert_eq!(list(&db)?.len(), 1);
-    Ok(())
-}
-
-#[tokio::test]
 async fn unreadable_stored_events_are_skipped_and_their_text_is_not_logged() -> TestResult {
     let logs = Sink::default();
     let _guard = logs.capture();
@@ -590,5 +604,22 @@ async fn unreadable_stored_events_are_skipped_and_their_text_is_not_logged() -> 
         !out.contains("SECRET-TITLE"),
         "payload text reached the log: {out}"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_poisoned_store_lock_is_recovered() -> TestResult {
+    let db = db()?;
+    let _ = std::thread::scope(|s| {
+        s.spawn(|| {
+            let _held = db.lock();
+            std::panic::resume_unwind(Box::new("poison the lock"));
+        })
+        .join()
+    });
+    assert!(db.is_poisoned());
+    let fake = Fake::new(vec![modified(basic_feed(Some("Team")), None)]);
+    add_ics(&db, &fake, SECRET_URL, now()).await?;
+    assert_eq!(list(&db)?.len(), 1);
     Ok(())
 }

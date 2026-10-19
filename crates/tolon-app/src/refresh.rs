@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tolon_store::Calendar;
 
-use crate::commands::{sync_and_notify, AppState};
+use crate::commands::{state, sync_and_notify};
 use crate::pipeline;
 
 /// Time between two syncs of one calendar (AC1.4).
@@ -60,11 +60,7 @@ pub async fn run(app: AppHandle) {
     loop {
         tokio::time::sleep(TICK).await;
         let now = Utc::now();
-        let Some(state) = app.try_state::<AppState>() else {
-            tracing::warn!("refresh skipped: app state is not ready");
-            continue;
-        };
-        let calendars = match pipeline::calendars(&state.db) {
+        let calendars = match state(&app).and_then(|s| pipeline::calendars(&s.db)) {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(error = %e, "refresh could not list calendars");

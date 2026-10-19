@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use anyhow::{anyhow, Context};
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
@@ -16,6 +15,8 @@ use tolon_core::{
 };
 use tolon_store::{Calendar, FeedEvent, Store};
 use tolon_sync::{normalize_url, redact_url, FetchError, FetchOutcome, IcsFetcher};
+
+use crate::errors::{fetch_code, AppError, SyncErrorDto};
 
 /// The store behind a mutex. A guard is never held across an await.
 pub type Db = Mutex<Store>;
@@ -34,7 +35,8 @@ pub struct CalendarDto {
     pub enabled: bool,
     pub url: Option<String>,
     pub last_sync_at: Option<String>,
-    pub last_error: Option<String>,
+    /// `{ kind, status? }`, for example `{ "kind": "http", "status": 404 }`; the UI localises it.
+    pub last_error: Option<SyncErrorDto>,
 }
 
 impl From<Calendar> for CalendarDto {
@@ -46,7 +48,7 @@ impl From<Calendar> for CalendarDto {
             enabled: c.enabled,
             url: c.url,
             last_sync_at: c.last_sync_at,
-            last_error: c.last_error,
+            last_error: c.last_error.as_deref().map(SyncErrorDto::from_code),
         }
     }
 }
@@ -104,7 +106,10 @@ pub async fn add_ics(
     raw_url: &str,
     now: DateTime<Utc>,
 ) -> anyhow::Result<CalendarDto> {
-    let url = normalize_url(raw_url).map_err(|e| anyhow!(add_error_text(&e)))?;
+    let url = normalize_url(raw_url).map_err(|e| match e {
+        FetchError::UnsupportedScheme => AppError::UNSUPPORTED_SCHEME,
+        _ => AppError::INVALID_URL,
+    })?;
     let result = fetcher.fetch(&url, None).await;
     // The repo cannot rename a calendar, and event ids embed the calendar id, so the name is
     // read from a first parse and the calendar is inserted afterwards; `apply` parses again with the real id.
@@ -125,7 +130,7 @@ pub async fn add_ics(
     let fresh = lock(db)
         .calendars()
         .get(&cal.id)?
-        .ok_or_else(|| anyhow!("Tolon could not find that calendar."))?;
+        .ok_or(AppError::NOT_FOUND)?;
     Ok(fresh.into())
 }
 
@@ -136,14 +141,8 @@ pub async fn sync_one(
     id: &str,
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
-    let cal = lock(db)
-        .calendars()
-        .get(id)?
-        .ok_or_else(|| anyhow!("Tolon could not find that calendar."))?;
-    let url = cal
-        .url
-        .as_deref()
-        .ok_or_else(|| anyhow!("This calendar has no link to refresh."))?;
+    let cal = lock(db).calendars().get(id)?.ok_or(AppError::NOT_FOUND)?;
+    let url = cal.url.as_deref().ok_or(AppError::NO_URL)?;
     let result = fetcher.fetch(url, cal.etag.as_deref()).await;
     apply(db, id, result, now)
 }
@@ -181,10 +180,12 @@ fn apply(
             let feed = feed_events(std::mem::take(&mut parsed.events))?;
             store.events().replace_for_calendar(id, &feed, &at)?;
             store.calendars().record_success(id, etag.as_deref(), &at)?;
-            if let Some(summary) = parsed.skipped_summary() {
+            // S2.3: the log records the skipped count as a code ("skipped:1"), not a sentence.
+            if parsed.skipped_components > 0 {
+                let detail = format!("skipped:{}", parsed.skipped_components);
                 store
                     .sync_log()
-                    .append(Some(id), &at, "ok", Some(&summary))?;
+                    .append(Some(id), &at, "ok", Some(&detail))?;
             }
         }
         // A 304 is a healthy answer, so it clears a stale error (record_success, not
@@ -195,13 +196,13 @@ fn apply(
                 .record_success(id, cal.etag.as_deref(), &at)?;
         }
         Err(e) => {
-            let text = error_text(&e);
-            store.calendars().record_failure(id, &text)?;
+            let code = fetch_code(&e);
+            store.calendars().record_failure(id, &code)?;
             store
                 .sync_log()
-                .append(Some(id), &at, "error", Some(&text))?;
+                .append(Some(id), &at, "error", Some(&code))?;
             let host = cal.url.as_deref().map(redact_url);
-            tracing::warn!(calendar = %id, host = host.as_deref(), error = %text, "calendar sync failed");
+            tracing::warn!(calendar = %id, host = host.as_deref(), code = %code, "calendar sync failed");
         }
     }
     Ok(())
@@ -224,31 +225,14 @@ fn feed_events(events: Vec<Event>) -> anyhow::Result<Vec<FeedEvent>> {
         .map(|e| {
             Ok(FeedEvent {
                 uid: e.uid.clone(),
-                payload: serde_json::to_string(e)
-                    .context("Tolon could not save an event from that calendar.")?,
+                // Only the error category is logged: its text can quote the event.
+                payload: serde_json::to_string(e).map_err(|err| {
+                    tracing::warn!(category = ?err.classify(), "event could not be encoded");
+                    AppError::INTERNAL
+                })?,
             })
         })
         .collect()
-}
-
-/// "Sync failed: 404" for an HTTP answer, the error kind's own text otherwise (S1.3).
-fn error_text(e: &FetchError) -> String {
-    match e.status() {
-        Some(status) => format!("Sync failed: {status}"),
-        None => e.to_string(),
-    }
-}
-
-fn add_error_text(e: &FetchError) -> String {
-    match e {
-        FetchError::UnsupportedScheme => {
-            "Tolon can only add calendar links that start with https:// or webcal://.".to_owned()
-        }
-        FetchError::InvalidUrl => {
-            "That does not look like a calendar link. Check it and try again.".to_owned()
-        }
-        other => other.to_string(),
-    }
 }
 
 /// Host of an already normalised https URL, through `redact_url` so nothing else leaks into a name.
@@ -272,7 +256,7 @@ pub fn today_window(
     let day = now.with_timezone(&local).date_naive();
     let next = day
         .checked_add_signed(Duration::days(1))
-        .ok_or_else(|| anyhow!("Tolon could not work out today's date."))?;
+        .ok_or(AppError::INTERNAL)?;
     Ok((midnight(day, local)?, midnight(next, local)?))
 }
 
@@ -280,7 +264,7 @@ fn midnight(day: NaiveDate, local: Tz) -> anyhow::Result<DateTime<Utc>> {
     day.and_hms_opt(0, 0, 0)
         .and_then(|t| wall_clock(t, local))
         .map(|t| t.with_timezone(&Utc))
-        .ok_or_else(|| anyhow!("Tolon could not work out today's date."))
+        .ok_or_else(|| AppError::INTERNAL.into())
 }
 
 fn flag(store: &Store, key: &str, default: bool) -> anyhow::Result<bool> {
@@ -309,12 +293,12 @@ pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occur
         (expand_options(&store)?, store.events().list_enabled()?)
     };
     let mut events = Vec::new();
-    for stored in stored {
-        match serde_json::from_str::<Event>(&stored.payload) {
+    for item in stored {
+        match serde_json::from_str::<Event>(&item.payload) {
             Ok(e) => events.push(e),
             // Titles are personal data and the error text can quote the payload: log the id and category only.
             Err(e) => {
-                tracing::warn!(event = %stored.id, category = ?e.classify(), "stored event could not be read")
+                tracing::warn!(event = %item.id, category = ?e.classify(), "stored event could not be read")
             }
         }
     }
