@@ -328,7 +328,9 @@ fn build(props: &[Property], calendar: &CalendarId) -> Option<Raw> {
             attendees_count: u32::try_from(attendees.len()).unwrap_or(u32::MAX),
             location: text("LOCATION"),
             description: text("DESCRIPTION"),
-            conference: text("X-GOOGLE-CONFERENCE").and_then(http_url),
+            conference: text("X-GOOGLE-CONFERENCE")
+                .or_else(|| text("X-MICROSOFT-SKYPETEAMSMEETINGURL"))
+                .and_then(http_url),
             html_link: text("URL").and_then(http_url),
             updated,
         },

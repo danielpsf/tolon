@@ -5,8 +5,9 @@ use chrono_tz::Tz;
 use rrule::{RRule, RRuleSet, Tz as RTz, Unvalidated};
 use std::collections::HashSet;
 
+use crate::join::detect_join;
 use crate::model::{
-    wall_clock, Event, EventStatus, EventTime, JoinTarget, Occurrence, OccurrenceKey, Response,
+    wall_clock, Event, EventStatus, EventTime, Occurrence, OccurrenceKey, Response,
 };
 
 /// How far ahead `expand` looks (AC2.2).
@@ -255,11 +256,7 @@ fn expand_event(
                 end,
                 title: src.title.clone(),
                 all_day: src.all_day,
-                join: match (&src.conference, &src.html_link) {
-                    (Some(link), _) => JoinTarget::Link(link.clone()),
-                    (None, Some(page)) => JoinTarget::EventPage(page.clone()),
-                    (None, None) => JoinTarget::None,
-                },
+                join: detect_join(src),
                 people: src.attendees_count,
             });
         };
