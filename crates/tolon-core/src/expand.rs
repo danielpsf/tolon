@@ -153,33 +153,28 @@ fn skip_ahead(rule: &str, start: DateTime<Tz>, horizon: DateTime<Utc>) -> Option
     let days = (target.date() - origin.date()).num_days();
     let months = i64::from(target.year() - origin.year()) * 12 + i64::from(target.month())
         - i64::from(origin.month());
-    // Whole periods to move, leaving two periods of slack before the horizon.
-    let (periods, shift): (i64, Box<dyn Fn(i64) -> Option<NaiveDateTime>>) =
-        match freq.to_ascii_uppercase().as_str() {
-            "DAILY" => (
-                days / interval - 2,
-                Box::new(move |k| origin.checked_add_signed(Duration::days(k * interval))),
-            ),
-            "WEEKLY" => (
-                days / (7 * interval) - 2,
-                Box::new(move |k| origin.checked_add_signed(Duration::days(k * interval * 7))),
-            ),
-            "MONTHLY" => (
-                months / interval - 2,
-                Box::new(move |k| {
-                    origin.checked_add_months(Months::new(u32::try_from(k * interval).ok()?))
-                }),
-            ),
-            "YEARLY" => (
-                months / (12 * interval) - 2,
-                Box::new(move |k| {
-                    origin.checked_add_months(Months::new(u32::try_from(k * interval * 12).ok()?))
-                }),
-            ),
-            _ => return None,
-        };
-    // A month or year shift can land on a day that does not exist (31st, 29 Feb); step back to one that does.
+    // Whole periods to move, leaving two periods of slack before the horizon. Event.rrule is a
+    // raw string from the store, so INTERVAL can be anything i64 holds: all arithmetic is checked
+    // and an overflow means no skip.
     let by_month = matches!(freq.to_ascii_uppercase().as_str(), "MONTHLY" | "YEARLY");
+    let (unit, available) = match freq.to_ascii_uppercase().as_str() {
+        "DAILY" => (1, days),
+        "WEEKLY" => (7, days),
+        "MONTHLY" => (1, months),
+        "YEARLY" => (12, months),
+        _ => return None,
+    };
+    let step = interval.checked_mul(unit)?; // days or months per period
+    let periods = available / step - 2;
+    let shift = |k: i64| -> Option<NaiveDateTime> {
+        let n = k.checked_mul(step)?;
+        if by_month {
+            origin.checked_add_months(Months::new(u32::try_from(n).ok()?))
+        } else {
+            origin.checked_add_signed(Duration::try_days(n)?)
+        }
+    };
+    // A month or year shift can land on a day that does not exist (31st, 29 Feb); step back to one that does.
     (1..=periods.min(12)).find_map(|back| {
         let moved = shift(periods - back + 1)?;
         let same_day = (!by_month || moved.day() == origin.day()) && moved.time() == origin.time();

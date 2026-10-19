@@ -559,6 +559,30 @@ fn ac2_5_parsing_never_panics_and_skips_bad_components() -> TestResult {
 }
 
 #[test]
+fn ac2_5_huge_interval_never_panics() -> TestResult {
+    // Event.rrule is a raw string from the store; parse_ics would reject these, expand must still hold.
+    let base = parse(&wrap(
+        "BEGIN:VEVENT\nUID:h@example.com\nSUMMARY:h\nDTSTART;TZID=Europe/Berlin:20000103T090000\nDTEND;TZID=Europe/Berlin:20000103T100000\nEND:VEVENT\n",
+    ));
+    let template = base.first().ok_or("event")?;
+    for freq in ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] {
+        for interval in [
+            "9223372036854775807",
+            "4611686018427387904",
+            "3074457345618258603",
+            "65536",
+            "0",
+            "-1",
+        ] {
+            let mut e = template.clone();
+            e.rrule = Some(format!("FREQ={freq};INTERVAL={interval}"));
+            let _ = expand(&[e], now()?, LOCAL, &ExpandOptions::default());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn ac2_1_crlf_and_lf_feeds_parse_the_same() -> TestResult {
     let lf = fixture_text("google-basic.ics")?;
     let crlf = lf.replace('\n', "\r\n");
