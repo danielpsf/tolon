@@ -35,3 +35,9 @@ None in beta. If a crash reporter is ever added it will be opt-in and documented
 
 ## 2026-10-19 WebDriver e2e is non-blocking for now
 The e2e jobs (Linux, Windows) run with `continue-on-error` so `main` is not red while Windows WebDriver is unreliable on hosted runners (L-027, actions/runner-images#14738). The `cargo xtask ci` gate stays blocking on all three OS. Revert to blocking once L-027 shows Windows e2e green on several runs in a row.
+
+## 2026-10-19 reqwest uses the OS trust store
+`reqwest` runs with `rustls-tls-native-roots`, not `rustls-tls`, because the bundled `webpki-roots` is CDLA-Permissive-2.0, which `deny.toml` does not allow. Side effect: corporate TLS-inspection CAs installed on the machine are trusted, which suits a desktop app.
+
+## 2026-10-19 What counts as a calendar response
+A feed is accepted when the response is `text/calendar`, or when the body starts with `BEGIN:VCALENDAR` whatever the content type, because several hosts serve `.ics` as `text/plain`. Redirects are followed only to `https` and for at most 10 requests; the 30 s timeout covers the body too. `redact_url()` keeps scheme and host only, dropping the port.
