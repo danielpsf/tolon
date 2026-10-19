@@ -80,6 +80,13 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: cargo install tauri-driver --locked
+      - name: Install msedgedriver matching WebView2 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool --rev 8c4b34f51b45f5cf08013366d703de464ab871d1 --locked
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
       - run: npm --prefix ui ci
       - name: Build debug app
         run: npm --prefix ui run tauri build -- --debug --no-bundle
