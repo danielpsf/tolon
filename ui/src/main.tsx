@@ -9,9 +9,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { initCopy } from "./copy";
+import { followSystemTheme } from "./theme";
 
 // `?lang=pt-PT` overrides the system language (dev, tests, and later the language setting).
 initCopy(new URLSearchParams(window.location.search).get("lang"));
+followSystemTheme();
 
 const root = document.getElementById("root");
 if (root) {
