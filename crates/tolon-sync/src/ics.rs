@@ -22,8 +22,8 @@ pub fn redact_url(url: &str) -> String {
 /// Typed fetch failure. `Display` never contains the URL, so it is safe for the UI and logs.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum FetchError {
-    #[error("unsupported URL scheme: {0}")]
-    UnsupportedScheme(String),
+    #[error("unsupported URL scheme")]
+    UnsupportedScheme,
     #[error("invalid URL")]
     InvalidUrl,
     /// The UI shows "Sync failed: {status}".
@@ -58,6 +58,7 @@ pub enum FetchOutcome {
 }
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct FetchConfig {
     pub timeout: Duration,
     pub max_body_bytes: usize,
@@ -90,8 +91,7 @@ impl IcsFetcher {
         let allow_http = cfg.allow_http;
         // Redirects may only land on https (plain http only in tests), so a feed cannot downgrade.
         let policy = redirect::Policy::custom(move |a| {
-            let ok = a.url().scheme() == "https" || (allow_http && a.url().scheme() == "http");
-            if ok && a.previous().len() < MAX_REDIRECTS {
+            if follow_redirect(a.url().scheme(), a.previous().len(), allow_http) {
                 a.follow()
             } else {
                 a.stop()
@@ -120,7 +120,7 @@ impl IcsFetcher {
     }
 
     async fn fetch_inner(&self, url: &str, etag: Option<&str>) -> Result<FetchOutcome, FetchError> {
-        let url = normalize_url(url, self.cfg.allow_http)?;
+        let url = parse_url(url, self.cfg.allow_http)?;
         let mut req = self.client.get(url);
         if let Some(etag) = etag {
             req = req.header(header::IF_NONE_MATCH, etag);
@@ -166,6 +166,17 @@ impl IcsFetcher {
     }
 }
 
+/// Redirect target must be https (http only when `allow_http`) and the chain shorter than `MAX_REDIRECTS`.
+fn follow_redirect(target_scheme: &str, hops: usize, allow_http: bool) -> bool {
+    (target_scheme == "https" || (allow_http && target_scheme == "http")) && hops < MAX_REDIRECTS
+}
+
+/// Canonical https form of a subscription URL: `webcal://` becomes `https://`, other schemes are rejected.
+/// tolon-app stores this form (S1.2).
+pub fn normalize_url(raw: &str) -> Result<String, FetchError> {
+    parse_url(raw, false).map(String::from)
+}
+
 fn map_err(e: reqwest::Error) -> FetchError {
     if e.is_timeout() {
         FetchError::Timeout
@@ -177,7 +188,7 @@ fn map_err(e: reqwest::Error) -> FetchError {
 }
 
 /// `webcal://` becomes `https://`; only https is accepted (http when `allow_http`, tests only).
-fn normalize_url(raw: &str, allow_http: bool) -> Result<Url, FetchError> {
+fn parse_url(raw: &str, allow_http: bool) -> Result<Url, FetchError> {
     let raw = raw.trim();
     let rewritten;
     let raw = match raw.get(..9) {
@@ -191,7 +202,7 @@ fn normalize_url(raw: &str, allow_http: bool) -> Result<Url, FetchError> {
     match url.scheme() {
         "https" => Ok(url),
         "http" if allow_http => Ok(url),
-        other => Err(FetchError::UnsupportedScheme(other.to_owned())),
+        _ => Err(FetchError::UnsupportedScheme),
     }
 }
 
@@ -258,28 +269,61 @@ mod tests {
 
     #[test]
     fn s1_2_webcal_rewritten_to_https() {
-        let u = normalize_url("webcal://example.com/team.ics", false).unwrap();
+        let u = parse_url("webcal://example.com/team.ics", false).unwrap();
         assert_eq!(u.as_str(), "https://example.com/team.ics");
-        let u = normalize_url("WEBCAL://example.com/team.ics", false).unwrap();
+        let u = parse_url("WEBCAL://example.com/team.ics", false).unwrap();
         assert_eq!(u.as_str(), "https://example.com/team.ics");
     }
 
     #[test]
-    fn s1_2_other_schemes_rejected() {
-        for (raw, scheme) in [
-            ("http://example.com/a.ics", "http"),
-            ("ftp://example.com/a.ics", "ftp"),
-            ("file:///etc/passwd", "file"),
-        ] {
-            assert_eq!(
-                normalize_url(raw, false),
-                Err(FetchError::UnsupportedScheme(scheme.into()))
-            );
-        }
+    fn s1_2_normalized_url_is_https() {
         assert_eq!(
-            normalize_url("not a url", false),
-            Err(FetchError::InvalidUrl)
+            normalize_url("webcal://example.com/team.ics").unwrap(),
+            "https://example.com/team.ics"
         );
+        assert_eq!(
+            normalize_url("http://example.com/a.ics"),
+            Err(FetchError::UnsupportedScheme)
+        );
+        let msg = format!("{}", normalize_url("secret-token:abc").unwrap_err());
+        assert!(!msg.contains("secret-token"));
+    }
+
+    #[test]
+    fn s1_2_redirect_downgrade_refused() {
+        // Production config (allow_http false): https may follow, http may not.
+        assert!(follow_redirect("https", 0, false));
+        assert!(!follow_redirect("http", 0, false));
+        assert!(!follow_redirect("ftp", 0, true));
+    }
+
+    #[tokio::test]
+    async fn s1_2_redirect_chain_capped_at_ten_hops() {
+        let (base, seen) = serve(
+            (0..12)
+                .map(|_| http("302 Found", "Location: /next\r\n", ""))
+                .collect(),
+        )
+        .await;
+        let err = quick()
+            .fetch(&format!("{base}/a.ics"), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err, FetchError::Status(302));
+        assert_eq!(seen.lock().unwrap().len(), MAX_REDIRECTS); // reqwest counts the first URL in previous()
+    }
+
+    #[test]
+    fn s1_2_other_schemes_rejected() {
+        for raw in [
+            "http://example.com/a.ics",
+            "ftp://example.com/a.ics",
+            "file:///etc/passwd",
+            "secret-token:abc",
+        ] {
+            assert_eq!(parse_url(raw, false), Err(FetchError::UnsupportedScheme));
+        }
+        assert_eq!(parse_url("not a url", false), Err(FetchError::InvalidUrl));
     }
 
     #[test]
