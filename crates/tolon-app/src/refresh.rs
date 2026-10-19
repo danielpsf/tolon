@@ -60,7 +60,11 @@ pub async fn run(app: AppHandle) {
     loop {
         tokio::time::sleep(TICK).await;
         let now = Utc::now();
-        let calendars = match pipeline::calendars(&app.state::<AppState>().db) {
+        let Some(state) = app.try_state::<AppState>() else {
+            tracing::warn!("refresh skipped: app state is not ready");
+            continue;
+        };
+        let calendars = match pipeline::calendars(&state.db) {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(error = %e, "refresh could not list calendars");

@@ -31,7 +31,9 @@ pub fn notify(app: &AppHandle) {
 /// One calendar, or every enabled one when `id` is `None`; the UI is told afterwards even on failure
 /// because `last_error` may have changed.
 pub async fn sync_and_notify(app: &AppHandle, id: Option<&str>) -> anyhow::Result<()> {
-    let state = app.state::<AppState>();
+    let state = app
+        .try_state::<AppState>()
+        .ok_or_else(|| anyhow::anyhow!("Tolon is not ready yet."))?;
     let now = Utc::now();
     let result = match id {
         Some(id) => pipeline::sync_one(&state.db, &state.fetcher, id, now).await,
