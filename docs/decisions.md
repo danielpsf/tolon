@@ -73,3 +73,12 @@ Every piece of UI copy is translated, starting with en-US, en-GB, pt-BR and pt-P
 
 ## 2026-10-20 Scenario copy lives in the UI
 `docs/plan.md` quotes English wording in S1.1 ("Synced just now"), S1.3 ("Sync failed: 404"), S2.3 ("1 component skipped") and AC1.2. Since Tolon is translated, the core and the app store and send codes (`http:404`, `timeout`, `connect`, `not_calendar`, `too_large`, `network`, `skipped:N`; command errors `{code}`), and the UI renders the sentence per locale. Those scenarios are proven in two halves: a Rust test for the code, and a UI test that maps the code to the quoted en-US sentence. Other app decisions from L-029: a 304 clears a stale `last_error`; `sync_now(id)` syncs a disabled calendar; ignore-rule settings are `ignore_all_day`, `ignore_declined`, `ignore_cancelled` (JSON bools, default true); the webview may only `listen`/`unlisten` to events (capability `default.json`).
+
+## 2026-10-20 Alarm behaviour (L-009)
+- `Alarm` carries the meeting `start` as well as `at`, so expiry (start + 10 min) and the countdown work without the occurrence. It is persisted (store V2 migration, L-035) because `plan` compares it to spot a moved meeting.
+- "I am already there" ends in Joined, not Dismissed: the person is in the meeting, so the "again at the start" alarm stays silent. A plain Dismiss of the lead alarm still lets the start alarm fire. AC4.4's "dismisses" is read as "closes".
+- One interrupt per meeting: the start alarm expires silently while the lead alarm of the same meeting is firing or snoozed (and the mirror case).
+- Pause and quiet hours hold firing back only; an alarm due meanwhile fires afterwards if start + 10 min is still open, else expires. Expiry beats snooze.
+- `plan` keeps Dismissed and Joined alarms even while their meeting is filtered out, so toggling a rule cannot revive them; an Expired alarm re-arms when its meeting moved later and the window is open.
+- "Events without other attendees" means no ATTENDEE line at all (`people == 0`): Outlook lists the organiser outside ATTENDEE, so one attendee is a real two-person meeting.
+- Default lead time 2 minutes (from S3.1), clamped to 1 to 60; to be confirmed against mockup 04.
