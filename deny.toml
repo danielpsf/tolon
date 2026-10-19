@@ -11,6 +11,9 @@ targets = [
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "unmaintained, not a vulnerability; transitive via Tauri 2's gtk-rs 0.18 Linux stack; drop when Tauri moves to gtk-rs >= 0.19 or gtk4" }
+]
 
 [licenses]
 version = 2
