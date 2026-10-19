@@ -55,6 +55,34 @@ fn s3_1_lead_time() -> TestResult {
 }
 
 #[test]
+fn s3_1_a_15_second_tick_fires_within_15_seconds_of_the_lead_time() -> TestResult {
+    let meeting = occ("review", at(14, 0)?, 3);
+    // The loop's phase against the wall clock is arbitrary: try every offset in the 15 s cycle.
+    for offset in 0..15 {
+        let mut alarms = plan(
+            std::slice::from_ref(&meeting),
+            &settings(2, false),
+            &[],
+            at(13, 50)?,
+        );
+        let mut fired_at = None;
+        let mut now = at(13, 50)? + Duration::seconds(offset);
+        while now < at(14, 5)? && fired_at.is_none() {
+            if step(&mut alarms, now).iter().any(|t| t.fires()) {
+                fired_at = Some(now);
+            }
+            now += Duration::seconds(15);
+        }
+        let late = fired_at.ok_or("never fired")? - at(13, 58)?;
+        assert!(
+            (Duration::zero()..=Duration::seconds(15)).contains(&late),
+            "offset {offset}: fired {late} after 13:58:00"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn ac3_1_again_at_the_start_adds_a_second_alarm() -> TestResult {
     let meeting = occ("review", at(14, 0)?, 3);
     let mut alarms = plan(&[meeting], &settings(5, true), &[], at(9, 0)?);
