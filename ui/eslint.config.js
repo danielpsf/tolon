@@ -10,4 +10,6 @@ export default tseslint.config(
   reactHooks.configs.flat.recommended,
   { files: ["src/**/*.{ts,tsx}"], languageOptions: { globals: globals.browser } },
   { files: ["*.{ts,js}", "scripts/*.mjs"], languageOptions: { globals: globals.node } },
+  // The e2e script runs in Node but passes functions to the page via executeAsyncScript.
+  { files: ["e2e/*.mjs"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },
 );
