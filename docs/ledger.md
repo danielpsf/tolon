@@ -9,7 +9,7 @@ Conventions: ids are `L-NNN` in creation order. The orchestrator creates rows; t
 | L-001 | M0 | Create the Cargo workspace and crate skeletons per `docs/architecture.md` | core | done | d4e85cf | reviewer pass; bootstrap gate (fmt, clippy, test) green on macOS. Gate run by hand (fmt, clippy, test) green. No LICENSE file in repo yet; manifests say `MIT OR Apache-2.0`, confirm and add it. Toolchain pinned to 1.99. |
 | L-002 | M0 | Tauri 2 app boots on macOS, Windows, Linux with an empty Swiss Moss page | ui | todo | | |
 | L-003 | M0 | Vendor Swiss Moss into `ui/` as an npm dependency and bundle Inter + Inter Tight | ui | todo | | |
-| L-004 | M0 | SQLite store with migrations V1, `settings` repo, startup migration check | core | todo | | |
+| L-004 | M0 | SQLite store with migrations V1, `settings` repo, startup migration check | core | review | 6f1a892 | Bootstrap gate by hand (fmt, clippy, test --workspace) green. Follow-ups: wire StoreError::Migration to the startup dialog in tolon-app; run cargo deny once deny.toml exists. |
 | L-005 | M0 | `xtask ci`, `layers`, `check-scenario-ids`; `.github/workflows/ci.yml` green on 3 OS | release | todo | | |
 | L-023 | M0 | WebDriver smoke suite (`npm --prefix ui run e2e`): the app boots and shows the Swiss Moss paper background; the `e2e` CI job is green on Linux and Windows | qa | todo | | |
 | L-024 | M0 | Close M0: `cargo xtask ci` green on macOS, Windows, Linux in CI on `main`; empty Swiss Moss paper window opens | orchestrator | todo | | |
