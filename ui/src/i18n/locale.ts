@@ -1,14 +1,30 @@
+import { ar } from "./ar";
+import { de } from "./de";
 import { enGB } from "./en-GB";
 import { enUS, type Messages } from "./en-US";
+import { es } from "./es";
+import { hi } from "./hi";
+import { ja } from "./ja";
 import { ptBR } from "./pt-BR";
 import { ptPT } from "./pt-PT";
+import { tr } from "./tr";
+import { zhCN } from "./zh-CN";
 
 export const FALLBACK_LOCALE = "en-US";
 
-export const catalogues = { "en-US": enUS, "en-GB": enGB, "pt-BR": ptBR, "pt-PT": ptPT } as const satisfies Record<
-  string,
-  Messages
->;
+export const catalogues = {
+  "en-US": enUS,
+  "en-GB": enGB,
+  "pt-BR": ptBR,
+  "pt-PT": ptPT,
+  de,
+  es,
+  ar,
+  tr,
+  hi,
+  "zh-CN": zhCN,
+  ja,
+} as const satisfies Record<string, Messages>;
 
 export type Locale = keyof typeof catalogues;
 
@@ -17,6 +33,16 @@ export const LOCALES = Object.keys(catalogues) as Locale[];
 // docs/decisions.md: pt-AO falls to pt-PT, en-IE to en-GB. Portuguese outside Brazil follows pt-PT.
 const PT_PT_REGIONS = new Set(["PT", "AO", "MZ", "CV", "GW", "ST", "TL", "MO"]);
 const EN_US_REGIONS = new Set(["US", "CA", "PH"]);
+// docs/decisions.md, "Locale list for beta 1": one catalogue per language, any region. Every zh-* is Simplified for now.
+const BY_LANGUAGE = new Map<string, Locale>([
+  ["de", "de"],
+  ["es", "es"],
+  ["ar", "ar"],
+  ["tr", "tr"],
+  ["hi", "hi"],
+  ["ja", "ja"],
+  ["zh", "zh-CN"],
+]);
 
 /** One BCP 47 tag to a shipped locale, or null when the language is not shipped. */
 function matchTag(tag: string): Locale | null {
@@ -30,7 +56,7 @@ function matchTag(tag: string): Locale | null {
   if (language === "en") return !region || EN_US_REGIONS.has(region) ? "en-US" : "en-GB";
   // Bare "pt" and BR stay pt-BR (the user is Brazilian).
   if (language === "pt") return region && PT_PT_REGIONS.has(region) ? "pt-PT" : "pt-BR";
-  return null;
+  return BY_LANGUAGE.get(language) ?? null;
 }
 
 /**

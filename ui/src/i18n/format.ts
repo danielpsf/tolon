@@ -6,9 +6,12 @@ type Instant = Date | number;
 
 const MINUTE = 60_000;
 
-/** Wall-clock time in the locale's own style: 2:05 PM in en-US, 09:05 and 14:05 elsewhere. */
+/**
+ * Wall-clock time in the locale's own style: 2:05 PM in en-US, 09:05 and 14:05 in 24-hour locales.
+ * Every 12-hour locale (en-US, ar, hi) drops the leading zero as en-US does. Digits follow Intl.
+ */
 export function formatTime(locale: Locale, at: Instant): string {
-  const hour = locale === "en-US" ? "numeric" : "2-digit";
+  const hour = new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hour12 ? "numeric" : "2-digit";
   return new Intl.DateTimeFormat(locale, { hour, minute: "2-digit" }).format(at);
 }
 

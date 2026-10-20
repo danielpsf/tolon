@@ -25,9 +25,22 @@ function leaves(node: object, prefix = ""): [string, string][] {
 
 const sourceLeaves = leaves(enUS);
 
+/** The string leaves of a catalogue, with their dotted path. */
+function strings(t: object): [string, string][] {
+  return leaves(t)
+    .filter(([, kind]) => kind === "string")
+    .map(([path]) => [
+      path,
+      path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], t) as string,
+    ]);
+}
+
+/** Arabic-Indic digits to ASCII: older ICU writes ar numbers in Arabic-Indic, CLDR 46 and later in Latin digits. */
+const latn = (text: string) => text.replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660));
+
 describe("catalogues", () => {
-  it("ships en-US, en-GB, pt-BR and pt-PT", () => {
-    expect(LOCALES).toEqual(["en-US", "en-GB", "pt-BR", "pt-PT"]);
+  it("ships en-US, en-GB, pt-BR, pt-PT and the beta 1 list (de, es, ar, tr, hi, zh-CN, ja)", () => {
+    expect(LOCALES).toEqual(["en-US", "en-GB", "pt-BR", "pt-PT", "de", "es", "ar", "tr", "hi", "zh-CN", "ja"]);
   });
 
   it.each(LOCALES)("%s has exactly the en-US key set, with the same string or function shape", (locale) => {
@@ -67,6 +80,42 @@ describe("catalogues", () => {
       expect(text.toLowerCase()).not.toContain("oops");
       expect(text).not.toMatch(/\bthe app\b/i);
     }
+  });
+
+  it.each(LOCALES)("%s never translates the name Tolon", (locale) => {
+    const t = catalogues[locale];
+    expect(t.app.windowTitle).toBe("Tolon");
+    for (const text of [t.calendars.subtitle, t.calendars.removeConsequence, t.errors.command.internal]) {
+      expect(text).toContain("Tolon");
+    }
+  });
+
+  it.each(["zh-CN", "ja"] as const)("%s uses full-width punctuation", (locale) => {
+    for (const [path, text] of strings(catalogues[locale])) {
+      if (path === "calendars.urlPlaceholder") continue;
+      expect(text, path).not.toMatch(/[,.:;?]/);
+    }
+  });
+
+  it("uses the Arabic comma and question mark in ar", () => {
+    const t = catalogues.ar;
+    for (const [path, text] of strings(t)) {
+      if (path === "calendars.urlPlaceholder") continue;
+      expect(text, path).not.toMatch(/[,?]/);
+    }
+    expect(t.calendars.removeTitle("Work")).toMatch(/؟$/);
+    expect(t.errors.sync.httpHint(401, "x")).toContain("، ");
+  });
+
+  it("keeps a Latin name in order inside an Arabic sentence", () => {
+    expect(catalogues.ar.calendars.removeTitle("Team (EU)")).toBe("إزالة \u2068Team (EU)\u2069؟");
+  });
+
+  it("addresses the person as du in de and as tú in es", () => {
+    expect(catalogues.de.calendars.subtitle).toContain("deine");
+    expect(catalogues.de.errors.command.db_error).toContain("Versuch es");
+    expect(catalogues.es.calendars.subtitle).toContain("tus");
+    expect(catalogues.es.errors.command.db_error).toContain("Inténtalo");
   });
 
   it("keeps pt-BR and pt-PT as separate catalogues", () => {
@@ -114,19 +163,45 @@ describe("resolveLocale", () => {
     [["en-SG"], undefined, "en-GB"],
     [["en-HK"], undefined, "en-GB"],
     [["en-001"], undefined, "en-GB"],
-    [["de-DE"], undefined, "en-US"],
-    [["es-ES", "fr-FR"], undefined, "en-US"],
+    // The beta 1 list: one catalogue per language, any region; every Chinese tag reads Simplified.
+    [["de-DE"], undefined, "de"],
+    [["de-AT"], undefined, "de"],
+    [["de-CH"], undefined, "de"],
+    [["de"], undefined, "de"],
+    [["es-ES"], undefined, "es"],
+    [["es-MX"], undefined, "es"],
+    [["es-419"], undefined, "es"],
+    [["es-ES", "fr-FR"], undefined, "es"],
+    [["zh-CN"], undefined, "zh-CN"],
+    [["zh-TW"], undefined, "zh-CN"],
+    [["zh-HK"], undefined, "zh-CN"],
+    [["zh-Hant-TW"], undefined, "zh-CN"],
+    [["zh"], undefined, "zh-CN"],
+    [["ar-EG"], undefined, "ar"],
+    [["ar-SA"], undefined, "ar"],
+    [["ar"], undefined, "ar"],
+    [["hi-IN"], undefined, "hi"],
+    [["hi"], undefined, "hi"],
+    [["ja-JP"], undefined, "ja"],
+    [["ja"], undefined, "ja"],
+    [["tr-TR"], undefined, "tr"],
+    [["tr-CY"], undefined, "tr"],
+    [["fr-FR"], undefined, "en-US"],
+    [["ru-RU", "ko-KR"], undefined, "en-US"],
     [[], undefined, "en-US"],
     [["not a tag"], undefined, "en-US"],
     // Preference order: an unshipped language is skipped, the next shipped one wins.
-    [["de-DE", "pt-PT"], undefined, "pt-PT"],
+    [["fr-FR", "pt-PT"], undefined, "pt-PT"],
+    [["fr-FR", "ja-JP", "de-DE"], undefined, "ja"],
     [["pt-PT", "en-GB"], undefined, "pt-PT"],
     // The override wins, and a bad override falls back to the system list.
     [["pt-BR"], "pt-PT", "pt-PT"],
     [["en-US"], "en-AU", "en-GB"],
     [["pt-BR"], "xx-YY", "pt-BR"],
     [["pt-BR"], "", "pt-BR"],
-    [["de-DE"], null as unknown as undefined, "en-US"],
+    [["fr-FR"], null as unknown as undefined, "en-US"],
+    [["en-US"], "ar-EG", "ar"],
+    [["ar-EG"], "de-AT", "de"],
   ];
   it.each(cases)("%j with override %j gives %s", (languages, override, expected) => {
     expect(resolveLocale(languages, override)).toBe(expected);
@@ -139,11 +214,49 @@ describe("plurals", () => {
     "en-GB": ["1 component skipped", "2 components skipped"],
     "pt-BR": ["1 componente ignorado", "2 componentes ignorados"],
     "pt-PT": ["1 componente ignorado", "2 componentes ignorados"],
+    de: ["1 Komponente übersprungen", "2 Komponenten übersprungen"],
+    es: ["1 componente omitido", "2 componentes omitidos"],
+    ar: ["تم تخطي مكوّن واحد", "تم تخطي مكوّنين"],
+    tr: ["1 bileşen atlandı", "2 bileşen atlandı"],
+    hi: ["1 घटक छोड़ा गया", "2 घटक छोड़े गए"],
+    "zh-CN": ["已跳过 1 个组件", "已跳过 2 个组件"],
+    ja: ["1 件のコンポーネントをスキップしました", "2 件のコンポーネントをスキップしました"],
   };
   it.each(LOCALES)("%s renders skipped:1 and skipped:2", (locale) => {
     const c = createCopy(locale);
     expect(c.syncLogDetail("skipped:1")).toBe(expected[locale][0]);
     expect(c.syncLogDetail("skipped:2")).toBe(expected[locale][1]);
+  });
+
+  it("uses all six Arabic plural forms (zero, one, two, few, many, other)", () => {
+    const c = createCopy("ar");
+    const skipped = (n: number) => latn(c.syncLogDetail(`skipped:${n}`) ?? "");
+    expect(skipped(0)).toBe("لم يتم تخطي أي مكوّن");
+    expect(skipped(1)).toBe("تم تخطي مكوّن واحد");
+    expect(skipped(2)).toBe("تم تخطي مكوّنين");
+    expect(skipped(3)).toBe("تم تخطي 3 مكوّنات");
+    expect(skipped(10)).toBe("تم تخطي 10 مكوّنات");
+    expect(skipped(11)).toBe("تم تخطي 11 مكوّنًا");
+    expect(skipped(99)).toBe("تم تخطي 99 مكوّنًا");
+    expect(skipped(100)).toBe("تم تخطي 100 مكوّن");
+    const people = (n: number) => latn(c.t.interrupt.details("R", null, n));
+    expect(people(1)).toBe("R مع شخص واحد.");
+    expect(people(2)).toBe("R مع شخصين.");
+    expect(people(5)).toBe("R مع 5 أشخاص.");
+    expect(people(12)).toBe("R مع 12 شخصًا.");
+    expect(people(100)).toBe("R مع 100 شخص.");
+    expect(latn(c.t.interrupt.snooze(5))).toBe("تأجيل 5 دقائق");
+    expect(c.t.interrupt.snooze(1)).toBe("تأجيل دقيقة واحدة");
+    expect(c.t.interrupt.snooze(2)).toBe("تأجيل دقيقتين");
+  });
+
+  it("follows the Hindi plural rule, where 0 and 1 are both singular", () => {
+    const c = createCopy("hi");
+    expect(c.syncLogDetail("skipped:0")).toBe("0 घटक छोड़ा गया");
+    expect(c.syncLogDetail("skipped:1")).toBe("1 घटक छोड़ा गया");
+    expect(c.syncLogDetail("skipped:5")).toBe("5 घटक छोड़े गए");
+    expect(c.t.interrupt.details("R", "Zoom", 1)).toBe("R, Zoom पर, 1 व्यक्ति के साथ।");
+    expect(c.t.interrupt.details("R", null, 8)).toBe("R, 8 लोगों के साथ।");
   });
 
   it("returns null for details that are not coded copy", () => {
@@ -191,6 +304,23 @@ describe("error codes", () => {
     const c = createCopy("en-US");
     expect(c.syncError({ kind: "http", status: 404 })).toBe("Sync failed: 404");
     expect(c.syncLogDetail("skipped:1")).toBe("1 component skipped");
+  });
+
+  const s13: Record<Locale, string> = {
+    "en-US": "Sync failed: 404",
+    "en-GB": "Sync failed: 404",
+    "pt-BR": "Falha na sincronização: 404",
+    "pt-PT": "A sincronização falhou: 404",
+    de: "Synchronisierung fehlgeschlagen: 404",
+    es: "Falló la sincronización: 404",
+    ar: "فشلت المزامنة: 404",
+    tr: "Eşitleme başarısız: 404",
+    hi: "सिंक विफल: 404",
+    "zh-CN": "同步失败：404",
+    ja: "同期に失敗しました：404",
+  };
+  it.each(LOCALES)("%s pins the S1.3 sentence for http:404", (locale) => {
+    expect(createCopy(locale).syncError({ kind: "http", status: 404 })).toBe(s13[locale]);
   });
 
   it.each(LOCALES)("%s gives http:404 no hint", (locale) => {
@@ -270,6 +400,44 @@ describe("formatting", () => {
     expect(createCopy("pt-BR").startsIn(at(120), now)).toBe("Começa em 2 min");
     expect(createCopy("pt-PT").startsIn(at(120), now)).toBe("Começa dentro de 2 min");
     expect(createCopy("pt-PT").startedAgo(at(-180), now)).toBe("Começou há 3 min");
+  });
+
+  it("formats time in the new locales: 24-hour with two digits, 12-hour without the leading zero", () => {
+    for (const locale of ["de", "es", "tr", "zh-CN", "ja"] as const) {
+      expect(createCopy(locale).formatTime(morning)).toBe("09:05");
+      expect(createCopy(locale).formatTime(afternoon)).toBe("14:05");
+    }
+    // Intl's own digits: Latin in current engines, Arabic-Indic in older ICU for ar.
+    expect(latn(createCopy("ar").formatTime(afternoon)).replace(/\s/g, " ")).toBe("2:05 م");
+    expect(latn(createCopy("ar").formatTime(morning)).replace(/\s/g, " ")).toBe("9:05 ص");
+    expect(createCopy("hi").formatTime(afternoon).replace(/\s/g, " ")).toBe("2:05 pm");
+  });
+
+  it("writes relative copy in every new locale", () => {
+    const pinned: [Locale, string, string, string][] = [
+      ["de", "Vor 1 Min. synchronisiert", "Beginnt in 2 Min.", "Hat vor 3 Min. begonnen"],
+      ["es", "Sincronizado hace 1 min", "Empieza en 2 min", "Empezó hace 3 min"],
+      ["tr", "1 dk. önce eşitlendi", "2 dk. içinde başlıyor", "3 dk. önce başladı"],
+      ["zh-CN", "1分钟前同步", "2分钟后开始", "已开始3分钟"],
+      ["ja", "1 分前に同期しました", "2 分後に開始", "3 分前に開始しました"],
+    ];
+    for (const [locale, synced, starts, started] of pinned) {
+      const c = createCopy(locale);
+      expect(c.syncedAgo(at(-60), now).replace(/\s/g, " ")).toBe(synced);
+      expect(c.startsIn(at(120), now).replace(/\s/g, " ")).toBe(starts);
+      expect(c.startedAgo(at(-180), now).replace(/\s/g, " ")).toBe(started);
+    }
+    // Arabic and Hindi unit labels vary between CLDR versions: check the sentence around Intl's value.
+    for (const locale of ["ar", "hi"] as const) {
+      const c = createCopy(locale);
+      const span = (minutes: number) =>
+        new Intl.NumberFormat(locale, { style: "unit", unit: "minute", unitDisplay: "short" }).format(minutes);
+      expect(c.syncedAgo(at(-60), now)).toBe(c.t.relative.syncedAgo(span(1)));
+      expect(c.startsIn(at(120), now)).toBe(c.t.relative.startsIn(span(2)));
+      expect(c.startedAgo(at(-180), now)).toBe(c.t.relative.startedAgo(span(3)));
+      expect(c.syncedAgo(at(-30), now)).toBe(c.t.relative.syncedJustNow);
+    }
+    expect(createCopy("ar").syncedAgo(at(-2 * 24 * 3600), now)).toContain("يوم");
   });
 
   it("joins the ignore keywords in the locale's list style", () => {

@@ -1,0 +1,108 @@
+import type { Messages } from "./en-US";
+
+const plural = new Intl.PluralRules("hi");
+const number = new Intl.NumberFormat("hi");
+
+// Hindi, polite "आप", with the danda (।) as full stop. CLDR "one" covers 0 and 1.
+export const hi: Messages = {
+  app: { windowTitle: "Tolon" },
+  nav: {
+    label: "सेटिंग्स",
+    calendars: "कैलेंडर",
+    alarms: "अलार्म",
+    quietHours: "शांत समय",
+    appearance: "रूप-रंग",
+    startup: "स्टार्टअप",
+    about: "परिचय",
+    comingSoon: "यह बाद के किसी वर्शन में आएगा।",
+  },
+  calendars: {
+    title: "कैलेंडर",
+    subtitle: "Tolon आपके कैलेंडर पढ़ता है और उनमें कभी कुछ नहीं लिखता।",
+    googleName: (account) => `Google: ${account}`,
+    kindGoogle: "Google Calendar, साइन इन किया हुआ",
+    kindIcs: "iCal सदस्यता",
+    kindOutlook: "प्रकाशित Outlook कैलेंडर",
+    toggleLabel: (name) => `कैलेंडर ${name} चालू करें`,
+    addCalendar: "कैलेंडर जोड़ें",
+    pasteIcalUrl: "iCal URL चिपकाएं",
+    ignoreHeading: "अनदेखा करें",
+    ignoreAllDay: "पूरे दिन के इवेंट",
+    ignoreDeclined: "जिन इवेंट को मैंने अस्वीकार किया",
+    ignoreSolo: "ऐसे इवेंट जिनमें कोई और नहीं है",
+    ignoreMatching: (keywords) => `इनसे मेल खाने वाले इवेंट: ${keywords}`,
+    changesSave: "बदलाव तुरंत सेव हो जाते हैं।",
+    nameWithKind: (name, kind) => `${name}, ${kind}`,
+    removeLabel: (name) => `कैलेंडर ${name} हटाएं`,
+    removeTitle: (name) => `${name} हटाएं?`,
+    removeConsequence: "Tolon इस कैलेंडर को पढ़ना बंद कर देगा। कैलेंडर में खुद कोई बदलाव नहीं होगा।",
+    remove: "हटाएं",
+    removeConfirm: "कैलेंडर हटाएं",
+    cancel: "रद्द करें",
+    urlPlaceholder: "https://calendar.example.com/team.ics",
+    urlHint: "Tolon लिंक को इसी कंप्यूटर पर रखता है और उससे सिर्फ़ पढ़ता है।",
+    adding: "कैलेंडर जोड़ा जा रहा है",
+    empty: "अभी कोई कैलेंडर नहीं है। जोड़ने के लिए एक iCal URL चिपकाएं।",
+  },
+  interrupt: {
+    region: "मीटिंग अलार्म",
+    testTitle: "टेस्ट अलार्म",
+    joinCall: "कॉल में शामिल हों",
+    joinOn: (host) => `${host} पर शामिल हों`,
+    openEvent: "इवेंट खोलें",
+    alreadyThere: "मैं पहले से वहां हूं",
+    snooze: (minutes) => `${number.format(minutes)} मिनट के लिए स्नूज़ करें`,
+    dismiss: "खारिज करें",
+    dismissConsequence: "खारिज करने पर इस कंप्यूटर पर यह रिमाइंडर बंद हो जाता है।",
+    hintJoin: "Esc: स्नूज़। Enter: शामिल हों। D: खारिज करें।",
+    hintEvent: "Esc: स्नूज़। Enter: इवेंट खोलें। D: खारिज करें।",
+    hintAlreadyThere: "Esc: स्नूज़। Enter: मैं पहले से वहां हूं। D: खारिज करें।",
+    hintSpace: "Space: मैं पहले से वहां हूं।",
+    timeRange: (start, end) => `${start} से ${end}`,
+    details: (range, provider, people) =>
+      `${range}${provider ? `, ${provider} पर` : ""}${
+        people > 0 ? `, ${number.format(people)} ${plural.select(people) === "one" ? "व्यक्ति" : "लोगों"} के साथ` : ""
+      }।`,
+  },
+  relative: {
+    neverSynced: "अभी तक सिंक नहीं हुआ",
+    syncedJustNow: "अभी-अभी सिंक हुआ",
+    syncedAgo: (duration) => `${duration} पहले सिंक हुआ`,
+    startsNow: "अभी शुरू हो रही है",
+    startsIn: (duration) => `${duration} में शुरू होगी`,
+    startedJustNow: "अभी-अभी शुरू हुई",
+    startedAgo: (duration) => `${duration} पहले शुरू हुई`,
+  },
+  syncLog: {
+    skipped: (count) => `${number.format(count)} घटक ${plural.select(count) === "one" ? "छोड़ा गया" : "छोड़े गए"}`,
+  },
+  errors: {
+    sync: {
+      http: (status) => `सिंक विफल: ${status}`,
+      httpHint: (status, hint) => `सिंक विफल: ${status}, ${hint}`,
+      timeout: "सिंक विफल: कैलेंडर ने जवाब देने में बहुत देर लगाई।",
+      connect: "सिंक विफल: Tolon सर्वर से कनेक्ट नहीं कर सका।",
+      not_calendar: "सिंक विफल: यह लिंक iCal कैलेंडर नहीं है।",
+      too_large: "सिंक विफल: कैलेंडर इतना बड़ा है कि पढ़ा नहीं जा सकता।",
+      network: "सिंक विफल: नेटवर्क कनेक्शन नहीं है।",
+      unsupported_scheme: "सिंक विफल: सिर्फ़ https और webcal लिंक काम करते हैं।",
+      invalid_url: "सिंक विफल: यह मान्य URL नहीं है।",
+      unknown: "सिंक विफल।",
+    },
+    httpHints: {
+      unauthorized: "लिंक की समय-सीमा खत्म",
+      forbidden: "पहुंच अस्वीकृत",
+      tooManyRequests: "बहुत ज़्यादा अनुरोध",
+      server: "सर्वर त्रुटि",
+    },
+    command: {
+      unsupported_scheme: "Tolon सिर्फ़ https या webcal लिंक जोड़ सकता है।",
+      invalid_url: "यह मान्य कैलेंडर URL नहीं है।",
+      not_found: "यह कैलेंडर अब मौजूद नहीं है।",
+      no_url: "इस कैलेंडर में सिंक करने के लिए कोई लिंक नहीं है।",
+      not_ready: "Tolon अभी शुरू हो रहा है। थोड़ी देर में फिर कोशिश करें।",
+      db_error: "Tolon यह बदलाव सेव नहीं कर सका। फिर कोशिश करें।",
+      internal: "Tolon में कुछ गड़बड़ हो गई। फिर कोशिश करें।",
+    },
+  },
+};

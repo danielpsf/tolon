@@ -12,7 +12,7 @@ describe("copy", () => {
   it("follows the system language and sets <html lang>", () => {
     const documentElement = { lang: "" };
     vi.stubGlobal("document", { documentElement });
-    vi.stubGlobal("navigator", { languages: ["de-DE", "pt-PT"] });
+    vi.stubGlobal("navigator", { languages: ["fr-FR", "pt-PT"] });
     expect(initCopy().locale).toBe("pt-PT");
     expect(documentElement.lang).toBe("pt-PT");
     expect(copy().locale).toBe("pt-PT");
