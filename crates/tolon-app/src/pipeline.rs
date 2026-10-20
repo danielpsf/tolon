@@ -76,7 +76,7 @@ impl Fetch for IcsFetcher {
 
 /// A panic elsewhere must not lock the person out of their calendars: SQLite keeps its own
 /// consistency, so a poisoned lock is taken over.
-fn lock(db: &Db) -> MutexGuard<'_, Store> {
+pub(crate) fn lock(db: &Db) -> MutexGuard<'_, Store> {
     db.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -210,7 +210,7 @@ fn apply(
 }
 
 /// Duplicate UIDs keep the last event, then each event becomes its stored JSON payload.
-fn feed_events(events: Vec<Event>) -> anyhow::Result<Vec<FeedEvent>> {
+pub(crate) fn feed_events(events: Vec<Event>) -> anyhow::Result<Vec<FeedEvent>> {
     let mut at: HashMap<String, usize> = HashMap::new();
     let mut kept: Vec<Event> = Vec::new();
     for e in events {
@@ -268,7 +268,7 @@ fn midnight(day: NaiveDate, local: Tz) -> anyhow::Result<DateTime<Utc>> {
         .ok_or_else(|| AppError::INTERNAL.into())
 }
 
-fn flag(store: &Store, key: &str, default: bool) -> anyhow::Result<bool> {
+pub(crate) fn flag(store: &Store, key: &str, default: bool) -> anyhow::Result<bool> {
     Ok(store
         .settings()
         .get(key)?
@@ -277,7 +277,7 @@ fn flag(store: &Store, key: &str, default: bool) -> anyhow::Result<bool> {
 }
 
 /// AC2.3, AC2.4, AC8.2: all-day off, declined on, cancelled on, unless a setting says otherwise.
-fn expand_options(store: &Store) -> anyhow::Result<ExpandOptions> {
+pub(crate) fn expand_options(store: &Store) -> anyhow::Result<ExpandOptions> {
     Ok(ExpandOptions {
         ignore_cancelled: flag(store, IGNORE_CANCELLED, true)?,
         ignore_declined: flag(store, IGNORE_DECLINED, true)?,
@@ -285,14 +285,8 @@ fn expand_options(store: &Store) -> anyhow::Result<ExpandOptions> {
     })
 }
 
-/// Today's occurrences from the enabled calendars, in the machine's zone, after the ignore rules.
-pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occurrence>> {
-    let (from, to) = today_window(now, local)?;
-    // The store guard is released before the (CPU-bound) expansion.
-    let (opts, stored) = {
-        let store = lock(db);
-        (expand_options(&store)?, store.events().list_enabled()?)
-    };
+/// The stored events as core events. A payload that no longer decodes is skipped.
+pub(crate) fn decode_events(stored: Vec<tolon_store::Event>) -> Vec<Event> {
     let mut events = Vec::new();
     for item in stored {
         match serde_json::from_str::<Event>(&item.payload) {
@@ -303,7 +297,24 @@ pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occur
             }
         }
     }
-    Ok(expand_window(&events, from, to, local, &opts))
+    events
+}
+
+/// Today's occurrences from the enabled calendars, in the machine's zone, after the ignore rules.
+pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occurrence>> {
+    let (from, to) = today_window(now, local)?;
+    // The store guard is released before the (CPU-bound) expansion.
+    let (opts, stored) = {
+        let store = lock(db);
+        (expand_options(&store)?, store.events().list_enabled()?)
+    };
+    Ok(expand_window(
+        &decode_events(stored),
+        from,
+        to,
+        local,
+        &opts,
+    ))
 }
 
 #[cfg(test)]
