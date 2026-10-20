@@ -70,17 +70,24 @@ impl MeetingDto {
             title: o.title.clone(),
             start: o.start.to_rfc3339_opts(SecondsFormat::Secs, false),
             end: o.end.to_rfc3339_opts(SecondsFormat::Secs, false),
-            join: match &o.join {
-                JoinTarget::Link {
-                    host, recognised, ..
-                } => JoinDto::Link {
-                    host: host.clone(),
-                    recognised: *recognised,
-                },
-                JoinTarget::EventPage(_) => JoinDto::EventPage,
-                JoinTarget::None => JoinDto::None,
-            },
+            join: JoinDto::of(&o.join),
             people: o.people,
+        }
+    }
+}
+
+impl JoinDto {
+    /// The join target as a page may see it: never the URL.
+    pub(crate) fn of(target: &JoinTarget) -> Self {
+        match target {
+            JoinTarget::Link {
+                host, recognised, ..
+            } => Self::Link {
+                host: host.clone(),
+                recognised: *recognised,
+            },
+            JoinTarget::EventPage(_) => Self::EventPage,
+            JoinTarget::None => Self::None,
         }
     }
 }

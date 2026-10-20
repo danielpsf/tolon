@@ -78,13 +78,22 @@ pub async fn sync_and_notify(app: &AppHandle, id: Option<&str>) -> anyhow::Resul
 }
 
 #[tauri::command]
-pub async fn calendars_list(app: AppHandle) -> Result<Vec<CalendarDto>, CommandError> {
+pub async fn calendars_list(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<Vec<CalendarDto>, CommandError> {
+    main_only(window.label())?;
     let list = state(&app).and_then(|s| pipeline::list(&s.db));
     list.map_err(|e| command_error(&e))
 }
 
 #[tauri::command]
-pub async fn calendars_add_ics(app: AppHandle, url: String) -> Result<CalendarDto, CommandError> {
+pub async fn calendars_add_ics(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    url: String,
+) -> Result<CalendarDto, CommandError> {
+    main_only(window.label())?;
     let added = async {
         let state = state(&app)?;
         pipeline::add_ics(&state.db, &state.fetcher, &url, Utc::now()).await
@@ -96,7 +105,12 @@ pub async fn calendars_add_ics(app: AppHandle, url: String) -> Result<CalendarDt
 }
 
 #[tauri::command]
-pub async fn calendars_remove(app: AppHandle, id: String) -> Result<(), CommandError> {
+pub async fn calendars_remove(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
     state(&app)
         .and_then(|s| pipeline::remove(&s.db, &id))
         .map_err(|e| command_error(&e))?;
@@ -107,9 +121,11 @@ pub async fn calendars_remove(app: AppHandle, id: String) -> Result<(), CommandE
 #[tauri::command]
 pub async fn calendars_set_enabled(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     id: String,
     enabled: bool,
 ) -> Result<(), CommandError> {
+    main_only(window.label())?;
     state(&app)
         .and_then(|s| pipeline::set_enabled(&s.db, &id, enabled))
         .map_err(|e| command_error(&e))?;
@@ -119,18 +135,42 @@ pub async fn calendars_set_enabled(
 
 /// With an id the calendar syncs even when disabled (the person asked); without one, only enabled ones.
 #[tauri::command]
-pub async fn calendars_sync_now(app: AppHandle, id: Option<String>) -> Result<(), CommandError> {
+pub async fn calendars_sync_now(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: Option<String>,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
     sync_and_notify(&app, id.as_deref())
         .await
         .map_err(|e| command_error(&e))
 }
 
-/// Today's meetings, the ignored ones included with their reason in `ignored` (S8.1).
+/// Today's meetings, the ignored ones included with their reason in `ignored` (S8.1). No URLs.
 #[tauri::command]
-pub async fn occurrences_today(app: AppHandle) -> Result<Vec<ListedDto>, CommandError> {
+pub async fn occurrences_today(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<Vec<ListedDto>, CommandError> {
+    main_only(window.label())?;
     let today =
         state(&app).and_then(|s| pipeline::today(&s.db, Utc::now(), pipeline::local_zone()));
     today.map_err(|e| command_error(&e))
+}
+
+/// The panel's Join for one of today's meetings: `key` is `ListedDto::key`. Rust opens the link.
+#[tauri::command]
+pub async fn occurrences_join(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    let done = state(&app).and_then(|s| {
+        let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
+        scheduler.join_listed(&s.db, &key)
+    });
+    done.map_err(|e| command_error(&e))
 }
 
 // ---- Alarm actions (F3, F4, F5) ---------------------------------------------------------------
@@ -308,6 +348,13 @@ mod tests {
     fn every_settings_command_checks_the_window_first() {
         let source = include_str!("commands.rs");
         for (name, check) in [
+            ("calendars_list", "main_only"),
+            ("calendars_add_ics", "main_only"),
+            ("calendars_remove", "main_only"),
+            ("calendars_set_enabled", "main_only"),
+            ("calendars_sync_now", "main_only"),
+            ("occurrences_today", "main_only"),
+            ("occurrences_join", "main_only"),
             ("alarms_test", "main_only"),
             ("settings_get", "main_or_interrupt"),
             ("settings_set", "main_only"),

@@ -76,6 +76,7 @@ fn main() -> anyhow::Result<()> {
             commands::calendars_set_enabled,
             commands::calendars_sync_now,
             commands::occurrences_today,
+            commands::occurrences_join,
             commands::alarms_snooze,
             commands::alarms_dismiss,
             commands::alarms_join,

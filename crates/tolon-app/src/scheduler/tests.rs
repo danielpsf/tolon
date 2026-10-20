@@ -1492,3 +1492,88 @@ async fn ac6_3_the_preview_plays_once_and_opens_nothing() -> TestResult {
     assert_eq!(rig.host().calls(), ["play"]);
     Ok(())
 }
+
+// ---- occurrences_join (decision "All-day events, weekends and window checks") -----------------
+
+/// The key of today's meeting `uid` as `occurrences_today` lists it.
+fn listed_key(rig: &Rig, uid: &str) -> anyhow::Result<String> {
+    pipeline::today(&rig.db, rig.host().now(), Tz::UTC)?
+        .into_iter()
+        .find(|l| l.key.contains(&format!(":{uid}@")))
+        .map(|l| l.key)
+        .ok_or_else(|| anyhow!("{uid} is not listed today"))
+}
+
+#[tokio::test]
+async fn occurrences_join_opens_the_link_of_a_listed_meeting_and_changes_no_alarm() -> TestResult {
+    let rig = Rig::new(&[with_link("call", "140000", MEET_LOCATION)], at(9, 0, 0))?;
+    rig.tick_at(at(9, 0, 0)).await;
+    let key = listed_key(&rig, "call")?;
+    rig.sched.join_listed(&rig.db, &key)?;
+    assert_eq!(rig.host().urls(), [MEET]);
+    assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("scheduled"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn occurrences_join_with_an_unknown_key_does_nothing() -> TestResult {
+    let rig = Rig::new(&[with_link("call", "140000", MEET_LOCATION)], at(9, 0, 0))?;
+    let key = listed_key(&rig, "call")?;
+    let other_day = key.replace("2026-10-20", "2026-10-21");
+    for bad in [
+        other_day.as_str(),
+        "not a key",
+        "x@2026-10-20T14:00:00Z",
+        "",
+    ] {
+        let e = rig
+            .sched
+            .join_listed(&rig.db, bad)
+            .err()
+            .ok_or_else(|| anyhow!("{bad:?} joined"))?;
+        assert_eq!(
+            crate::errors::command_error(&e).code,
+            "not_found",
+            "{bad:?}"
+        );
+    }
+    assert!(rig.host().urls().is_empty());
+    assert!(rig.host().calls().is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn occurrences_join_re_checks_the_link_before_opening() -> TestResult {
+    let rig = Rig::new(
+        &[
+            with_link("file", "100000", "URL:file:///etc/passwd\r\n"),
+            with_link("zw", "110000", "URL:https://exa\u{200B}mple.com/e\r\n"),
+            with_link(
+                "page",
+                "120000",
+                "URL:https://calendar.example.com/e?eid=1\r\n",
+            ),
+            ("none", "Nothing", "130000", ""),
+        ],
+        at(9, 0, 0),
+    )?;
+    // The core keeps no file: link at all; the zero-width one reaches the re-check and fails it.
+    for (uid, code) in [("file", "not_found"), ("zw", "internal")] {
+        let e = rig
+            .sched
+            .join_listed(&rig.db, &listed_key(&rig, uid)?)
+            .err()
+            .ok_or_else(|| anyhow!("{uid} opened"))?;
+        assert_eq!(crate::errors::command_error(&e).code, code, "{uid}");
+    }
+    let e = rig
+        .sched
+        .join_listed(&rig.db, &listed_key(&rig, "none")?)
+        .err()
+        .ok_or_else(|| anyhow!("nothing opened"))?;
+    assert_eq!(crate::errors::command_error(&e).code, "not_found");
+    assert!(rig.host().urls().is_empty());
+    rig.sched.join_listed(&rig.db, &listed_key(&rig, "page")?)?;
+    assert_eq!(rig.host().urls(), ["https://calendar.example.com/e?eid=1"]);
+    Ok(())
+}

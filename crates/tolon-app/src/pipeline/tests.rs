@@ -118,7 +118,7 @@ fn titles(listed: &[ListedDto]) -> Vec<&str> {
     listed
         .iter()
         .filter(|l| l.ignored.is_none())
-        .map(|l| l.occurrence.title.as_str())
+        .map(|l| l.title.as_str())
         .collect()
 }
 
@@ -460,7 +460,7 @@ async fn s8_1_ignored_meetings_are_listed_with_their_reason() -> TestResult {
     let listed = today(&db, now(), Tz::UTC)?;
     let tags: Vec<(&str, Option<&str>)> = listed
         .iter()
-        .map(|l| (l.occurrence.title.as_str(), l.ignored))
+        .map(|l| (l.title.as_str(), l.ignored))
         .collect();
     assert_eq!(
         tags,
@@ -703,4 +703,55 @@ fn ac1_3_dto_json_never_carries_the_secret() -> TestResult {
 fn ac1_3_display_url_is_redact_url() {
     let dto = CalendarDto::from(calendar_row(SECRET_URL));
     assert_eq!(dto.display_url, Some(redact_url(SECRET_URL)));
+}
+
+#[tokio::test]
+async fn occurrences_today_sends_no_url_for_any_join_kind() -> TestResult {
+    let db = db()?;
+    let text = feed(
+        None,
+        &[
+            vevent(
+                "call",
+                "Call",
+                "DTSTART:20261020T100000Z\r\nLOCATION:https://meet.google.com/SECRET-CALL\r\n",
+            ),
+            vevent(
+                "page",
+                "Page",
+                "DTSTART:20261020T110000Z\r\nURL:https://calendar.example.com/event?eid=SECRET-PAGE\r\n",
+            ),
+            vevent("none", "Nothing", "DTSTART:20261020T120000Z\r\n"),
+        ],
+    );
+    let fake = Fake::new(vec![modified(text, None)]);
+    add_ics(&db, &fake, SECRET_URL, now()).await?;
+    let json = serde_json::to_value(today(&db, now(), Tz::UTC)?)?;
+    let joins: Vec<&serde_json::Value> = json
+        .as_array()
+        .map(|a| a.iter().map(|l| &l["join"]).collect())
+        .unwrap_or_default();
+    assert_eq!(
+        joins,
+        [
+            &json!({ "kind": "link", "host": "meet.google.com", "recognised": true }),
+            &json!({ "kind": "event_page" }),
+            &json!({ "kind": "none" }),
+        ]
+    );
+    let text = json.to_string();
+    for secret in ["SECRET-CALL", "SECRET-PAGE", "https://", "url"] {
+        assert!(!text.contains(secret), "{secret} in {text}");
+    }
+    let first = &json[0];
+    let mut fields: Vec<&str> = first
+        .as_object()
+        .map(|o| o.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    fields.sort_unstable();
+    assert_eq!(
+        fields,
+        ["all_day", "end", "ignored", "join", "key", "people", "start", "title"]
+    );
+    Ok(())
 }

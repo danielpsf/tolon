@@ -695,6 +695,27 @@ impl<H: Host> Scheduler<H> {
         self.host.stop_sound();
     }
 
+    /// The panel's Join (`occurrences_join`): opens the link or event page of one of today's
+    /// meetings, resolved from `key` in Rust and re-checked like `alarms_join`. Alarm states do not
+    /// change. A key that is not one of today's meetings, or a meeting with nothing to open, is
+    /// `not_found`; a link that fails the re-check is `internal`. Either way nothing opens.
+    pub fn join_listed(&self, db: &Db, key: &str) -> anyhow::Result<()> {
+        interrupt::parse_key(key)?;
+        let today = pipeline::today_judged(db, self.host.now(), self.host.zone())?;
+        let occ = today
+            .iter()
+            .map(|(o, _)| o)
+            .find(|o| o.key.to_string() == key)
+            .ok_or(AppError::NOT_FOUND)?;
+        let url = match occ.join {
+            JoinTarget::None => return Err(AppError::NOT_FOUND.into()),
+            _ => link_of(occ).ok_or(AppError::INTERNAL)?,
+        };
+        self.host
+            .open_url(&url)
+            .map_err(|_| AppError::INTERNAL.into())
+    }
+
     /// One shot of `sound`, for the settings page's Play button (AC6.3).
     pub fn preview(&self, sound: Sound) {
         self.host.play(sound);

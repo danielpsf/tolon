@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
 use tolon_core::{
@@ -16,6 +16,7 @@ use tolon_store::{Calendar, FeedEvent, Store};
 use tolon_sync::{normalize_url, redact_url, FetchError, FetchOutcome, IcsFetcher};
 
 use crate::errors::{fetch_code, AppError, SyncErrorDto};
+use crate::interrupt::JoinDto;
 use crate::settings;
 
 /// The store behind a mutex. A guard is never held across an await.
@@ -291,42 +292,71 @@ pub(crate) fn decode_events(stored: Vec<tolon_store::Event>) -> Vec<Event> {
     events
 }
 
-/// One of today's occurrences as `occurrences_today` sends it: the occurrence, and why it gets no
-/// alarm, if it gets none (S8.1): `keyword`, `all_day`, `declined`, `cancelled` or `no_attendees`.
+/// One of today's occurrences as `occurrences_today` sends it (decision "All-day events, weekends
+/// and window checks"). No URL: joining goes through `occurrences_join`. `ignored` says why it
+/// gets no alarm, if it gets none (S8.1): `keyword`, `all_day`, `declined`, `cancelled` or
+/// `no_attendees`.
 #[derive(Debug, Serialize)]
 pub struct ListedDto {
-    #[serde(flatten)]
-    pub occurrence: Occurrence,
+    /// `OccurrenceKey`'s text form, for `occurrences_join`.
+    pub key: String,
+    pub title: String,
+    /// RFC 3339 with the machine's offset.
+    pub start: String,
+    pub end: String,
+    pub all_day: bool,
+    pub people: u32,
     pub ignored: Option<&'static str>,
+    pub join: JoinDto,
+}
+
+impl ListedDto {
+    fn new(o: &Occurrence, verdict: &Verdict) -> Self {
+        Self {
+            key: o.key.to_string(),
+            title: o.title.clone(),
+            start: o.start.to_rfc3339_opts(SecondsFormat::Secs, false),
+            end: o.end.to_rfc3339_opts(SecondsFormat::Secs, false),
+            all_day: o.all_day,
+            people: o.people,
+            ignored: match verdict {
+                Verdict::Keep => None,
+                Verdict::Ignored(reason) => Some(reason.code()),
+            },
+            join: JoinDto::of(&o.join),
+        }
+    }
+}
+
+/// Today's occurrences for the panel, as sent to the page.
+pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<ListedDto>> {
+    Ok(today_judged(db, now, local)?
+        .iter()
+        .map(|(o, v)| ListedDto::new(o, v))
+        .collect())
 }
 
 /// Today's occurrences from the enabled calendars, in the machine's zone, each with the ignore
 /// rule that silences it (AC8.2, S8.1). The ignored ones stay listed so the panel can tag them.
-pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<ListedDto>> {
+pub fn today_judged(
+    db: &Db,
+    now: DateTime<Utc>,
+    local: Tz,
+) -> anyhow::Result<Vec<(Occurrence, Verdict)>> {
     let (from, to) = today_window(now, local)?;
     // The store guard is released before the (CPU-bound) expansion.
     let (settings, stored) = {
         let store = lock(db);
         (settings::read(&store)?, store.events().list_enabled()?)
     };
-    let judged = judge_window(
+    Ok(judge_window(
         &decode_events(stored),
         from,
         to,
         local,
         &settings.expand_options(),
         &settings.rules(),
-    );
-    Ok(judged
-        .into_iter()
-        .map(|(occurrence, verdict)| ListedDto {
-            occurrence,
-            ignored: match verdict {
-                Verdict::Keep => None,
-                Verdict::Ignored(reason) => Some(reason.code()),
-            },
-        })
-        .collect())
+    ))
 }
 
 #[cfg(test)]
