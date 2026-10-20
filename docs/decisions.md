@@ -192,3 +192,4 @@ The orchestrator's screen check found that a regular app's windows cannot appear
 - Quiet hours, Rules, Appearance, Language and Startup have no mockup; they follow the Alarms page layout. Mockups 03 and 04 should be updated to match.
 - The language list is a native `sm-select`, not `sm-menu`, because the app does not load `swiss-moss.js`.
 - The minute unit after the lead time uses each locale's plural rules.
+- (overnight, L-016 re-review) A Saturday or Sunday all-day event never fires while weekends are quiet, because its anchor falls inside quiet hours; it is still listed. `occurrences_join` may open ignored or cancelled meetings: it needs a click and the link re-check still applies.
