@@ -19,7 +19,7 @@
     "@tauri-apps/api": "^2.12.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "swiss-moss": "github:danielpsf/swiss-moss#a6454b60ba551650b74547ced6092fe3d8a55ac6",
+    "swiss-moss": "github:danielpsf/swiss-moss#3daa85b87bba42c335fe32277d25a1ba85bfd475",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
