@@ -1027,6 +1027,26 @@ async fn s4_4_a_stale_notification_action_after_a_regroup_does_not_touch_the_lar
 }
 
 #[tokio::test]
+async fn notification_ids_differ_between_runs() -> TestResult {
+    // Two starts of the app, a minute apart: the first notification of each gets another id.
+    let mut first_ids = Vec::new();
+    for start in [at(13, 40, 0), at(13, 41, 0)] {
+        let mut host = Fake::new(start);
+        host.degraded = Some("wayland_no_takeover");
+        let rig = Rig::with_host(&[STANDUP], host)?;
+        rig.tick_at(at(13, 58, 5)).await;
+        first_ids.extend(rig.host().notices());
+    }
+    let [one, two] = first_ids[..] else {
+        anyhow::bail!("two notifications expected: {first_ids:?}");
+    };
+    assert_ne!(one, two);
+    assert!(one > 0 && two > 0);
+    assert_eq!(two, one + 60, "seeded from the start time in seconds");
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_regroup_checks_focus_again() -> TestResult {
     let rig = Rig::new(
         &[("a", "Alpha", "140000", ""), ("b", "Beta", "140030", "")],

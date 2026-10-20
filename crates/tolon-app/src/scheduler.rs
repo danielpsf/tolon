@@ -409,6 +409,11 @@ fn links_of(group: &InterruptGroup) -> HashMap<String, String> {
 
 // ---- The loop ------------------------------------------------------------------------------
 
+/// Where the notification identifiers start: the low 30 bits of the start time in unix seconds.
+fn notice_seed(now: DateTime<Utc>) -> i32 {
+    i32::try_from(now.timestamp().rem_euclid(1 << 30)).unwrap_or(0)
+}
+
 /// The interrupt that is up. With `test` it is F10's sample: no alarm behind it.
 struct Open {
     show: AlarmShow,
@@ -452,7 +457,9 @@ struct Inner {
     sound: Sound,
     repeat: bool,
     degraded_logged: bool,
-    /// The last notification identifier handed out; never reused, so a stale id never matches.
+    /// The last notification identifier handed out. It counts up from a start-time seed, so a stale
+    /// id never matches within a run, and a notification left over from an earlier run (the OS may
+    /// keep it on screen) is unlikely to match either.
     last_notice: i32,
 }
 
@@ -464,6 +471,7 @@ pub struct Scheduler<H> {
 
 impl<H: Host> Scheduler<H> {
     pub fn new(host: H) -> Self {
+        let now = host.now();
         Self {
             host,
             inner: Mutex::new(Inner {
@@ -472,7 +480,7 @@ impl<H: Host> Scheduler<H> {
                 sound: Sound::SoftBell,
                 repeat: true,
                 degraded_logged: false,
-                last_notice: 0,
+                last_notice: notice_seed(now),
             }),
             wake: Notify::new(),
         }
