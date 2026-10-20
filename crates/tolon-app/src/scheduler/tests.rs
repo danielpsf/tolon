@@ -669,6 +669,8 @@ fn only_plain_https_links_are_openable() {
         "https://meet.google.com/abc-defg-hij",
         "https://us02web.zoom.us/j/123456789?pwd=x",
         "https://example.com:8443/path#frag",
+        // Other non-ASCII text is fine: only the format characters are refused.
+        "https://example.com/caf\u{e9}",
     ] {
         assert!(openable(good), "{good}");
     }
@@ -684,6 +686,14 @@ fn only_plain_https_links_are_openable() {
         "https://example.com/a\nb",
         "https://[::1]/a",
         "HTTPS://example.com/a",
+        // Format characters hide where a link goes: zero-width, bidi override, BOM, soft hyphen, tags.
+        "https://example.com/a\u{200B}b",
+        "https://example.com/gpj.exe\u{202E}fdp",
+        "https://example.com/?next=\u{2066}evil",
+        "https://example.com/\u{FEFF}",
+        "https://example.com/\u{00AD}",
+        "https://example.com/\u{E0041}",
+        "https://exa\u{200D}mple.com/",
     ] {
         assert!(!openable(bad), "{bad}");
     }

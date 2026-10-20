@@ -341,17 +341,49 @@ fn stored_firing(db: &Db) -> anyhow::Result<Vec<Alarm>> {
 
 // ---- Join links ----------------------------------------------------------------------------
 
-/// A link Tolon may open: `https://`, at most 8 KB, no whitespace or control characters, and an
+/// A link Tolon may open: `https://`, at most 8 KB, no whitespace, control or Unicode format
+/// characters (zero-width and bidi overrides hide where a link goes), and an
 /// authority of plain host characters (no userinfo, no backslash). The core validated a `Link`;
 /// an event page comes straight from the feed's `URL` property, so every link is checked again
 /// right before it is opened (decision "Join links are treated as untrusted").
+/// Unicode general category Cf (format), as of Unicode 16: zero-width and joiner characters, bidi
+/// marks and overrides, the BOM, tag characters. `std` has no category table, so they are listed.
+fn is_format_char(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x00AD
+            | 0x0600..=0x0605
+            | 0x061C
+            | 0x06DD
+            | 0x070F
+            | 0x0890..=0x0891
+            | 0x08E2
+            | 0x180E
+            | 0x200B..=0x200F
+            | 0x202A..=0x202E
+            | 0x2060..=0x2064
+            | 0x2066..=0x206F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x110BD
+            | 0x110CD
+            | 0x13430..=0x1343F
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0001
+            | 0xE0020..=0xE007F
+    )
+}
+
 pub(crate) fn openable(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     url.len() <= 8 * 1024
-        && !url.chars().any(|c| c.is_control() || c.is_whitespace())
+        && !url
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || is_format_char(c))
         && !authority.is_empty()
         && authority
             .chars()
