@@ -15,7 +15,6 @@
 //!   the Action Center. Installed builds only: a dev build shows PowerShell's name and icon.
 
 use std::future::Future;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use chrono::{DateTime, Utc};
@@ -37,9 +36,7 @@ pub struct TauriHost {
     app: AppHandle,
     /// `None` when the audio thread could not start: alarms then show without sound.
     sound: Option<Arc<SoundPlayer>>,
-    playing: Arc<Mutex<Vec<Playback>>>,
-    /// Bumped by every `stop_sound`: a play that was still starting then stops itself.
-    generation: Arc<AtomicU64>,
+    playing: Arc<Mutex<Sounds<Playback>>>,
 }
 
 impl TauriHost {
@@ -55,12 +52,56 @@ impl TauriHost {
             app,
             sound,
             playing: Arc::default(),
-            generation: Arc::default(),
         }
     }
 }
 
-fn held(playing: &Mutex<Vec<Playback>>) -> std::sync::MutexGuard<'_, Vec<Playback>> {
+/// The sounds that are playing, and which generation of "wanted" they belong to. Both sit under one
+/// lock: a `play` that is still starting when `stop` runs must find out in the same step that keeps
+/// its handle, or its sound would outlive the interrupt.
+struct Sounds<T> {
+    generation: u64,
+    held: Vec<T>,
+}
+
+impl<T> Default for Sounds<T> {
+    fn default() -> Self {
+        Self {
+            generation: 0,
+            held: Vec::new(),
+        }
+    }
+}
+
+impl<T> Sounds<T> {
+    /// The generation a new play starts in.
+    fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// The sounds still held, to be cut before a new one starts.
+    fn take(&mut self) -> Vec<T> {
+        std::mem::take(&mut self.held)
+    }
+
+    /// Keeps `started` unless a stop happened since `wanted`; then it comes back to be cut.
+    fn keep(&mut self, wanted: u64, started: T) -> Option<T> {
+        if self.generation == wanted {
+            self.held.push(started);
+            None
+        } else {
+            Some(started)
+        }
+    }
+
+    /// Everything held. Nothing that started before this call can be kept afterwards.
+    fn stop(&mut self) -> Vec<T> {
+        self.generation = self.generation.wrapping_add(1);
+        self.take()
+    }
+}
+
+fn held(playing: &Mutex<Sounds<Playback>>) -> std::sync::MutexGuard<'_, Sounds<Playback>> {
     playing.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -115,21 +156,20 @@ impl Host for TauriHost {
             return;
         };
         let playing = Arc::clone(&self.playing);
-        let generation = Arc::clone(&self.generation);
-        let wanted = generation.load(Ordering::SeqCst);
+        let wanted = held(&playing).generation();
         // `play` waits for the audio thread (up to 3 s): it runs off the scheduler, which must stay
-        // free for a key press. A close while it waits bumps `generation`, so the late sound is cut.
+        // free for a key press. A stop while it waits changes the generation, so the late sound is cut.
         tauri::async_runtime::spawn_blocking(move || {
-            let previous: Vec<Playback> = held(&playing).drain(..).collect();
+            let previous = held(&playing).take();
             for p in &previous {
                 let _ = player.stop(p);
             }
             match player.play(sound) {
-                Ok(started) if generation.load(Ordering::SeqCst) == wanted => {
-                    held(&playing).push(started);
-                }
-                Ok(late) => {
-                    let _ = player.stop(&late);
+                Ok(started) => {
+                    let late = held(&playing).keep(wanted, started);
+                    if let Some(late) = late {
+                        let _ = player.stop(&late);
+                    }
                 }
                 // No output device is normal on a server or a CI runner; the alarm still shows.
                 Err(e) => tracing::warn!(error = %e, "the alarm sound did not play"),
@@ -138,9 +178,8 @@ impl Host for TauriHost {
     }
 
     fn stop_sound(&self) {
-        self.generation.fetch_add(1, Ordering::SeqCst);
         let Some(player) = &self.sound else { return };
-        let stopped: Vec<Playback> = held(&self.playing).drain(..).collect();
+        let stopped = held(&self.playing).stop();
         for p in &stopped {
             let _ = player.stop(p);
         }
@@ -229,5 +268,41 @@ async fn fallback_action(app: &AppHandle, notice: i32, act: Act) {
     // The interrupt may have been handled on screen already: that is not an error worth a warning.
     if let Err(e) = result {
         tracing::debug!(error = %e, "notification action had nothing to act on");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sound_that_starts_after_a_stop_is_cut_not_kept() {
+        let mut sounds = Sounds::<u32>::default();
+        let wanted = sounds.generation();
+        // The interrupt closes while the audio thread is still starting sound 1.
+        assert!(sounds.stop().is_empty());
+        assert_eq!(sounds.keep(wanted, 1), Some(1), "late: cut");
+        assert!(sounds.stop().is_empty(), "nothing is left playing");
+    }
+
+    #[test]
+    fn a_sound_that_starts_in_time_is_kept_and_stopped_by_the_next_stop() {
+        let mut sounds = Sounds::<u32>::default();
+        let wanted = sounds.generation();
+        assert_eq!(sounds.keep(wanted, 1), None);
+        // The repeat cuts the previous sound before the next one starts.
+        assert_eq!(sounds.take(), [1]);
+        let wanted = sounds.generation();
+        assert_eq!(sounds.keep(wanted, 2), None);
+        assert_eq!(sounds.stop(), [2]);
+    }
+
+    #[test]
+    fn a_play_that_began_before_two_stops_is_still_late() {
+        let mut sounds = Sounds::<u32>::default();
+        let wanted = sounds.generation();
+        sounds.stop();
+        sounds.stop();
+        assert_eq!(sounds.keep(wanted, 7), Some(7));
     }
 }
