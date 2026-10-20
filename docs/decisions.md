@@ -183,3 +183,12 @@ The orchestrator's screen check found that a regular app's windows cannot appear
 - An alarm already firing when quiet hours begin stays until it is handled or expires; a snooze that ends inside quiet hours follows "nothing fires inside them".
 - `occurrences_today` no longer carries join URLs: its items are `{ key, title, start, end, all_day, people, ignored, join: { kind: "link" | "event_page" | "none", host, recognised } }`, and joining goes through a main-only `occurrences_join(key)` that resolves the key in Rust and re-checks the link like `alarms_join`. This restores "the join link never reaches the page" for every window.
 - Every command that changes or reveals calendar data (`calendars_*`, `occurrences_*`) answers the main window only; interrupt windows may call only the alarm actions for their own group and `settings_get`.
+
+## 2026-10-21 Settings pages deviations from mockups 03 and 04 (L-017)
+(overnight) Recorded under AGENTS.md rule 10:
+- Rules is its own page; mockup 03 put "Ignore" under Calendars. The settings nav grows from 6 to 8 entries (Calendars, Alarms, Quiet hours, Rules, Appearance, Language, Startup, About).
+- Mockup 04's "On which screens" and "Join button" sections are left out until they are in the settings contract.
+- "Again at the start" is its own switch (AC9.5), not part of the lead-time sentence; the sound select lists sounds only, with a separate repeat switch and a "Play the sound" button.
+- Quiet hours, Rules, Appearance, Language and Startup have no mockup; they follow the Alarms page layout. Mockups 03 and 04 should be updated to match.
+- The language list is a native `sm-select`, not `sm-menu`, because the app does not load `swiss-moss.js`.
+- The minute unit after the lead time uses each locale's plural rules.
