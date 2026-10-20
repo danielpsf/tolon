@@ -139,3 +139,10 @@ Production fetches https only. To prove S1.1 end to end, `tolon-sync` and `tolon
 - The sound repeats every 30 s from the loop until the interrupt closes; the stop and a late play decide under one lock, so nothing plays after a close.
 - `alarms_test` only answers the `main` window. `alarms_e2e_state` (key, kind, state, until; no titles or URLs) exists only with `e2e-loopback`; `check-release-features` allows that feature in `commands.rs` and `main.rs` on the exact `#[cfg(...)]` lines only.
 - `deny.toml` ignores RUSTSEC-2026-0370, -0371 and -0372 (zbus 5 and zvariant, informational "unmaintained", no fixed version). zbus 5 reaches Linux builds through tauri-plugin-notification, notify-rust 4.18 and tauri-plugin-opener; drop the ignores when they move to zbus 6.
+
+## 2026-10-21 Locale list for beta 1
+The maintainer confirmed the languages: Portuguese, German, English, Spanish, Arabic, Turkish, Hindi, Chinese and Japanese. Tolon adds `de`, `es`, `ar`, `tr`, `hi`, `zh-CN` and `ja` to the existing en-US, en-GB, pt-BR and pt-PT catalogues (L-039).
+- Language matching keeps the existing rules for en and pt. Every `de-*`, `es-*`, `tr-*`, `hi-*` and `ja-*` tag maps to its language; every `zh-*` tag, including zh-TW and zh-HK, maps to zh-CN (Simplified) until a Traditional catalogue exists; `ar-*` maps to ar.
+- Arabic is right to left: the webview sets `dir="rtl"` for ar and layouts use logical CSS properties. Text that is not Latin falls back to system fonts per script; Tolon does not ship CJK fonts.
+- "Tolon" is never translated. Copy rules per language: no exclamation marks or emoji; sentence case where the script has case; German uses "du", Spanish neutral international Spanish with "tú".
+- Translations are drafted by an agent and checked by a second model; native review is still required before release, as for pt-BR and pt-PT.
