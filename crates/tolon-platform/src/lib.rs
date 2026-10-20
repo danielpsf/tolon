@@ -34,6 +34,16 @@ pub type NativePlatform = WindowsPlatform;
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub type NativePlatform = StubPlatform;
 
+/// [`NativePlatform`] as a value: an alias for a unit struct cannot be used as one.
+#[cfg(target_os = "linux")]
+pub const NATIVE: NativePlatform = LinuxPlatform;
+#[cfg(target_os = "macos")]
+pub const NATIVE: NativePlatform = MacPlatform;
+#[cfg(target_os = "windows")]
+pub const NATIVE: NativePlatform = WindowsPlatform;
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+pub const NATIVE: NativePlatform = StubPlatform;
+
 /// One connected display.
 ///
 /// **Do not pick coordinates yourself: call [`Screen::placement`]**, which returns the right
