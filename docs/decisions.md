@@ -146,3 +146,6 @@ The maintainer confirmed the languages: Portuguese, German, English, Spanish, Ar
 - Arabic is right to left: the webview sets `dir="rtl"` for ar and layouts use logical CSS properties. Text that is not Latin falls back to system fonts per script; Tolon does not ship CJK fonts.
 - "Tolon" is never translated. Copy rules per language: no exclamation marks or emoji; sentence case where the script has case; German uses "du", Spanish neutral international Spanish with "tú".
 - Translations are drafted by an agent and checked by a second model; native review is still required before release, as for pt-BR and pt-PT.
+
+## 2026-10-21 Hebrew joins the locale list
+The maintainer added Hebrew. L-039 also ships `he`: every `he-*` tag and the legacy `iw` map to it, it is right to left like ar, and its script falls back to system fonts ("Arial Hebrew", "Segoe UI", "Noto Sans Hebrew").
