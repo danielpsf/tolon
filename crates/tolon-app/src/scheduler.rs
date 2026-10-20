@@ -22,8 +22,8 @@
 //! Everything outside the process (windows, sound, notifications, the browser, the clock) is behind
 //! [`Host`], so the unit tests run the whole loop without Tauri. The Tauri side is `tauri_host.rs`.
 //!
-//! Pause and quiet hours have no settings yet (M3, L-016): `tick` gets `None` for both. They hold
-//! firing back only, so adding them later is two arguments.
+//! Quiet hours come from the settings (AC8.1, `settings::read`); pause has none yet (wave 2), so
+//! `tick` gets `None` for it.
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -34,9 +34,9 @@ use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use tokio::sync::{Mutex, Notify};
 use tolon_core::{
-    apply_rules, apply_transitions, expand_window, group_firing, plan, tick, Alarm, AlarmKind,
-    AlarmSettings, AlarmState, Event, ExpandOptions, IgnoreRules, InterruptGroup, JoinTarget,
-    Occurrence, OccurrenceKey, Transition, Verdict, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
+    apply_transitions, group_firing, judge_window, plan, tick, Alarm, AlarmKind, AlarmSettings,
+    AlarmState, Event, ExpandOptions, IgnoreRules, InterruptGroup, JoinTarget, Occurrence,
+    OccurrenceKey, QuietHours, Transition, Verdict, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
     WINDOW_DAYS,
 };
 use tolon_platform::Sound;
@@ -45,6 +45,7 @@ use tolon_store::AlarmRow;
 use crate::errors::AppError;
 use crate::interrupt::{self, AlarmShow};
 use crate::pipeline::{self, Db};
+use crate::settings;
 
 mod tauri_host;
 pub use tauri_host::{setup_fallback_actions, TauriHost};
@@ -185,44 +186,21 @@ pub struct Inputs {
     rules: IgnoreRules,
     sound: Sound,
     repeat: bool,
+    quiet: Option<QuietHours>,
 }
 
-pub fn load_inputs(db: &Db) -> anyhow::Result<Inputs> {
+/// `zone` is the machine's: quiet hours are local time.
+pub fn load_inputs(db: &Db, zone: Tz) -> anyhow::Result<Inputs> {
     let store = pipeline::lock(db);
-    let settings = store.settings();
-    let (alarm_default, rules_default) = (AlarmSettings::default(), IgnoreRules::default());
-    let lead = settings
-        .get(LEAD_MINUTES)?
-        .and_then(|v| v.as_u64())
-        .and_then(|n| u32::try_from(n).ok())
-        .unwrap_or(alarm_default.lead_minutes)
-        .clamp(MIN_LEAD_MINUTES, MAX_LEAD_MINUTES);
-    let alarm = AlarmSettings {
-        lead_minutes: lead,
-        again_at_start: pipeline::flag(&store, AGAIN_AT_START, alarm_default.again_at_start)?,
-    };
-    let rules = IgnoreRules {
-        keywords: settings
-            .get(IGNORE_KEYWORDS)?
-            .and_then(|v| v.as_str().map(str::to_owned))
-            .unwrap_or(rules_default.keywords),
-        without_other_attendees: pipeline::flag(
-            &store,
-            IGNORE_NO_ATTENDEES,
-            rules_default.without_other_attendees,
-        )?,
-    };
-    let sound = settings
-        .get(SOUND)?
-        .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or(Sound::SoftBell);
+    let s = settings::read(&store)?;
     Ok(Inputs {
-        opts: pipeline::expand_options(&store)?,
+        opts: s.expand_options(),
         events: pipeline::decode_events(store.events().list_enabled()?),
-        alarm,
-        rules,
-        sound,
-        repeat: pipeline::flag(&store, SOUND_REPEAT, true)?,
+        alarm: s.alarm(),
+        rules: s.rules(),
+        sound: s.sound.into(),
+        repeat: s.sound_repeat,
+        quiet: s.quiet_hours(zone),
     })
 }
 
@@ -232,11 +210,17 @@ pub fn occurrences(inputs: &Inputs, now: DateTime<Utc>, zone: Tz) -> Vec<Occurre
     let to = now
         .checked_add_signed(Duration::days(WINDOW_DAYS))
         .unwrap_or(DateTime::<Utc>::MAX_UTC);
-    let all = expand_window(&inputs.events, now - LOOKBACK, to, zone, &inputs.opts);
-    apply_rules(all, &inputs.rules)
-        .into_iter()
-        .filter_map(|(occ, verdict)| (verdict == Verdict::Keep).then_some(occ))
-        .collect()
+    judge_window(
+        &inputs.events,
+        now - LOOKBACK,
+        to,
+        zone,
+        &inputs.opts,
+        &inputs.rules,
+    )
+    .into_iter()
+    .filter_map(|(occ, verdict)| (verdict == Verdict::Keep).then_some(occ))
+    .collect()
 }
 
 /// The result of planning and ticking: the transitions of this tick, and every alarm that is Firing now.
@@ -254,11 +238,13 @@ pub struct Ticked {
 ///   window closed, and `plan` would then re-create it as Scheduled (S3.3, decision "Alarm behaviour").
 /// - The transitions are written after the prune, so an alarm that expired in this tick is still
 ///   stored (and visible) until the next one.
-/// - Pause and quiet hours are `None`: no setting exists yet.
+/// - Pause is `None`: no setting exists yet. Quiet hours hold firing back only (AC8.1): the plan
+///   is written as usual, so the tray still lists what is coming.
 pub fn plan_and_tick(
     db: &Db,
     occurrences: &[Occurrence],
     settings: &AlarmSettings,
+    quiet: Option<&QuietHours>,
     now: DateTime<Utc>,
 ) -> anyhow::Result<Ticked> {
     let store = pipeline::lock(db);
@@ -267,7 +253,7 @@ pub fn plan_and_tick(
     let planned: Vec<AlarmRow> = alarms.iter().map(|a| to_row(a, now)).collect();
     store.alarms().upsert_all(&planned)?;
     store.alarms().prune_before(&ts(now))?;
-    let transitions = tick(&alarms, now, None, None);
+    let transitions = tick(&alarms, now, None, quiet);
     apply_transitions(&mut alarms, &transitions);
     // Only the alarms that changed: a pruned row must not come back.
     let changed: Vec<AlarmRow> = transitions
@@ -537,9 +523,10 @@ impl<H: Host> Scheduler<H> {
                 tracing::info!("wake from sleep detected; alarms that fell due are handled now");
             }
             inner.last_tick = Some(now);
-            let evaluated = load_inputs(db).and_then(|inputs| {
-                let occs = occurrences(&inputs, now, self.host.zone());
-                let ticked = plan_and_tick(db, &occs, &inputs.alarm, now)?;
+            let zone = self.host.zone();
+            let evaluated = load_inputs(db, zone).and_then(|inputs| {
+                let occs = occurrences(&inputs, now, zone);
+                let ticked = plan_and_tick(db, &occs, &inputs.alarm, inputs.quiet.as_ref(), now)?;
                 Ok((inputs, occs, ticked))
             });
             match evaluated {
@@ -708,6 +695,11 @@ impl<H: Host> Scheduler<H> {
         self.host.stop_sound();
     }
 
+    /// One shot of `sound`, for the settings page's Play button (AC6.3).
+    pub fn preview(&self, sound: Sound) {
+        self.host.play(sound);
+    }
+
     /// Shows F10's test alarm. A real interrupt that is up is left alone.
     pub async fn show_test(&self) -> anyhow::Result<()> {
         let now = self.host.now();
@@ -823,7 +815,7 @@ impl<H: Host> Scheduler<H> {
             if firing.is_empty() {
                 return Ok(None);
             }
-            let inputs = load_inputs(db)?;
+            let inputs = load_inputs(db, self.host.zone())?;
             Ok(Some((firing, occurrences(&inputs, now, self.host.zone()))))
         });
         match waiting {

@@ -7,6 +7,7 @@ mod interrupt;
 mod pipeline;
 mod refresh;
 mod scheduler;
+mod settings;
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -81,6 +82,9 @@ fn main() -> anyhow::Result<()> {
             commands::alarms_already_there,
             commands::alarms_current,
             commands::alarms_test,
+            commands::settings_get,
+            commands::settings_set,
+            commands::sound_preview,
             #[cfg(feature = "e2e-loopback")]
             commands::alarms_e2e_state,
         ])

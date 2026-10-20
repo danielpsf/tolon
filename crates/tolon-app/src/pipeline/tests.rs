@@ -113,8 +113,13 @@ fn basic_feed(name: Option<&str>) -> String {
     )
 }
 
-fn titles(occurrences: &[Occurrence]) -> Vec<&str> {
-    occurrences.iter().map(|o| o.title.as_str()).collect()
+/// The titles of the meetings that get an alarm; the ignored ones are listed but left out here.
+fn titles(listed: &[ListedDto]) -> Vec<&str> {
+    listed
+        .iter()
+        .filter(|l| l.ignored.is_none())
+        .map(|l| l.occurrence.title.as_str())
+        .collect()
 }
 
 fn stored_uids(db: &Db, id: &str) -> anyhow::Result<Vec<String>> {
@@ -400,7 +405,7 @@ async fn remove_and_set_enabled_affect_today() -> TestResult {
     );
 
     set_enabled(&db, &one.id, true)?;
-    assert_eq!(today(&db, now(), Tz::UTC)?.len(), 3);
+    assert_eq!(titles(&today(&db, now(), Tz::UTC)?).len(), 3);
 
     remove(&db, &two.id)?;
     assert_eq!(titles(&today(&db, now(), Tz::UTC)?), ["Standup", "Review"]);
@@ -444,6 +449,41 @@ async fn ac8_2_today_ignores_all_day_declined_and_cancelled_by_default() -> Test
 }
 
 #[tokio::test]
+async fn s8_1_ignored_meetings_are_listed_with_their_reason() -> TestResult {
+    let db = db()?;
+    let feed_text = rules_feed().replace(
+        "END:VCALENDAR",
+        "BEGIN:VEVENT\r\nUID:focus\r\nSUMMARY:Focus time\r\nDTSTART:20261020T130000Z\r\nDTEND:20261020T140000Z\r\nEND:VEVENT\r\nEND:VCALENDAR",
+    );
+    let fake = Fake::new(vec![modified(feed_text, None)]);
+    add_ics(&db, &fake, SECRET_URL, now()).await?;
+    let listed = today(&db, now(), Tz::UTC)?;
+    let tags: Vec<(&str, Option<&str>)> = listed
+        .iter()
+        .map(|l| (l.occurrence.title.as_str(), l.ignored))
+        .collect();
+    assert_eq!(
+        tags,
+        [
+            ("All day", Some("all_day")),
+            ("Timed", None),
+            ("Cancelled", Some("cancelled")),
+            ("Declined", Some("declined")),
+            ("Focus time", Some("keyword")),
+        ]
+    );
+    // The DTO is the occurrence's fields plus `ignored`, as the panel reads it.
+    let first = serde_json::to_value(&listed[1])?;
+    assert_eq!(first["title"], json!("Timed"));
+    assert_eq!(first["ignored"], serde_json::Value::Null);
+    assert_eq!(
+        serde_json::to_value(&listed[4])?["ignored"],
+        json!("keyword")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn ac8_2_settings_turn_each_rule_off() -> TestResult {
     let db = db()?;
     let fake = Fake::new(vec![modified(rules_feed(), None)]);
@@ -461,10 +501,10 @@ async fn ac8_2_settings_turn_each_rule_off() -> TestResult {
         ["All day", "Timed", "Cancelled"]
     );
     set(IGNORE_DECLINED, false)?;
-    assert_eq!(today(&db, now(), Tz::UTC)?.len(), 4);
+    assert_eq!(titles(&today(&db, now(), Tz::UTC)?).len(), 4);
     // A value that is not a bool counts as missing, so the default applies again.
     lock(&db).settings().set(IGNORE_ALL_DAY, &json!("yes"))?;
-    assert_eq!(today(&db, now(), Tz::UTC)?.len(), 3);
+    assert_eq!(titles(&today(&db, now(), Tz::UTC)?).len(), 3);
     Ok(())
 }
 

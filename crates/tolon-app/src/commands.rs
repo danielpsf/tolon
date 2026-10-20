@@ -6,19 +6,29 @@
 
 use chrono::Utc;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tolon_core::Occurrence;
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
 use crate::interrupt::{AlarmShow, InterruptState};
-use crate::pipeline::{self, CalendarDto, Db};
+use crate::pipeline::{self, CalendarDto, Db, ListedDto};
 use crate::scheduler::{Act, Scheduler, TauriHost};
+use crate::settings::{self, SettingsDto, SoundChoice};
 
 /// The scheduler of the running app, managed next to `AppState`.
 pub type AppScheduler = Scheduler<TauriHost>;
 
-/// The settings window: the only one that may start the test alarm.
+/// The settings window: the only one that may start the test alarm or read and change settings.
 const MAIN_WINDOW: &str = "main";
+
+/// Every command of the settings window starts with this. Any other window, an interrupt or a page
+/// a future change loads, gets `not_found`: the capability files cannot scope app commands.
+fn main_only(label: &str) -> Result<(), CommandError> {
+    if label == MAIN_WINDOW {
+        Ok(())
+    } else {
+        Err(command_error(&AppError::NOT_FOUND.into()))
+    }
+}
 
 pub struct AppState {
     pub db: Db,
@@ -32,7 +42,7 @@ pub fn state(app: &AppHandle) -> anyhow::Result<State<'_, AppState>> {
 }
 
 /// Tells the UI to reload the calendar list and today's occurrences, and the scheduler to re-plan
-/// at once (AC8.3). The payload is empty. A settings command (L-016) must call this too.
+/// at once (AC8.3). The payload is empty. `settings_set` calls this too.
 pub fn notify(app: &AppHandle) {
     if let Some(scheduler) = app.try_state::<AppScheduler>() {
         scheduler.wake();
@@ -105,8 +115,9 @@ pub async fn calendars_sync_now(app: AppHandle, id: Option<String>) -> Result<()
         .map_err(|e| command_error(&e))
 }
 
+/// Today's meetings, the ignored ones included with their reason in `ignored` (S8.1).
 #[tauri::command]
-pub async fn occurrences_today(app: AppHandle) -> Result<Vec<Occurrence>, CommandError> {
+pub async fn occurrences_today(app: AppHandle) -> Result<Vec<ListedDto>, CommandError> {
     let today =
         state(&app).and_then(|s| pipeline::today(&s.db, Utc::now(), pipeline::local_zone()));
     today.map_err(|e| command_error(&e))
@@ -160,15 +171,64 @@ pub async fn alarms_current(app: AppHandle) -> Option<AlarmShow> {
 /// Only the settings window may ask: an interrupt window, or any page a future change loads, may not.
 #[tauri::command]
 pub async fn alarms_test(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), CommandError> {
-    if window.label() != MAIN_WINDOW {
-        return Err(command_error(&AppError::NOT_FOUND.into()));
-    }
+    main_only(window.label())?;
     let done = async {
         let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
         scheduler.show_test().await
     }
     .await;
     done.map_err(|e| command_error(&e))
+}
+
+// ---- Settings (F8, F9; the contract in docs/decisions.md, 2026-10-21) -------------------------
+
+#[tauri::command]
+pub async fn settings_get(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<SettingsDto, CommandError> {
+    main_only(window.label())?;
+    state(&app)
+        .and_then(|s| settings::get(&s.db))
+        .map_err(|e| command_error(&e))
+}
+
+/// Saves the patch at once (AC9.1), tells the settings window (`settings:changed`, the new
+/// settings) and the panel (`occurrences:changed`), and wakes the scheduler so the plan follows
+/// within 15 s (AC8.3). A refused field is `invalid:<field>` and nothing is saved.
+#[tauri::command]
+pub async fn settings_set(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    patch: serde_json::Value,
+) -> Result<SettingsDto, CommandError> {
+    main_only(window.label())?;
+    let dto = state(&app)
+        .and_then(|s| settings::apply(&s.db, &patch))
+        .map_err(|e| command_error(&e))?;
+    // The main window only: no other window has settings access.
+    if let Err(e) = app.emit_to(MAIN_WINDOW, "settings:changed", &dto) {
+        tracing::warn!(error = %e, "could not emit settings:changed");
+    }
+    notify(&app);
+    Ok(dto)
+}
+
+/// One shot of `sound` (`bell`, `chime` or `none`) for the Play button (AC6.3).
+#[tauri::command]
+pub async fn sound_preview(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    sound: serde_json::Value,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    let choice: SoundChoice = serde_json::from_value(sound)
+        .map_err(|_| command_error(&AppError("invalid:sound").into()))?;
+    let scheduler = app
+        .try_state::<AppScheduler>()
+        .ok_or_else(|| command_error(&AppError::NOT_READY.into()))?;
+    scheduler.preview(choice.into());
+    Ok(())
 }
 
 /// The alarm rows, for the WebDriver tests. It exists only in the end-to-end build, whose feature no
@@ -200,4 +260,47 @@ pub async fn alarms_e2e_state(app: AppHandle) -> Result<Vec<AlarmStateDto>, Comm
             until: r.until,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_commands_answer_only_the_main_window() {
+        assert_eq!(main_only("main"), Ok(()));
+        for label in ["interrupt-0", "interrupt-main", "Main", "main ", ""] {
+            assert_eq!(
+                main_only(label),
+                Err(CommandError { code: "not_found" }),
+                "{label:?}"
+            );
+        }
+    }
+
+    /// Every command that reads or changes settings, and the test alarm, checks the window first.
+    #[test]
+    fn every_main_window_command_checks_the_window_first() {
+        let source = include_str!("commands.rs");
+        for name in [
+            "alarms_test",
+            "settings_get",
+            "settings_set",
+            "sound_preview",
+        ] {
+            let start = source
+                .find(&format!("pub async fn {name}("))
+                .unwrap_or(usize::MAX);
+            let body = source.get(start..).unwrap_or_default();
+            let first = body
+                .split_once(") -> ")
+                .and_then(|(_, rest)| rest.split_once('{'))
+                .map(|(_, rest)| rest.trim_start())
+                .unwrap_or_default();
+            assert!(
+                first.starts_with("main_only(window.label())?;"),
+                "{name} must start with the window check"
+            );
+        }
+    }
 }

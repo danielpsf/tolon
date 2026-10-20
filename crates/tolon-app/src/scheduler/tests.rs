@@ -1354,3 +1354,121 @@ fn the_opener_plugin_is_never_registered() -> TestResult {
     );
     Ok(())
 }
+
+// ---- F8 quiet hours and rules, F6 preview (L-016) ------------------------------------------------
+
+/// An all-day event today, 20 Oct 2026. With the machine on UTC its lead alarm is due at 23:58
+/// the day before and its window stays open until 00:10.
+const ALL_DAY_TODAY: &str = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:holiday\r\nSUMMARY:Holiday\r\nDTSTART;VALUE=DATE:20261020\r\nDTEND;VALUE=DATE:20261021\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+/// Runs the real loop, lets its first tick pass, saves `patch` the way `settings_set` does (save,
+/// then wake), and waits for `uid`'s lead alarm to reach `state`. The fake clock stands still and
+/// the loop's next timed tick is 15 s of real time away, so only the wake can re-plan in time.
+async fn after_a_settings_change(
+    rig: &Rig,
+    patch: serde_json::Value,
+    uid: &str,
+    state: &str,
+) -> anyhow::Result<bool> {
+    let changed = async {
+        tokio::time::sleep(StdDuration::from_millis(200)).await;
+        settings::apply(&rig.db, &patch)?;
+        rig.sched.wake();
+        for _ in 0..50 {
+            if rig.state_of(uid, "lead")?.as_deref() == Some(state) {
+                return Ok(true);
+            }
+            tokio::time::sleep(StdDuration::from_millis(50)).await;
+        }
+        Ok(false)
+    };
+    tokio::select! {
+        () = rig.sched.run_loop(&rig.db) => Err(anyhow!("the loop ended")),
+        seen = changed => seen,
+    }
+}
+
+#[tokio::test]
+async fn s8_2_turning_ignore_all_day_off_makes_its_alarm_appear_within_15_s() -> TestResult {
+    let rig = Rig::from_feed(ALL_DAY_TODAY, at(0, 1, 0))?;
+    assert_eq!(
+        rig.tick_at(at(0, 1, 0)).await.fired,
+        0,
+        "all-day is ignored by default"
+    );
+    assert!(rig.states()?.is_empty());
+    let patch = serde_json::json!({ "ignore": { "all_day": false } });
+    assert!(after_a_settings_change(&rig, patch, "holiday", "firing").await?);
+    assert_eq!(rig.host().count("open"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac8_3_a_keyword_change_replans_without_a_restart() -> TestResult {
+    let rig = Rig::new(&[("f", "Focus time", "140000", "")], at(13, 59, 0))?;
+    assert_eq!(rig.tick_at(at(13, 59, 0)).await.fired, 0);
+    let patch = serde_json::json!({ "ignore": { "keywords": ["Lunch", "OOO"] } });
+    assert!(after_a_settings_change(&rig, patch, "f", "firing").await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac8_3_turning_a_rule_on_drops_a_planned_alarm() -> TestResult {
+    let rig = Rig::new(&[("solo", "Write-up", "140000", "")], at(13, 0, 0))?;
+    rig.tick_at(at(13, 0, 0)).await;
+    assert_eq!(rig.state_of("solo", "lead")?.as_deref(), Some("scheduled"));
+    settings::apply(
+        &rig.db,
+        &serde_json::json!({ "ignore": { "no_attendees": true } }),
+    )?;
+    rig.tick_at(at(13, 0, 15)).await;
+    assert!(rig.states()?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac8_1_quiet_hours_hold_everything_and_keep_the_plan() -> TestResult {
+    let rig = Rig::new(
+        &[
+            ("inside", "Review", "140000", ""),
+            ("after", "Retro", "150000", ""),
+        ],
+        at(13, 0, 0),
+    )?;
+    settings::apply(
+        &rig.db,
+        &serde_json::json!({ "quiet": { "enabled": true, "start": "13:00", "end": "15:00" } }),
+    )?;
+    // 14:00 starts inside quiet hours: no interrupt, no notification, no sound; still planned.
+    assert_eq!(rig.tick_at(at(13, 58, 5)).await.fired, 0);
+    assert_eq!(
+        rig.state_of("inside", "lead")?.as_deref(),
+        Some("scheduled")
+    );
+    // 15:00 starts after them: its lead time 14:58 is quiet, so it fires at the start.
+    assert_eq!(rig.tick_at(at(14, 58, 5)).await.fired, 0);
+    assert_eq!(rig.state_of("after", "lead")?.as_deref(), Some("scheduled"));
+    assert_eq!(rig.state_of("inside", "lead")?.as_deref(), Some("expired"));
+    for call in ["open", "notify", "play"] {
+        assert_eq!(rig.host().count(call), 0, "{call}");
+    }
+    assert_eq!(rig.tick_at(at(15, 0, 5)).await.fired, 1);
+    assert_eq!(rig.state_of("after", "lead")?.as_deref(), Some("firing"));
+    assert_eq!(rig.host().count("open"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac8_1_quiet_hours_are_off_by_default() -> TestResult {
+    let rig = Rig::new(&[("night", "Late call", "220000", "")], at(21, 0, 0))?;
+    assert_eq!(rig.tick_at(at(21, 58, 5)).await.fired, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac6_3_the_preview_plays_once_and_opens_nothing() -> TestResult {
+    let rig = Rig::new(&[], at(13, 0, 0))?;
+    rig.sched.preview(Sound::Chime);
+    assert_eq!(rig.host().calls(), ["play"]);
+    Ok(())
+}

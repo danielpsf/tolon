@@ -10,21 +10,21 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use chrono_tz::Tz;
 use serde::Serialize;
 use tolon_core::{
-    expand_window, parse_ics, wall_clock, CalendarId, Event, ExpandOptions, Occurrence,
-    ParseOptions,
+    judge_window, parse_ics, wall_clock, CalendarId, Event, Occurrence, ParseOptions, Verdict,
 };
 use tolon_store::{Calendar, FeedEvent, Store};
 use tolon_sync::{normalize_url, redact_url, FetchError, FetchOutcome, IcsFetcher};
 
 use crate::errors::{fetch_code, AppError, SyncErrorDto};
+use crate::settings;
 
 /// The store behind a mutex. A guard is never held across an await.
 pub type Db = Mutex<Store>;
 
 /// Settings keys for the ignore rules (AC8.2). The value is a JSON bool; a missing key means the default.
-const IGNORE_ALL_DAY: &str = "ignore_all_day";
-const IGNORE_DECLINED: &str = "ignore_declined";
-const IGNORE_CANCELLED: &str = "ignore_cancelled";
+pub(crate) const IGNORE_ALL_DAY: &str = "ignore_all_day";
+pub(crate) const IGNORE_DECLINED: &str = "ignore_declined";
+pub(crate) const IGNORE_CANCELLED: &str = "ignore_cancelled";
 
 /// What the UI sees of a calendar. The full URL never leaves the core (AC1.3): `display_url` is
 /// scheme and host only, from `redact_url`.
@@ -276,15 +276,6 @@ pub(crate) fn flag(store: &Store, key: &str, default: bool) -> anyhow::Result<bo
         .unwrap_or(default))
 }
 
-/// AC2.3, AC2.4, AC8.2: all-day off, declined on, cancelled on, unless a setting says otherwise.
-pub(crate) fn expand_options(store: &Store) -> anyhow::Result<ExpandOptions> {
-    Ok(ExpandOptions {
-        ignore_cancelled: flag(store, IGNORE_CANCELLED, true)?,
-        ignore_declined: flag(store, IGNORE_DECLINED, true)?,
-        include_all_day: !flag(store, IGNORE_ALL_DAY, true)?,
-    })
-}
-
 /// The stored events as core events. A payload that no longer decodes is skipped.
 pub(crate) fn decode_events(stored: Vec<tolon_store::Event>) -> Vec<Event> {
     let mut events = Vec::new();
@@ -300,21 +291,42 @@ pub(crate) fn decode_events(stored: Vec<tolon_store::Event>) -> Vec<Event> {
     events
 }
 
-/// Today's occurrences from the enabled calendars, in the machine's zone, after the ignore rules.
-pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<Occurrence>> {
+/// One of today's occurrences as `occurrences_today` sends it: the occurrence, and why it gets no
+/// alarm, if it gets none (S8.1): `keyword`, `all_day`, `declined`, `cancelled` or `no_attendees`.
+#[derive(Debug, Serialize)]
+pub struct ListedDto {
+    #[serde(flatten)]
+    pub occurrence: Occurrence,
+    pub ignored: Option<&'static str>,
+}
+
+/// Today's occurrences from the enabled calendars, in the machine's zone, each with the ignore
+/// rule that silences it (AC8.2, S8.1). The ignored ones stay listed so the panel can tag them.
+pub fn today(db: &Db, now: DateTime<Utc>, local: Tz) -> anyhow::Result<Vec<ListedDto>> {
     let (from, to) = today_window(now, local)?;
     // The store guard is released before the (CPU-bound) expansion.
-    let (opts, stored) = {
+    let (settings, stored) = {
         let store = lock(db);
-        (expand_options(&store)?, store.events().list_enabled()?)
+        (settings::read(&store)?, store.events().list_enabled()?)
     };
-    Ok(expand_window(
+    let judged = judge_window(
         &decode_events(stored),
         from,
         to,
         local,
-        &opts,
-    ))
+        &settings.expand_options(),
+        &settings.rules(),
+    );
+    Ok(judged
+        .into_iter()
+        .map(|(occurrence, verdict)| ListedDto {
+            occurrence,
+            ignored: match verdict {
+                Verdict::Keep => None,
+                Verdict::Ignored(reason) => Some(reason.code()),
+            },
+        })
+        .collect())
 }
 
 #[cfg(test)]
