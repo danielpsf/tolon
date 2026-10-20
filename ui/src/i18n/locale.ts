@@ -32,6 +32,22 @@ export type Locale = keyof typeof catalogues;
 
 export const LOCALES = Object.keys(catalogues) as Locale[];
 
+/** Each language in its own words, for the language setting. Never translated. */
+export const NATIVE_NAMES: Record<Locale, string> = {
+  "en-US": "English (US)",
+  "en-GB": "English (UK)",
+  "pt-BR": "Português (Brasil)",
+  "pt-PT": "Português (Portugal)",
+  de: "Deutsch",
+  es: "Español",
+  ar: "العربية",
+  tr: "Türkçe",
+  hi: "हिन्दी",
+  "zh-CN": "简体中文",
+  ja: "日本語",
+  he: "עברית",
+};
+
 // docs/decisions.md: pt-AO falls to pt-PT, en-IE to en-GB. Portuguese outside Brazil follows pt-PT.
 const PT_PT_REGIONS = new Set(["PT", "AO", "MZ", "CV", "GW", "ST", "TL", "MO"]);
 const EN_US_REGIONS = new Set(["US", "CA", "PH"]);

@@ -73,7 +73,17 @@ export function syncErrorText(m: Messages, error: SyncError): string {
 
 /** A rejected command to copy. A code from a newer core falls back to the internal-error copy. */
 export function commandErrorText(m: Messages, error: Pick<CommandError, "code">): string {
+  const invalid = /^invalid:(.+)$/.exec(error.code);
+  if (invalid) return m.errors.invalid[invalidKind(invalid[1])];
   return (m.errors.command as Record<string, string>)[error.code] ?? m.errors.command.internal;
+}
+
+/** `settings_set` names the refused field: `lead_minutes`, the quiet hours times, the keywords. */
+function invalidKind(field: string): keyof Messages["errors"]["invalid"] {
+  if (field === "lead_minutes") return "lead_minutes";
+  if (/^quiet|^(start|end)$/.test(field)) return "time";
+  if (/keywords/.test(field)) return "keywords";
+  return "other";
 }
 
 /** `sync_log.detail` to copy: `skipped:N` is the one coded detail today. Anything else is not for the user. */

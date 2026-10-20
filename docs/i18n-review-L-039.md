@@ -56,3 +56,94 @@ The orchestrator recorded the clock, digit and key rules in `docs/decisions.md`,
 - Key names stay in Latin script in every language (Esc, Enter, D); only Space is translated. D also matches the physical key (`KeyD`), so it works on Arabic, Hebrew, Hindi and other layouts.
 - Key hint sentences are joined with a space, except after the full-width "。" in zh-CN and ja.
 - Turkish uses informal "sen", to match "du" and "tú".
+
+## L-017
+
+The settings copy of L-017 (46 new strings: two nav labels, the Alarms, Quiet hours, Rules, Appearance, Language and Startup pages, and four `invalid:<field>` errors) was drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues and checked by the same judge. The prompts for de, tr, hi, zh-CN and ja also held the L-040 copy nits (`nav.about` in ja and hi, `relative.startsNow` and `interrupt.snooze` in ja, `ignoreMatching` in de, `timeRange` in tr, `snooze` in zh-CN). en-US is the source and was not judged.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000.
+- One locale per call. Each prompt held only the new strings as key, en-US source and translation, a short description of each page, the copy rules and the language rules of the L-039 method (de "du", es "tú", pt-BR "você", pt-PT "ecrã", ar punctuation, tr "sen", hi "आप" and the danda, zh-CN and ja full-width punctuation, he gender-neutral instructions, en-GB spelling).
+- Strict JSON answers. Round 2 ran on every locale with an accepted round 1 fix; en-GB had none.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 2161 | 3179 (3092) | 5340 | 17.8 | 1 | fix |
+| de | 1 | 2181 | 3650 (3425) | 5831 | 20.4 | 3 | fix |
+| de | 2 | 2186 | 4106 (3936) | 6292 | 36.6 | 2 | fix |
+| es | 1 | 2122 | 5752 (5399) | 7874 | 32.9 | 4 | fix |
+| es | 2 | 2129 | 5272 (5030) | 7401 | 41.7 | 3 | fix |
+| pt-BR | 1 | 2239 | 5569 (5309) | 7808 | 52.8 | 3 | fix |
+| pt-BR | 2 | 2239 | 3508 (3487) | 5747 | 46.3 | 0 | ok |
+| pt-PT | 1 | 2258 | 4946 (4754) | 7204 | 27.1 | 2 | fix |
+| pt-PT | 2 | 2264 | 2654 (2633) | 4918 | 14.7 | 0 | ok |
+| ar | 1 | 2188 | 3391 (3184) | 5579 | 18.7 | 2 | fix |
+| ar | 2 | 2198 | 4818 (4683) | 7016 | 39.6 | 1 | fix |
+| tr | 1 | 2242 | 5260 (5060) | 7502 | 43.4 | 2 | fix |
+| tr | 2 | 2243 | 4104 (4011) | 6347 | 25.7 | 1 | fix |
+| hi | 1 | 2178 | 3038 (2804) | 5216 | 18.2 | 4 | fix |
+| hi | 2 | 2178 | 3236 (3143) | 5414 | 24.9 | 1 | fix |
+| zh-CN | 1 | 2210 | 5429 (5324) | 7639 | 48.5 | 1 | fix |
+| zh-CN | 2 | 2211 | 5223 (5131) | 7434 | 37.6 | 1 | fix |
+| ja | 1 | 2188 | 8474 (8153) | 10662 | 61.1 | 4 | fix |
+| ja | 2 | 2190 | 11259 (11103) | 13449 | 65.5 | 2 | fix |
+| he | 1 | 2299 | 8325 (8072) | 10624 | 40.3 | 3 | fix |
+| he | 2 | 2300 | 3977 (3968) | 6277 | 21.8 | 0 | ok |
+| All (21 calls) | | 46404 | 105170 | 151574 | | 40 | |
+
+### Issues and decisions
+
+40 issues: 31 accepted, 9 rejected. The two-round cap is reached; the round 2 fixes were applied without a third call.
+
+Rejected:
+
+| Locale | Round | Key | Judge's point | Why rejected |
+|---|---|---|---|---|
+| en-GB, es, pt-BR, ja | 1 | `settings.rules.removeKeyword` | The `(word: string)` annotation was dropped. | Not a copy issue: every catalogue is typed `Messages`, so the parameter type is inferred; `tsc` is green. |
+| es, zh-CN | 2 | `settings.rules.removeKeyword` | Same. | Same. |
+| hi | 1, 2 | `nav.about` | "के बारे में" is a dangling postposition; suggests "जानकारी". | The orchestrator chose "के बारे में" in L-040. Left for the native review. |
+| es | 2 | `settings.alarms.soundChime` | "Carillón" is misspelled. | The RAE spelling is "carillón". |
+
+Accepted, round 1:
+
+| Locale | Key | Before | After |
+|---|---|---|---|
+| ar | `quiet.weekends` | عطلة نهاية الأسبوع هادئة كلها | هدوء طوال عطلة نهاية الأسبوع |
+| ar | `invalid.keywords` | 50 كلمة على الأكثر، وكل كلمة حتى 64 حرفًا. | استخدم 50 كلمة كحد أقصى، بما لا يتجاوز 64 حرفًا لكل كلمة. |
+| es | `alarms.repeat` | Repetir cada 30 s hasta descartar | Repetir cada 30 s hasta que se descarte |
+| es | `rules.keywordsHint` | No importan las mayúsculas. | No se distingue entre mayúsculas y minúsculas. |
+| es | `invalid.time` | Escribe una hora con horas y minutos. | Introduce una hora en formato de horas y minutos. |
+| he | `quiet.subtitle` | ... את מה שמתקרב. | ... את האירועים הקרובים. |
+| he | `startup.subtitle` | תתפספס (colloquial) | תוחמץ |
+| he | `invalid.lead_minutes` | של 1 עד 60 דקות | בין 1 ל-60 דקות |
+| hi | `alarms.leadSuffix` | मिनट पहले, शुरुआत से | मिनट (शुरुआत से पहले) |
+| hi | `appearance.light`, `appearance.dark` | हल्की, गहरी | लाइट, डार्क |
+| pt-BR | `alarms.repeat` | até dispensar | até ser dispensado |
+| pt-BR | `rules.noAttendeesHint` | que você cria para si | que você mesmo cria |
+| pt-PT | `alarms.repeat` | Repetir a cada 30 s até dispensar | Repetir de 30 em 30 s até ser dispensado |
+| pt-PT | `invalid.time` | Introduza uma hora em horas e minutos. | Introduza a hora no formato de horas e minutos. |
+| tr | `alarms.leadSuffix` | dakika önce, başlangıçtan | dakika (başlangıçtan önce) |
+| tr | `appearance.subtitle` | bu ayarı izler | bu ayara uyar |
+| zh-CN | `quiet.weekendsHint` | 周末全天保持安静。 | 周末全天保持勿扰。 |
+| de | `alarms.subtitle` | welcher Ton spielt | welcher Ton abgespielt wird |
+| de | `rules.declinedHint` | denen du abgesagt hast | die du abgelehnt hast |
+| de | `startup.nextBuild` | Wirkt ab dem nächsten Build. | Wird ab dem nächsten Build wirksam. |
+| ja | `alarms.takeOver` | 画面の表示 | 全画面表示 |
+| ja | `rules.keywordPlaceholder`, `rules.keywordsHint` | 語を追加 | キーワードを追加 (the label and the error use キーワード too) |
+
+Accepted, round 2:
+
+| Locale | Key | Before | After |
+|---|---|---|---|
+| ar | `alarms.leadSuffix` | دقائق قبل البدء | دقيقة قبل البدء (right after numbers 11 to 60) |
+| de | `alarms.repeat` | bis verworfen | bis er verworfen wird |
+| de | `quiet.weekends` | Wochenenden ganz ruhig | Ganzes Wochenende ruhig |
+| es | `rules.noAttendeesHint` | que te pones tú | que programas tú mismo |
+| ja | `alarms.leadLabel` | 開始前の分数 | 開始何分前 |
+| ja | `quiet.enabled` | サイレント時間を使う | サイレント時間帯を使う |
+| tr | `alarms.takeOver` | Ekranı kaplama | Ekranı kapla |
+
+The L-040 nits raised no issue except hi `nav.about` (rejected above). A native review of every catalogue is still required before release.

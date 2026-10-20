@@ -6,7 +6,7 @@ import { catalogues, resolveLocale, RTL_LOCALES, type Locale } from "./i18n/loca
 
 export type { Messages } from "./i18n/en-US";
 export type { Locale } from "./i18n/locale";
-export { LOCALES, resolveLocale } from "./i18n/locale";
+export { LOCALES, NATIVE_NAMES, RTL_LOCALES, resolveLocale } from "./i18n/locale";
 
 type Instant = Date | number;
 

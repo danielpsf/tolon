@@ -11,7 +11,9 @@ export const enUS = {
     calendars: "Calendars",
     alarms: "Alarms",
     quietHours: "Quiet hours",
+    rules: "Rules",
     appearance: "Appearance",
+    language: "Language",
     startup: "Startup",
     about: "About",
     comingSoon: "Coming in a later version.",
@@ -43,6 +45,60 @@ export const enUS = {
     urlHint: "Tolon keeps the link on this computer and only reads from it.",
     adding: "Adding calendar",
     empty: "No calendars yet. Paste an iCal URL to add one.",
+  },
+  settings: {
+    sameAsSystem: "Same as the system",
+    alarms: {
+      subtitle: "When to take over the screen, and what to play.",
+      takeOver: "Take over the screen",
+      leadLabel: "Minutes before the start",
+      leadSuffix: "minutes before the start",
+      againAtStart: "Again at the start if not dismissed",
+      sound: "Sound",
+      soundBell: "Soft bell",
+      soundChime: "Chime",
+      soundNone: "None",
+      play: "Play",
+      repeat: "Repeat every 30 s until dismissed",
+      keyboard: "Keyboard",
+      spaceKey: "Space",
+    },
+    quiet: {
+      subtitle: "No alarm takes over the screen in these hours. Tolon still lists what is coming.",
+      enabled: "Use quiet hours",
+      from: "From",
+      to: "To",
+      weekends: "Quiet all weekend",
+      weekendsHint: "Weekends stay quiet all day.",
+    },
+    rules: {
+      subtitle: "Events that never take over the screen.",
+      allDayHint: "Holidays, birthdays and days out of office.",
+      declinedHint: "Invitations you said no to.",
+      cancelled: "Canceled events",
+      cancelledHint: "Events the organizer canceled but left in the calendar.",
+      noAttendeesHint: "Events with nobody invited, such as reminders you set yourself.",
+      keywords: "Events with these words in the title",
+      keywordsHint: "Upper and lower case do not matter. Press Enter or a comma to add a word.",
+      keywordPlaceholder: "Add a word",
+      removeKeyword: (word: string) => `Remove ${word}`,
+    },
+    appearance: {
+      subtitle: "The alarm screen follows this setting too.",
+      theme: "Theme",
+      light: "Light",
+      dark: "Dark",
+    },
+    language: {
+      subtitle: "The language of every Tolon window.",
+      label: "Language",
+    },
+    startup: {
+      subtitle: "Tolon can start on its own, so no meeting slips by after a restart.",
+      atLogin: "Start Tolon when I log in",
+      atLoginHint: "Tolon waits in the background and takes over the screen only before a meeting.",
+      nextBuild: "Takes effect in the next build.",
+    },
   },
   interrupt: {
     region: "Meeting alarm",
@@ -96,6 +152,12 @@ export const enUS = {
       tooManyRequests: "too many requests",
       server: "server error",
     },
+    invalid: {
+      lead_minutes: "Choose a lead time from 1 to 60 minutes.",
+      time: "Enter a time as hours and minutes.",
+      keywords: "Use at most 50 words of up to 64 characters each.",
+      other: "Tolon could not save that value. Try another one.",
+    },
     command: {
       unsupported_scheme: "Tolon can only add https or webcal links.",
       invalid_url: "That is not a valid calendar URL.",
@@ -116,6 +178,7 @@ export const enUS = {
     };
     command: Record<CommandErrorCode, string>;
     httpHints: Record<"unauthorized" | "forbidden" | "tooManyRequests" | "server", string>;
+    invalid: Record<"lead_minutes" | "time" | "keywords" | "other", string>;
   };
 };
 
