@@ -9,3 +9,5 @@ ui/dist/
 *.key
 *.key.pub
 .tauri/
+__pycache__/
+*.pyc
