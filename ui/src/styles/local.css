@@ -93,3 +93,152 @@
   max-width: 560px;
   margin-top: var(--sm-space-5);
 }
+
+/*
+ * Interrupt window (mockup 01): full-bleed moss in both themes. `--sm-moss` is the fill and
+ * `--sm-on-moss` the text; Swiss Moss flips both for dark, so one rule set serves light and dark.
+ * Every length is a multiple of --tl-u, one design pixel at 1280x800, so the page grows with the
+ * screen up to 3840x2160 and beyond (the display-xl clamp stops at 112 px, too small on a 4K screen).
+ */
+.tl-int {
+  --tl-u: max(1px, calc(100vmin / 800));
+  --tl-ring: color-mix(in srgb, var(--sm-on-moss) 45%, transparent);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  overflow: hidden;
+  padding: calc(50 * var(--tl-u)) calc(96 * var(--tl-u)) calc(64 * var(--tl-u));
+  background: var(--sm-moss);
+  color: var(--sm-on-moss);
+  font-size: calc(15 * var(--tl-u));
+  cursor: default;
+  user-select: none;
+}
+:root[data-theme="dark"] .tl-int {
+  --tl-ring: color-mix(in srgb, var(--sm-ink) 55%, transparent);
+}
+.tl-int :focus-visible {
+  outline: calc(3 * var(--tl-u)) solid var(--sm-on-moss);
+  outline-offset: calc(4 * var(--tl-u));
+  border-radius: var(--sm-radius-pill);
+}
+.tl-int-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(24 * var(--tl-u));
+}
+.tl-int-count {
+  display: flex;
+  align-items: center;
+  gap: calc(20 * var(--tl-u));
+}
+.tl-int-count svg {
+  width: calc(44 * var(--tl-u));
+  height: calc(38 * var(--tl-u));
+}
+.tl-int-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  padding-top: calc(86 * var(--tl-u));
+  overflow-y: auto;
+}
+.tl-int-head {
+  display: flex;
+  flex-direction: column;
+  gap: calc(18 * var(--tl-u));
+}
+.tl-int .tl-int-title {
+  font-size: calc(112 * var(--tl-u));
+  overflow-wrap: anywhere;
+}
+.tl-int .tl-int-title[data-len="long"] {
+  font-size: calc(72 * var(--tl-u));
+}
+.tl-int .tl-int-title[data-len="longer"] {
+  font-size: calc(48 * var(--tl-u));
+}
+.tl-int-details {
+  margin: 0;
+  font-size: calc(20 * var(--tl-u));
+  line-height: 1.2;
+}
+.tl-int-hint {
+  margin: calc(64 * var(--tl-u)) 0 0;
+  font-size: calc(14 * var(--tl-u));
+}
+.tl-int-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(24 * var(--tl-u));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Several meetings in the same minute (S3.6): one row each, the meeting on the left and its own Join button on the right. */
+.tl-int-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: calc(40 * var(--tl-u));
+  row-gap: calc(4 * var(--tl-u));
+}
+.tl-int-item > .sm-btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.tl-int .tl-int-item .sm-display-l {
+  font-size: calc(44 * var(--tl-u));
+  overflow-wrap: anywhere;
+}
+.tl-int-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(12 * var(--tl-u));
+}
+.tl-int .sm-btn {
+  height: auto;
+  min-height: calc(64 * var(--tl-u));
+  padding: calc(8 * var(--tl-u)) calc(38 * var(--tl-u));
+  border-color: var(--tl-ring);
+  color: var(--sm-on-moss);
+  font-size: calc(16 * var(--tl-u));
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.tl-int .sm-btn:hover {
+  background: var(--tl-ring);
+  color: var(--sm-on-moss);
+}
+.tl-int .sm-btn.tl-primary {
+  border-color: var(--sm-on-moss);
+  background: var(--sm-on-moss);
+  color: var(--sm-moss-deep);
+  padding-inline: calc(54 * var(--tl-u));
+  font-size: calc(19 * var(--tl-u));
+  font-weight: 600;
+}
+.tl-int .sm-btn.tl-primary:hover {
+  background: var(--sm-on-moss);
+  color: var(--sm-moss-deep);
+}
+.tl-int-consequence {
+  flex: 1 1 calc(280 * var(--tl-u));
+  max-width: calc(460 * var(--tl-u));
+  margin: 0 0 0 auto;
+  font-size: calc(14 * var(--tl-u));
+  text-align: right;
+}
+.tl-int-error {
+  position: fixed;
+  right: calc(96 * var(--tl-u));
+  bottom: calc(16 * var(--tl-u));
+  margin: 0;
+  font-size: calc(14 * var(--tl-u));
+}
