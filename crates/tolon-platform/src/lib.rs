@@ -17,6 +17,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 use std::num::NonZeroIsize;
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "linux")]
 pub use linux::LinuxPlatform;
@@ -247,12 +248,25 @@ pub trait Platform: Send + Sync {
     /// asks once before an alarm and runs the F4.5 fallback on [`Takeover::Degraded`]. Every
     /// implementation answers for itself; there is no default.
     fn takeover_support(&self) -> Takeover;
+
+    /// Whether the OS starts Tolon at login, read from the OS on every call, never cached
+    /// (AC9.4). [`StartAtLogin::RequiresApproval`] (macOS) means registered but not yet allowed
+    /// in System Settings, Login Items; the switch shows off and the UI says so.
+    fn start_at_login(&self) -> Result<StartAtLogin, PlatformError>;
+
+    /// Register or remove the login item for the running program. Call
+    /// [`Platform::start_at_login`] afterwards for the real state: macOS may register and still
+    /// wait for approval. Removing an item that is not there succeeds.
+    fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError>;
 }
 
 /// Implementation for CI and tests: one fixed 1440x900 primary screen at 2x; raising does
-/// nothing and reports no focus. It is also what unknown OSes get, so it reports
+/// nothing and reports no focus; the login item is one flag in memory, shared by the process
+/// like the one login item of a real machine, so tests that set it must not run in parallel. It is also what unknown OSes get, so it reports
 /// `Degraded(Unsupported)`: nothing here can cover the screen.
 pub struct StubPlatform;
+
+static STUB_START_AT_LOGIN: AtomicBool = AtomicBool::new(false);
 
 impl Platform for StubPlatform {
     fn name(&self) -> &'static str {
@@ -286,6 +300,19 @@ impl Platform for StubPlatform {
 
     fn takeover_support(&self) -> Takeover {
         Takeover::Degraded(Reason::Unsupported)
+    }
+
+    fn start_at_login(&self) -> Result<StartAtLogin, PlatformError> {
+        Ok(if STUB_START_AT_LOGIN.load(Ordering::SeqCst) {
+            StartAtLogin::Enabled
+        } else {
+            StartAtLogin::Disabled
+        })
+    }
+
+    fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError> {
+        STUB_START_AT_LOGIN.store(enabled, Ordering::SeqCst);
+        Ok(())
     }
 }
 
@@ -504,6 +531,14 @@ mod tests {
             StubPlatform.takeover_support(),
             Takeover::Degraded(Reason::Unsupported)
         );
+    }
+
+    #[test]
+    fn ac9_4_stub_login_item_is_read_back_from_memory() {
+        assert_eq!(StubPlatform.set_start_at_login(true), Ok(()));
+        assert_eq!(StubPlatform.start_at_login(), Ok(StartAtLogin::Enabled));
+        assert_eq!(StubPlatform.set_start_at_login(false), Ok(()));
+        assert_eq!(StubPlatform.start_at_login(), Ok(StartAtLogin::Disabled));
     }
 
     #[test]

@@ -9,18 +9,41 @@
 //! [`Platform::takeover_support`] reports [`Takeover::Degraded`] and the app runs the F4.5
 //! fallback (notification with Join and Snooze, alarm sound).
 //!
+//! Start at login is an XDG autostart entry (`login.rs` holds the logic every OS tests).
+//!
 //! `screens` returns `Err(Unsupported)`: GDK and XRandR are the only sources, both need GTK or a
 //! new X11 dependency, and Tauri's `available_monitors` already reads them. An error, not an
 //! empty list, so a successful result always has exactly one main screen.
 
+use crate::login::{autostart_file, read_autostart, remove_autostart, write_autostart};
 use crate::session::{detect_session, session_of_handle, takeover_for};
-use crate::{Focus, Platform, PlatformError, Raised, Screen, Takeover};
+use crate::{Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
 use raw_window_handle::HasWindowHandle;
+use std::path::PathBuf;
 
 pub struct LinuxPlatform;
 
 fn env(name: &str) -> Option<String> {
     std::env::var(name).ok()
+}
+
+/// The autostart file and the program it must start. `$APPIMAGE` wins over the running exe,
+/// which inside an AppImage is a temporary mount that is gone after the next start. A Flatpak
+/// sandbox has its own config home that the host never reads, so it is unsupported here.
+fn login_target() -> Result<(PathBuf, String), PlatformError> {
+    if env("FLATPAK_ID").is_some() {
+        return Err(PlatformError::Unsupported);
+    }
+    let file = autostart_file(env("XDG_CONFIG_HOME").as_deref(), env("HOME").as_deref())
+        .ok_or_else(|| PlatformError::Io("no config directory: HOME is not set".into()))?;
+    let exe = match env("APPIMAGE").filter(|p| !p.is_empty()) {
+        Some(p) => p,
+        None => std::env::current_exe()
+            .map_err(|e| PlatformError::Io(e.to_string()))?
+            .to_string_lossy()
+            .into_owned(),
+    };
+    Ok((file, exe))
 }
 
 impl Platform for LinuxPlatform {
@@ -51,6 +74,20 @@ impl Platform for LinuxPlatform {
             env("XDG_SESSION_TYPE").as_deref(),
             env("WAYLAND_DISPLAY").as_deref(),
         ))
+    }
+
+    fn start_at_login(&self) -> Result<StartAtLogin, PlatformError> {
+        let (file, exe) = login_target()?;
+        read_autostart(&file, &exe)
+    }
+
+    fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError> {
+        let (file, exe) = login_target()?;
+        if enabled {
+            write_autostart(&file, &exe)
+        } else {
+            remove_autostart(&file)
+        }
     }
 }
 
@@ -94,5 +131,37 @@ mod tests {
             LinuxPlatform.raise_above_everything(&Closed),
             Err(PlatformError::HandleUnavailable(_))
         ));
+    }
+
+    // The only test that touches these variables, so it cannot race with the others.
+    #[test]
+    fn ac9_4_linux_login_item_follows_the_environment() -> Result<(), PlatformError> {
+        let home = std::env::temp_dir().join(format!("tolon-linux-{}", std::process::id()));
+        let file = home.join("autostart").join("dev.tolon.desktop");
+        std::env::set_var("XDG_CONFIG_HOME", &home);
+        std::env::remove_var("FLATPAK_ID");
+        std::env::set_var("APPIMAGE", "/home/a b/Tolon.AppImage");
+
+        assert_eq!(LinuxPlatform.start_at_login()?, StartAtLogin::Disabled);
+        LinuxPlatform.set_start_at_login(true)?;
+        let written =
+            std::fs::read_to_string(&file).map_err(|e| PlatformError::Io(e.to_string()))?;
+        assert!(written.contains("Exec=\"/home/a b/Tolon.AppImage\"\n"));
+        assert_eq!(LinuxPlatform.start_at_login()?, StartAtLogin::Enabled);
+        // The same file no longer matches once $APPIMAGE points elsewhere: read, never cached.
+        std::env::set_var("APPIMAGE", "/home/a/Other.AppImage");
+        assert_eq!(LinuxPlatform.start_at_login()?, StartAtLogin::Disabled);
+        LinuxPlatform.set_start_at_login(false)?;
+        assert!(!file.exists());
+
+        std::env::set_var("FLATPAK_ID", "dev.tolon.desktop");
+        assert_eq!(
+            LinuxPlatform.start_at_login(),
+            Err(PlatformError::Unsupported)
+        );
+        std::env::remove_var("FLATPAK_ID");
+        std::env::remove_var("APPIMAGE");
+        let _ = std::fs::remove_dir_all(&home);
+        Ok(())
     }
 }

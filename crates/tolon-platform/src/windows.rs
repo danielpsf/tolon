@@ -13,14 +13,18 @@
 //! even when the OS refuses focus. In that case `raise_above_everything` still returns `Ok`, with
 //! `Raised { focus: Focus::No }`; the app decides whether to add the F4.5 notification.
 
+use crate::login::{windows_run_value, windows_run_value_is};
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
-use crate::{hwnd_of, Focus, Platform, PlatformError, Raised, Screen, Takeover};
+use crate::{hwnd_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
-use windows::core::BOOL;
-use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::core::{w, BOOL, PCWSTR};
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
+};
+use windows::Win32::System::Registry::{
+    RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
@@ -126,6 +130,58 @@ fn take_foreground(hwnd: HWND) -> bool {
     }
 }
 
+/// Start at login: the per-user `Run` key, no admin rights. The key exists in every profile.
+const RUN_KEY: PCWSTR = w!(r"Software\Microsoft\Windows\CurrentVersion\Run");
+const RUN_VALUE: PCWSTR = w!("Tolon");
+
+fn current_exe() -> Result<String, PlatformError> {
+    std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| PlatformError::Io(e.to_string()))
+}
+
+/// The `Tolon` value of the `Run` key, or `None` when it is not there.
+fn read_run_value() -> Result<Option<String>, PlatformError> {
+    let mut bytes = 0u32;
+    // SAFETY: with no data buffer the call only reports the size in `bytes`, a live u32.
+    let size = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            RUN_KEY,
+            RUN_VALUE,
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut bytes),
+        )
+    };
+    if size == ERROR_FILE_NOT_FOUND {
+        return Ok(None);
+    }
+    size.ok().map_err(|e| os_error("RegGetValueW", &e))?;
+    let mut buf = vec![0u16; (bytes as usize).div_ceil(2)];
+    // SAFETY: `buf` holds `bytes` bytes (rounded up to whole u16) and stays alive for the call.
+    unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            RUN_KEY,
+            RUN_VALUE,
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr().cast()),
+            Some(&mut bytes),
+        )
+    }
+    .ok()
+    .map_err(|e| os_error("RegGetValueW", &e))?;
+    let len = (bytes as usize / 2).min(buf.len());
+    Ok(Some(
+        String::from_utf16_lossy(&buf[..len])
+            .trim_end_matches('\0')
+            .to_owned(),
+    ))
+}
+
 impl Platform for WindowsPlatform {
     fn name(&self) -> &'static str {
         "windows"
@@ -183,6 +239,46 @@ impl Platform for WindowsPlatform {
 
     fn takeover_support(&self) -> Takeover {
         Takeover::Full
+    }
+
+    /// Enabled only when the value starts this exe: an entry left by a moved install is off.
+    fn start_at_login(&self) -> Result<StartAtLogin, PlatformError> {
+        let exe = current_exe()?;
+        Ok(match read_run_value()? {
+            Some(v) if windows_run_value_is(&v, &exe) => StartAtLogin::Enabled,
+            _ => StartAtLogin::Disabled,
+        })
+    }
+
+    fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError> {
+        if !enabled {
+            // SAFETY: plain registry call on constant, NUL-terminated names.
+            let gone = unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, RUN_KEY, RUN_VALUE) };
+            return if gone == ERROR_FILE_NOT_FOUND {
+                Ok(())
+            } else {
+                gone.ok().map_err(|e| os_error("RegDeleteKeyValueW", &e))
+            };
+        }
+        let data: Vec<u16> = windows_run_value(&current_exe()?)
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let bytes =
+            u32::try_from(data.len() * 2).map_err(|_| PlatformError::Io("path too long".into()))?;
+        // SAFETY: `data` is a NUL-terminated UTF-16 string of `bytes` bytes, alive for the call.
+        unsafe {
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                RUN_KEY,
+                RUN_VALUE,
+                REG_SZ.0,
+                Some(data.as_ptr().cast()),
+                bytes,
+            )
+        }
+        .ok()
+        .map_err(|e| os_error("RegSetKeyValueW", &e))
     }
 }
 
