@@ -35,6 +35,14 @@ function strings(t: object): [string, string][] {
     ]);
 }
 
+/** Every leaf as text: strings as they are, functions called with 2 for each argument. */
+function rendered(t: object): [string, string][] {
+  return leaves(t).map(([path]) => {
+    const leaf = path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], t);
+    return [path, typeof leaf === "function" ? String(leaf(...Array(leaf.length).fill(2))) : String(leaf)];
+  });
+}
+
 /** Arabic-Indic digits to ASCII: older ICU writes ar numbers in Arabic-Indic, CLDR 46 and later in Latin digits. */
 const latn = (text: string) => text.replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660));
 
@@ -272,8 +280,15 @@ describe("plurals", () => {
 
   it("keeps Hebrew instructions gender neutral: action nouns and אפשר with an infinitive", () => {
     const t = catalogues.he;
-    // Gendered imperatives a translator reaches for first: נסה/נסי, הדבק/הדביקי, הוסף/הוסיפי.
-    for (const [path, text] of strings(t)) expect(text, path).not.toMatch(/(^|\s)(נסה|נסי|הדבק|הדביקי|הוסף|הוסיפי)(\s|$|\.)/);
+    // Masculine and feminine imperatives of the verbs settings and alarms copy reaches for.
+    const imperatives = [
+      ["נסה", "נסי"], ["הדבק", "הדביקי"], ["הוסף", "הוסיפי"], ["בחר", "בחרי"], ["לחץ", "לחצי"],
+      ["הקש", "הקישי"], ["הסר", "הסירי"], ["בטל", "בטלי"], ["הפעל", "הפעילי"], ["כבה", "כבי"],
+      ["הזן", "הזיני"], ["הקלד", "הקלידי"], ["שמור", "שמרי"], ["פתח", "פתחי"], ["השתק", "השתיקי"],
+      ["דחה", "דחי"], ["התעלם", "התעלמי"], ["הצטרף", "הצטרפי"],
+    ].flat();
+    const gendered = new RegExp(`(^|[\\s"״(])(${imperatives.join("|")})(?=[\\s.,:;)]|$)`, "u");
+    for (const [path, text] of rendered(t)) expect(text, path).not.toMatch(gendered);
     expect(t.errors.command.db_error).toContain("אפשר לנסות שוב");
     expect(t.calendars.addCalendar).toBe("הוספת יומן");
   });

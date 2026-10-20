@@ -195,7 +195,7 @@ describe("keys (S4.3, AC4.4)", () => {
     expect(keyAction(press(" "))).toBe("already_there");
   });
 
-  it("S4.3 D dismisses on any layout: the physical KeyD counts when it types another script", () => {
+  it("AC4.4 D dismisses on any layout", () => {
     expect(keyAction(press("ي", { code: "KeyD" }))).toBe("dismiss"); // Arabic
     expect(keyAction(press("ג", { code: "KeyD" }))).toBe("dismiss"); // Hebrew
     expect(keyAction(press("्", { code: "KeyD" }))).toBe("dismiss"); // Hindi InScript
