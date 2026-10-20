@@ -13,7 +13,8 @@ use chrono_tz::Tz;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use tolon_core::{
-    AlarmSettings, ExpandOptions, IgnoreRules, QuietHours, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
+    AlarmSettings, ExpandOptions, IgnoreRules, QuietHours, ALL_DAY_AT, MAX_LEAD_MINUTES,
+    MIN_LEAD_MINUTES,
 };
 use tolon_platform::Sound;
 use tolon_store::Store;
@@ -151,9 +152,11 @@ fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D:
 
 impl SettingsDto {
     pub fn alarm(&self) -> AlarmSettings {
+        let quiet_end = hhmm(&self.quiet.end).filter(|_| self.quiet.enabled);
         AlarmSettings {
             lead_minutes: self.lead_minutes,
             again_at_start: self.again_at_start,
+            all_day_at: quiet_end.unwrap_or(ALL_DAY_AT),
         }
     }
 

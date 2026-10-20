@@ -46,6 +46,7 @@ fn alarm_settings() -> impl Strategy<Value = AlarmSettings> {
     (0u32..=90, any::<bool>()).prop_map(|(lead_minutes, again_at_start)| AlarmSettings {
         lead_minutes,
         again_at_start,
+        ..AlarmSettings::default()
     })
 }
 

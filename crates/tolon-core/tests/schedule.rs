@@ -14,6 +14,7 @@ fn settings(lead_minutes: u32, again_at_start: bool) -> AlarmSettings {
     AlarmSettings {
         lead_minutes,
         again_at_start,
+        ..AlarmSettings::default()
     }
 }
 
@@ -726,5 +727,104 @@ fn ac8_1_quiet_hours_follow_local_time_across_dst() -> TestResult {
     assert!(night.is_quiet(utc(2026, 10, 24, 16, 0)?), "18:00 CEST");
     assert!(night.is_quiet(utc(2026, 10, 25, 7, 59)?), "08:59 CET");
     assert!(!night.is_quiet(utc(2026, 10, 25, 8, 0)?), "09:00 CET");
+    Ok(())
+}
+
+/// An all-day occurrence on `date` in Berlin: it starts at local midnight.
+fn all_day(title: &str, y: i32, m: u32, d: u32) -> TestResult<tolon_core::Occurrence> {
+    let midnight = chrono::NaiveDate::from_ymd_opt(y, m, d)
+        .and_then(|day| day.and_hms_opt(0, 0, 0))
+        .and_then(|t| tolon_core::wall_clock(t, LOCAL))
+        .ok_or("bad date")?;
+    let mut o = occ(title, midnight.with_timezone(&Utc), 0);
+    o.all_day = true;
+    o.start = midnight;
+    o.end = midnight + Duration::days(1);
+    Ok(o)
+}
+
+fn anchored(at: NaiveTime) -> AlarmSettings {
+    AlarmSettings {
+        lead_minutes: 15,
+        again_at_start: true,
+        all_day_at: at,
+    }
+}
+
+#[test]
+fn all_day_events_get_one_alarm_at_the_anchor_with_no_lead_and_no_start_alarm() -> TestResult {
+    let holiday = all_day("holiday", 2026, 10, 22)?;
+    let nine = NaiveTime::from_hms_opt(9, 0, 0).ok_or("time")?;
+    let alarms = plan(
+        std::slice::from_ref(&holiday),
+        &anchored(nine),
+        &[],
+        at(0, 0)?,
+    );
+    assert_eq!(alarms.len(), 1, "no start alarm: {alarms:?}");
+    // 09:00 in Berlin (CEST) is 07:00 UTC; no lead time is taken off.
+    assert_eq!(alarms[0].kind, AlarmKind::Lead);
+    assert_eq!(alarms[0].at, at(7, 0)?);
+    assert_eq!(alarms[0].start, at(7, 0)?);
+    assert_eq!(alarms[0].expires_at(), at(7, 10)?);
+    assert_eq!(AlarmSettings::default().all_day_at, nine);
+
+    // Nothing at 23:58 the night before or at midnight; it fires at the anchor and expires 10 min on.
+    let mut alarms = alarms;
+    assert!(step(&mut alarms, utc(2026, 10, 21, 21, 58)?).is_empty());
+    assert!(step(&mut alarms, at(6, 59)?).is_empty());
+    assert_eq!(step(&mut alarms, at(7, 0)?).len(), 1);
+    let late = plan(&[holiday], &anchored(nine), &[], at(7, 10)?);
+    assert!(late.is_empty(), "the anchor window closed: {late:?}");
+    Ok(())
+}
+
+#[test]
+fn ac8_1_the_all_day_anchor_is_the_end_of_quiet_hours() -> TestResult {
+    let end = NaiveTime::from_hms_opt(7, 30, 0).ok_or("time")?;
+    let night = QuietHours {
+        tz: LOCAL,
+        ..quiet((18, 0), (7, 30), false)?
+    };
+    let mut alarms = plan(
+        &[all_day("holiday", 2026, 10, 22)?],
+        &anchored(end),
+        &[],
+        at(0, 0)?,
+    );
+    // 07:30 CEST is 05:30 UTC, the first minute after quiet hours: it fires there.
+    assert_eq!(alarms[0].at, at(5, 30)?);
+    assert!(tick(&alarms, at(5, 29)?, None, Some(&night)).is_empty());
+    let fired = tick(&alarms, at(5, 30)?, None, Some(&night));
+    apply_transitions(&mut alarms, &fired);
+    assert_eq!(alarms[0].state, firing(at(5, 30)?));
+    Ok(())
+}
+
+#[test]
+fn all_day_anchors_follow_local_time_across_dst() -> TestResult {
+    let nine = NaiveTime::from_hms_opt(9, 0, 0).ok_or("time")?;
+    let anchor = |y, m, d| -> TestResult<DateTime<Utc>> {
+        let alarms = plan(
+            &[all_day("day", y, m, d)?],
+            &anchored(nine),
+            &[],
+            utc(y, m, d, 0, 0)? - Duration::days(1),
+        );
+        Ok(alarms.first().ok_or("no alarm")?.at)
+    };
+    // Spring forward (29 Mar 2026) and fall back (25 Oct 2026): 09:00 local either way.
+    assert_eq!(anchor(2026, 3, 28)?, utc(2026, 3, 28, 8, 0)?, "CET");
+    assert_eq!(anchor(2026, 3, 29)?, utc(2026, 3, 29, 7, 0)?, "CEST");
+    assert_eq!(anchor(2026, 10, 25)?, utc(2026, 10, 25, 8, 0)?, "CET");
+    // An anchor inside the skipped hour uses the offset from before the gap (as events do).
+    let half_two = NaiveTime::from_hms_opt(2, 30, 0).ok_or("time")?;
+    let gap = plan(
+        &[all_day("gap", 2026, 3, 29)?],
+        &anchored(half_two),
+        &[],
+        utc(2026, 3, 28, 0, 0)?,
+    );
+    assert_eq!(gap.first().ok_or("no alarm")?.at, utc(2026, 3, 29, 1, 30)?);
     Ok(())
 }

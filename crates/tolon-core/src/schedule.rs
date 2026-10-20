@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::alarm::{Alarm, AlarmKind, AlarmState};
-use crate::model::{Occurrence, OccurrenceKey};
+use crate::model::{wall_clock, Occurrence, OccurrenceKey};
 
 pub const MIN_LEAD_MINUTES: u32 = 1;
 pub const MAX_LEAD_MINUTES: u32 = 60;
@@ -18,15 +18,32 @@ pub struct AlarmSettings {
     /// 1 to 60; `plan` clamps anything else.
     pub lead_minutes: u32,
     pub again_at_start: bool,
+    /// The local time an all-day occurrence's one alarm fires: the end of quiet hours when they
+    /// are on, else 09:00 (decision "All-day events, weekends and window checks").
+    pub all_day_at: NaiveTime,
 }
+
+/// 09:00, the all-day anchor while quiet hours are off.
+pub const ALL_DAY_AT: NaiveTime = match NaiveTime::from_hms_opt(9, 0, 0) {
+    Some(t) => t,
+    None => NaiveTime::MIN,
+};
 
 impl Default for AlarmSettings {
     fn default() -> Self {
         Self {
             lead_minutes: 2,
             again_at_start: false,
+            all_day_at: ALL_DAY_AT,
         }
     }
+}
+
+/// An all-day occurrence's anchor: `at` on its first day, on its own (the machine's) clock. A
+/// time the clocks skip uses the offset from before the gap, as for events.
+fn all_day_anchor(occ: &Occurrence, at: NaiveTime) -> Option<DateTime<Utc>> {
+    let day = occ.start.date_naive().and_time(at);
+    wall_clock(day, occ.start.timezone()).map(|t| t.with_timezone(&Utc))
 }
 
 /// AC8.1: a daily window and a weekend switch. Inside them nothing fires.
@@ -73,6 +90,9 @@ impl QuietHours {
 /// - A new alarm is not created once its meeting's window has closed (start + 10 min <= `now`),
 ///   so a feed read after the fact adds no stale alarms. One created inside the window with
 ///   `at` already past fires at the next tick.
+/// - An all-day occurrence gets one Lead alarm at its anchor (`settings.all_day_at` local time on
+///   its first day), with no lead time and no start alarm; its `start` is the anchor too, so it
+///   expires at the anchor plus 10 minutes.
 /// - Idempotent: `plan(o, s, &plan(o, s, e, now), now) == plan(o, s, e, now)`.
 pub fn plan(
     occurrences: &[Occurrence],
@@ -98,11 +118,21 @@ pub fn plan(
 
     let mut out = Vec::new();
     for occ in occurrences {
-        let start = occ.start.with_timezone(&Utc);
-        let mut wanted = vec![(AlarmKind::Lead, start.checked_sub_signed(lead))];
-        if settings.again_at_start {
-            wanted.push((AlarmKind::Start, Some(start)));
-        }
+        let anchor = occ
+            .all_day
+            .then(|| all_day_anchor(occ, settings.all_day_at));
+        let (start, wanted) = match anchor {
+            Some(None) => continue,
+            Some(Some(anchor)) => (anchor, vec![(AlarmKind::Lead, Some(anchor))]),
+            None => {
+                let start = occ.start.with_timezone(&Utc);
+                let mut wanted = vec![(AlarmKind::Lead, start.checked_sub_signed(lead))];
+                if settings.again_at_start {
+                    wanted.push((AlarmKind::Start, Some(start)));
+                }
+                (start, wanted)
+            }
+        };
         for (kind, at) in wanted {
             let Some(at) = at else { continue };
             let mut alarm = Alarm {

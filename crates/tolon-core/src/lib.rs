@@ -23,7 +23,7 @@ pub use parse::{parse_ics, ParseOptions, ParsedCalendar};
 pub use rules::{apply_rules, judge_window, IgnoreReason, IgnoreRules, Verdict};
 pub use schedule::{
     apply_transitions, countdown, group_firing, plan, tick, AlarmSettings, Countdown,
-    InterruptGroup, QuietHours, Transition, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
+    InterruptGroup, QuietHours, Transition, ALL_DAY_AT, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,
 };
 
 /// Crate name, a placeholder export until the real API lands.

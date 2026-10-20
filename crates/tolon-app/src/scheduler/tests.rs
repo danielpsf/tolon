@@ -1357,8 +1357,8 @@ fn the_opener_plugin_is_never_registered() -> TestResult {
 
 // ---- F8 quiet hours and rules, F6 preview (L-016) ------------------------------------------------
 
-/// An all-day event today, 20 Oct 2026. With the machine on UTC its lead alarm is due at 23:58
-/// the day before and its window stays open until 00:10.
+/// An all-day event today, 20 Oct 2026. With the machine on UTC and quiet hours off, its one
+/// alarm is at the 09:00 anchor and its window stays open until 09:10.
 const ALL_DAY_TODAY: &str = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:holiday\r\nSUMMARY:Holiday\r\nDTSTART;VALUE=DATE:20261020\r\nDTEND;VALUE=DATE:20261021\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
 /// Runs the real loop, lets its first tick pass, saves `patch` the way `settings_set` does (save,
@@ -1390,16 +1390,36 @@ async fn after_a_settings_change(
 
 #[tokio::test]
 async fn s8_2_turning_ignore_all_day_off_makes_its_alarm_appear_within_15_s() -> TestResult {
-    let rig = Rig::from_feed(ALL_DAY_TODAY, at(0, 1, 0))?;
-    assert_eq!(
-        rig.tick_at(at(0, 1, 0)).await.fired,
-        0,
-        "all-day is ignored by default"
-    );
-    assert!(rig.states()?.is_empty());
-    let patch = serde_json::json!({ "ignore": { "all_day": false } });
-    assert!(after_a_settings_change(&rig, patch, "holiday", "firing").await?);
-    assert_eq!(rig.host().count("open"), 1);
+    // At any hour before the anchor the alarm appears planned; at the anchor it fires.
+    for hour in [0, 6, 8] {
+        let rig = Rig::from_feed(ALL_DAY_TODAY, at(hour, 59, 0))?;
+        assert_eq!(
+            rig.tick_at(at(hour, 59, 0)).await.fired,
+            0,
+            "all-day is ignored by default"
+        );
+        assert!(rig.states()?.is_empty());
+        let patch = serde_json::json!({ "ignore": { "all_day": false } });
+        assert!(
+            after_a_settings_change(&rig, patch, "holiday", "scheduled").await?,
+            "{hour}:59"
+        );
+        assert_eq!(rig.host().count("open"), 0, "nothing before the anchor");
+        assert_eq!(rig.tick_at(at(9, 0, 5)).await.fired, 1);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn all_day_alarms_anchor_at_the_end_of_quiet_hours() -> TestResult {
+    let rig = Rig::from_feed(ALL_DAY_TODAY, at(0, 0, 0))?;
+    settings::apply(
+        &rig.db,
+        &serde_json::json!({ "ignore": { "all_day": false },
+                             "quiet": { "enabled": true, "start": "20:00", "end": "07:30" } }),
+    )?;
+    assert_eq!(rig.tick_at(at(7, 29, 50)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(7, 30, 5)).await.fired, 1);
     Ok(())
 }
 
