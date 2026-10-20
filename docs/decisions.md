@@ -149,3 +149,9 @@ The maintainer confirmed the languages: Portuguese, German, English, Spanish, Ar
 
 ## 2026-10-21 Hebrew joins the locale list
 The maintainer added Hebrew. L-039 also ships `he`: every `he-*` tag and the legacy `iw` map to it, it is right to left like ar, and its script falls back to system fonts ("Arial Hebrew", "Segoe UI", "Noto Sans Hebrew").
+
+## 2026-10-21 Clock, digits and keys across locales (L-039)
+- Times follow each locale's own clock. 12-hour locales (en-US, ar, hi) drop the leading zero ("2:05 pm", "2:05 م"); 24-hour locales keep two digits ("09:05"). This replaces the L-034 rule "two digits everywhere except en-US".
+- Digits follow the `Intl` defaults; `numberingSystem` is not pinned. Tests normalise digits before comparing, because ICU versions differ for Arabic.
+- Interrupt keys match the physical key as well as the character: `KeyD` dismisses on any keyboard layout, so the D shown in the hint works on Arabic, Hebrew, Hindi and other layouts. Enter, Escape and Space are layout independent already.
+- Sentences in key hints are joined per locale: a space for most languages, nothing after the full-width full stop in zh-CN and ja.
