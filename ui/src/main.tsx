@@ -8,18 +8,18 @@ import "./styles/local.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { initCopy } from "./copy";
-import { followSystemTheme } from "./theme";
+import { startSettingsFeed } from "./store";
 
-// `?lang=pt-PT` overrides the system language (dev, tests, and later the language setting).
-initCopy(new URLSearchParams(window.location.search).get("lang"));
-followSystemTheme();
+// `?lang=pt-PT` stands in for the system language (dev, tests) while the language setting follows the system.
+const settingsLoaded = startSettingsFeed(new URLSearchParams(window.location.search).get("lang"));
 
 const root = document.getElementById("root");
 if (root) {
-  createRoot(root).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
+  void settingsLoaded.finally(() =>
+    createRoot(root).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    ),
   );
 }
