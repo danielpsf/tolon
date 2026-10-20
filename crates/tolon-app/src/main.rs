@@ -15,6 +15,7 @@ use std::sync::Mutex;
 use anyhow::Context;
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tolon_platform::Platform;
 use tolon_store::Store;
 use tolon_sync::IcsFetcher;
 
@@ -64,6 +65,9 @@ fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .try_init();
 
+    // Tauri's default menu stays (no menu of our own, `enable_macos_default_menu` left on): an
+    // Accessory app shows no menu bar, but the menu still carries the Edit key equivalents
+    // (Cmd+C, Cmd+V, Cmd+A) that the settings window's text fields need on macOS (L-042).
     tauri::Builder::default()
         .manage(interrupt::InterruptState::default())
         .plugin(tauri_plugin_dialog::init())
@@ -90,6 +94,12 @@ fn main() -> anyhow::Result<()> {
             commands::alarms_e2e_state,
         ])
         .setup(|app| {
+            // Before any window opens: on macOS the Accessory activation policy lets the interrupt
+            // show over another app's full-screen Space (L-042). Nothing elsewhere. A failure costs
+            // only that, so Tolon starts anyway.
+            if let Err(e) = tolon_platform::NATIVE.prepare_app() {
+                tracing::warn!(error = %e, "could not set the Accessory activation policy");
+            }
             // A store that cannot open or migrate stops the app; it never runs on a half-applied
             // schema. The dialog needs the running event loop (a dialog shown before it never
             // appears), so a thread shows it and exits the app once it is dismissed.
@@ -118,6 +128,30 @@ mod tests {
     use super::*;
 
     type TestResult = anyhow::Result<()>;
+
+    /// L-042: the activation policy is set before anything opens a window, and the bundle hides
+    /// the Dock icon from launch and needs macOS 13 (SMAppService).
+    #[test]
+    fn the_app_is_an_accessory_app_on_macos() -> TestResult {
+        let source = include_str!("main.rs");
+        let setup = source.find(".setup(|app| {").unwrap_or(usize::MAX);
+        let prepare = source.find("NATIVE.prepare_app()").unwrap_or(usize::MAX);
+        let start = source.find("start(app.handle())").unwrap_or(0);
+        assert!(
+            setup < prepare && prepare < start,
+            "prepare_app runs first in setup"
+        );
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        assert!(!shipped.contains(".menu("), "keep Tauri's default menu");
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))?;
+        assert_eq!(
+            conf["bundle"]["macOS"]["minimumSystemVersion"],
+            serde_json::json!("13.0")
+        );
+        let plist = include_str!("../Info.plist");
+        assert!(plist.contains("<key>LSUIElement</key>\n\t<true/>"));
+        Ok(())
+    }
 
     #[test]
     fn open_store_in_creates_missing_nested_dirs() -> TestResult {
