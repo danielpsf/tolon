@@ -17,7 +17,7 @@ Read this before writing code. `AGENTS.md` points here, and every sub-agent brie
 | Tray, autostart, notifications, updater, single instance, opener | Official Tauri plugins | Avoid custom native code where a plugin exists |
 | Native window level (macOS) | `objc2` + `objc2-app-kit`, only in `crates/tolon-platform` | Required to sit above full-screen apps |
 | Tests | `cargo test`, `proptest`, `insta` snapshots, `tauri-driver` + WebDriver on Linux and Windows | See the test strategy in `docs/plan.md` |
-| CI | GitHub Actions, `tauri-apps/tauri-action` for releases | Free for a public repo |
+| CI | GitHub Actions, the Tauri CLI in a draft-release workflow (decision 2026-10-21) | Free for a public repo |
 
 ## Repository layout
 
