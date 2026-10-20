@@ -171,7 +171,7 @@ pub async fn alarms_test(app: AppHandle, window: tauri::WebviewWindow) -> Result
     done.map_err(|e| command_error(&e))
 }
 
-/// The alarm rows, for the WebDriver tests. It exists only with the `e2e-loopback` feature, which no
+/// The alarm rows, for the WebDriver tests. It exists only in the end-to-end build, whose feature no
 /// release build can have (decision "End-to-end fetch seam"). Keys and states, never titles.
 #[cfg(feature = "e2e-loopback")]
 #[derive(serde::Serialize)]

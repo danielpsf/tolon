@@ -5,6 +5,8 @@
 //!
 //! Where the name may appear:
 //! - the two feature definitions in the manifests, as exact lines;
+//! - the cfg gate line of the alarm command for the WebDriver suite, as an exact line, in the two
+//!   tolon-app files that gate on it (`CFG_GATES`);
 //! - the e2e build line of `ci.yml` (`tauri build --debug ... --features e2e-loopback`), in a job that
 //!   uploads no artifact;
 //! - the Rust sources that gate on it or lint and test it (`EXEMPT`) and Markdown docs.
@@ -28,13 +30,24 @@ const DEFINITIONS: &[(&str, &str)] = &[
     ),
 ];
 
+/// The only line that may name the feature in the two tolon-app sources that gate the WebDriver
+/// suite's read-only alarm command (its definition, and its registration in the handler list).
+/// Exact lines, like `DEFINITIONS`: any other mention in those files is a violation.
+const CFG_GATES: &[(&str, &str)] = &[
+    (
+        "crates/tolon-app/src/commands.rs",
+        "#[cfg(feature = \"e2e-loopback\")]",
+    ),
+    (
+        "crates/tolon-app/src/main.rs",
+        "#[cfg(feature = \"e2e-loopback\")]",
+    ),
+];
+
 /// Sources that name the feature by design: the cfg gates, the build script lock, the gate steps.
 const EXEMPT: &[&str] = &[
     "crates/tolon-sync/src/ics.rs",
     "crates/tolon-sync/build.rs",
-    // The WebDriver suite's read-only alarm command and its registration (L-032).
-    "crates/tolon-app/src/commands.rs",
-    "crates/tolon-app/src/main.rs",
     "xtask/src/ci.rs",
 ];
 
@@ -71,7 +84,10 @@ fn violations(rel: &str, text: &str) -> Vec<String> {
         let allowed = if rel == CI_WORKFLOW {
             is_e2e_build_line(line)
         } else {
-            DEFINITIONS.iter().any(|(p, l)| *p == rel && *l == line)
+            DEFINITIONS
+                .iter()
+                .chain(CFG_GATES)
+                .any(|(p, l)| *p == rel && *l == line)
         };
         if !allowed {
             found.push(format!("{rel}:{n}: `{FEATURE}` outside its allowed places"));
@@ -261,6 +277,45 @@ mod tests {
             "the e2e-loopback feature, never --all-features\n"
         )
         .is_empty());
+    }
+
+    #[test]
+    fn the_app_gate_lines_pass_and_nothing_else_in_those_files_does() {
+        let gate = "    #[cfg(feature = \"e2e-loopback\")]\n";
+        // The two files that gate the alarm command may carry the exact gate line ...
+        for file in [
+            "crates/tolon-app/src/commands.rs",
+            "crates/tolon-app/src/main.rs",
+        ] {
+            assert!(violations(file, gate).is_empty(), "{file}");
+            assert!(violations(file, &gate.repeat(3)).is_empty(), "{file}");
+        }
+        // ... and are not exempt: every other mention fails, in code or in a comment.
+        for file in [
+            "crates/tolon-app/src/commands.rs",
+            "crates/tolon-app/src/main.rs",
+        ] {
+            for other in [
+                "#[cfg(all(feature = \"e2e-loopback\", test))]\n",
+                "#[cfg(not(feature = \"e2e-loopback\"))]\n",
+                "let on = cfg!(feature = \"e2e-loopback\");\n",
+                "// exists only with the e2e-loopback feature\n",
+                "#[cfg(feature = \"e2e-loopback\")] fn x() {}\n",
+            ] {
+                assert_eq!(violations(file, other).len(), 1, "{file}: {other}");
+            }
+            // A gate line next to a bad one: only the bad one is reported.
+            let mixed = format!("{gate}let on = cfg!(feature = \"e2e-loopback\");\n");
+            assert_eq!(violations(file, &mixed).len(), 1, "{file}");
+        }
+        // The gate line is allowed in those two files only.
+        for file in [
+            "crates/tolon-app/src/interrupt.rs",
+            "crates/tolon-app/src/scheduler.rs",
+            "crates/tolon-store/src/lib.rs",
+        ] {
+            assert_eq!(violations(file, gate).len(), 1, "{file}");
+        }
     }
 
     #[test]
