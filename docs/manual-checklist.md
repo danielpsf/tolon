@@ -6,7 +6,8 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.1 Interrupt shows over a full-screen app (test with QuickTime full screen) and covers the menu bar and Dock.
 - [ ] S4.2 Two monitors: both show the interrupt; Esc on either hides both.
 - [ ] S4.3 Interrupt has focus on open; Enter joins; D dismisses; Space marks already there.
-- [ ] AC9.4 Start at login switch reflects System Settings, Login Items.
+- [ ] AC9.4 Start at login switch reflects System Settings, Login Items. Turning it off in System Settings and reopening the page shows the switch off with the hint to allow Tolon in Login Items; switching off twice shows no error.
+- [ ] AC9.4 A development build (`cargo run`) shows the switch off, and turning it on shows an error without a crash.
 - [ ] AC12.3 Fresh user account: install from the DMG following `docs/install.md` only; reach first run.
 - [ ] AC11.2 Install an update through the in-app updater; note whether Gatekeeper asks again.
 - [ ] AC3.4 Sleep the Mac across an alarm time with a full-screen app open; after wake the interrupt shows over it within 15 s.
@@ -14,13 +15,14 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 ## Windows
 - [ ] S4.2 Two monitors.
 - [ ] AC12.3 Fresh machine or VM: `.msi` through SmartScreen "More info, Run anyway"; reach first run.
-- [ ] AC9.4 Start at login appears in Task Manager, Startup apps.
+- [ ] AC9.4 Start at login appears in Task Manager, Startup apps. Disable it there, then turn the switch on in Tolon, and note what the switch shows (Windows keeps the Task Manager choice).
 - [ ] S4.4 When the interrupt cannot take focus, the fallback notification shows Snooze and Join; each acts on that meeting only.
 
 ## Linux
 - [ ] S4.4 On a Wayland session (GNOME), the fallback notification shows Join and Snooze and the sound plays.
 - [ ] S4.1 On X11, the interrupt covers a full-screen browser video.
 - [ ] AC12.3 `.AppImage` runs after `chmod +x`; `.deb` installs on Ubuntu 22.04 and 24.04.
+- [ ] AC9.4 Turning start at login on writes `~/.config/autostart/dev.tolon.desktop` with `Exec=` pointing at the AppImage path, and Tolon starts after logging out and in.
 
 ## Every OS
 - [ ] AC6.2 With the system output muted, an alarm makes no sound; the system volume is unchanged after an alarm.
