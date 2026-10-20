@@ -118,6 +118,8 @@ cargo run -p tolon-app       # run Tolon in development
 cargo xtask ci               # the full check that every change must pass
 ```
 
+On macOS and Linux, `make dev` does the same with hot reload, installing the UI dependencies first when they changed; `make ci` runs the full check.
+
 ## Contribute
 
 Bug reports, real-world calendar feeds that break the parser (anonymised, please), and pull requests are all welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md): it covers the setup, the checks, commit conventions and the rules every change follows.

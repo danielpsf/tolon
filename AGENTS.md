@@ -36,6 +36,7 @@ You are building Tolon beta 1, a desktop app that takes over the screen before a
 ```
 cargo xtask ci                      # the gate
 cargo run -p tolon-app              # run the desktop app in dev (uses ui/ dev server)
+make dev                            # same, with hot reload; installs ui deps when they changed (macOS, Linux)
 cargo test -p tolon-core            # fast core tests
 cargo xtask fixtures                # regenerate expected JSON for fixtures (review the diff!)
 npm --prefix ui run dev | build | lint | test
