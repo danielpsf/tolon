@@ -20,4 +20,19 @@ describe("right to left", () => {
     const knob = rules.find((r) => r.selector === ':root[dir="rtl"] .sm-switch input:checked::after');
     expect(knob?.body).toContain("translateX(-16px)");
   });
+
+  it.each([
+    ["ar", ['"Noto Sans Arabic"', '"Segoe UI"', '"Geeza Pro"']],
+    ["hi", ['"Kohinoor Devanagari"', '"Nirmala UI"', '"Noto Sans Devanagari"']],
+    ["zh", ['"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans CJK SC"']],
+    ["ja", ['"Hiragino Sans"', '"Yu Gothic"', '"Noto Sans CJK JP"']],
+  ])("falls back to system fonts for :lang(%s), Inter first", (lang, fonts) => {
+    const body = rules.find((r) => r.selector === `:root:lang(${lang})`)?.body ?? "";
+    for (const token of ["--sm-font-sans", "--sm-font-display"]) {
+      const stack = new RegExp(`${token}:([^;]+);`).exec(body)?.[1] ?? "";
+      expect(stack.indexOf("Inter")).toBeGreaterThanOrEqual(0);
+      expect(fonts.map((f) => stack.indexOf(f))).toEqual(fonts.map((f) => stack.indexOf(f)).sort((a, b) => a - b));
+      for (const font of fonts) expect(stack.indexOf(font)).toBeGreaterThan(stack.indexOf("Inter"));
+    }
+  });
 });

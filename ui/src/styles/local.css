@@ -1,7 +1,8 @@
 /*
  * The only place for Tolon-specific styles (AGENTS.md rule 5).
  * Every change needs a reviewer's sign-off. Use --sm-* tokens only, no hex colours.
- * Fonts are not declared here: main.tsx imports them from @fontsource (see decisions).
+ * Fonts are not declared here: main.tsx imports them from @fontsource (see decisions); the
+ * script fallbacks at the end only name system fonts.
  * Use logical properties (inline-start/end), so the layout mirrors for right to left.
  */
 
@@ -271,4 +272,22 @@
 /* Letter-spacing breaks the joins between Arabic letters; Swiss Moss tightens every display size. */
 :root:lang(ar) * {
   letter-spacing: normal;
+}
+
+/* Script fallbacks: Inter keeps the Latin parts (Tolon, Esc, digits), the system font draws the rest. No CJK font ships. */
+:root:lang(ar) {
+  --sm-font-sans: Inter, "Noto Sans Arabic", "Segoe UI", "Geeza Pro", system-ui, sans-serif;
+  --sm-font-display: "Inter Tight", Inter, "Noto Sans Arabic", "Segoe UI", "Geeza Pro", system-ui, sans-serif;
+}
+:root:lang(hi) {
+  --sm-font-sans: Inter, "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", system-ui, sans-serif;
+  --sm-font-display: "Inter Tight", Inter, "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", system-ui, sans-serif;
+}
+:root:lang(zh) {
+  --sm-font-sans: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --sm-font-display: "Inter Tight", Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+:root:lang(ja) {
+  --sm-font-sans: Inter, "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
+  --sm-font-display: "Inter Tight", Inter, "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
 }
