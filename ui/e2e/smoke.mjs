@@ -298,3 +298,62 @@ test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () 
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+// ---- Interrupt window (L-010) -----------------------------------------------------------------
+// `alarms_test` opens the sample interrupt on every screen (one here). The windows are separate
+// WebDriver handles: the test switches to one, checks focus, presses a key and expects every
+// interrupt window to close (AC4.6). The copy is left alone because it follows the system language.
+
+const interruptHandles = async (main) => (await driver.getAllWindowHandles()).filter((h) => h !== main);
+
+async function openTestInterrupt(main) {
+  const failure = await driver.executeAsyncScript((done) => {
+    window.__TAURI_INTERNALS__.invoke("alarms_test").then(
+      () => done(null),
+      (e) => done(JSON.stringify(e)),
+    );
+  });
+  assert.equal(failure, null, "alarms_test failed");
+  const handles = await waitFor("an interrupt window", async () => {
+    const found = await interruptHandles(main);
+    return found.length > 0 && found;
+  });
+  await driver.switchTo().window(handles[0]);
+  return handles;
+}
+
+for (const [name, key] of [
+  ["Esc", Key.ESCAPE],
+  ["D", "d"],
+  ["Space", Key.SPACE],
+  ["Enter", Key.ENTER],
+]) {
+  test(`s4_3 ${name} on the focused interrupt closes every interrupt window (AC4.4, AC4.6, S4.2)`, async () => {
+    const main = await driver.getWindowHandle();
+    try {
+      const handles = await openTestInterrupt(main);
+      // One window per screen: xvfb has one. Each is told its screen in the URL (docs/architecture.md, Scheduler).
+      assert.equal(handles.length, 1);
+      assert.match(await driver.getCurrentUrl(), /interrupt\.html\?screen=\d+/);
+
+      // The primary button has focus on open (S4.3). The sample link is not a known provider, so its host is on the button (L-013).
+      const primary = await waitFor("focus on the primary button", async () => {
+        const active = await driver.switchTo().activeElement();
+        return (await active.getAttribute("data-action")) === "join" && active;
+      });
+      assert.match(await primary.getText(), /example\.com/);
+
+      try {
+        await primary.sendKeys(key);
+      } catch (e) {
+        // The key can close the window before the driver has its answer; the wait below is the check.
+        if (!(e instanceof error.NoSuchWindowError)) throw e;
+      }
+      await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+    } finally {
+      // The current window may be gone: go back to the main one for the next test.
+      await driver.switchTo().window(main);
+    }
+    assert.equal((await driver.getAllWindowHandles()).length, 1);
+  });
+}
