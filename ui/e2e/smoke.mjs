@@ -97,8 +97,8 @@ test("the app boots and shows the paper background", async () => {
 });
 
 // ---- Calendars page (L-008) -------------------------------------------------------------------
-// Production only fetches https. A feed that syncs (S1.1) needs the `e2e-loopback` build feature: ci.yml builds
-// the debug app with `--features e2e-loopback`, which lets it fetch http from a loopback host and from nothing
+// Production only fetches https. A feed that syncs (S1.1) needs the e2e fetch seam: ci.yml builds
+// the debug app with it, which lets the app fetch http from a loopback host and from nothing
 // else. The failure path (S1.3) needs no feature: a closed local port refuses the connection at once.
 // The 404 wording of S1.3 is covered by the Rust test s1_3 and the Vitest mapping.
 
@@ -227,7 +227,10 @@ test("the app keeps its data in the temp dir", { skip: process.platform !== "lin
 const pad = (n) => String(n).padStart(2, "0");
 const now = new Date();
 const day = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-/** A feed named by X-WR-CALNAME with one event today; floating time reads in the machine's zone. */
+/**
+ * A feed named by X-WR-CALNAME with one event today (floating time reads in the machine's zone). The event is not
+ * asserted yet: the tray panel scenario (S1.1, "today's events appear in the tray panel") will read it.
+ */
 const FIXTURE_FEED = [
   "BEGIN:VCALENDAR",
   "VERSION:2.0",
@@ -259,6 +262,20 @@ async function fixtureServer() {
 const fixtureRows = () =>
   driver.findElements(By.xpath('//*[contains(@class, "tl-name") and starts-with(., "Team fixture")]/ancestor::*[contains(@class, "tl-row")][1]'));
 
+/** Leaves nothing behind (Windows keeps its data outside the temp dir), also when an assertion failed. */
+async function removeFixtureCalendar() {
+  try {
+    const [row] = await fixtureRows();
+    if (!row) return;
+    await row.findElement(By.css(".tl-remove button")).click();
+    await (await find("dialog[open] .sm-btn.danger")).click();
+    await waitFor("the fixture calendar to leave the list", async () => (await fixtureRows()).length === 0);
+  } catch (e) {
+    // The test's own failure is the one to report, not a failed cleanup after it.
+    console.warn(`could not remove the fixture calendar: ${e.message}`);
+  }
+}
+
 test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () => {
   const { server, requests, port } = await fixtureServer();
   try {
@@ -275,12 +292,8 @@ test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () 
     assert.equal(await row.findElement(By.css(".sm-caption")).getText(), "http://127.0.0.1");
     assert.ok(!(await driver.findElement(By.css("body")).getText()).includes("private-123"));
     assert.deepEqual(requests, ["/calendar/private-123/basic.ics"], "one fetch, made by the add");
-
-    // Leave nothing behind: Windows keeps its data outside the temp dir.
-    await row.findElement(By.css(".tl-remove button")).click();
-    await (await find("dialog[open] .sm-btn.danger")).click();
-    await waitFor("the fixture calendar to leave the list", async () => (await fixtureRows()).length === 0);
   } finally {
+    await removeFixtureCalendar();
     server.closeAllConnections(); // reqwest keeps the connection alive; close() alone would wait for it
     await new Promise((resolve) => server.close(resolve));
   }
