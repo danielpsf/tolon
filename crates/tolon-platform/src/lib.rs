@@ -3,6 +3,7 @@
 
 #[cfg(target_os = "linux")]
 mod linux;
+pub mod login;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod macos_level;
@@ -154,12 +155,16 @@ pub enum PlatformError {
     /// An OS call failed. `code` is the Win32 error or `HRESULT` it reported.
     #[error("{call} failed with OS error {code:#010x}")]
     Os { call: &'static str, code: u32 },
+    /// A file could not be read or written (Linux autostart entry).
+    #[error("file access failed: {0}")]
+    Io(String),
     /// Sound could not play: no output device, a decode error or a stopped audio thread. The app
     /// ignores it and shows the alarm without sound.
     #[error("audio: {0}")]
     Audio(String),
 }
 
+pub use login::StartAtLogin;
 pub use sound::{Playback, Sound, SoundPlayer};
 
 /// Whether the interrupt window can take over the screen on this system (AC4.1, AC4.5).
