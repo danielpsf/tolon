@@ -253,15 +253,15 @@ pub async fn settings_set(
     patch: serde_json::Value,
 ) -> Result<SettingsDto, CommandError> {
     main_only(window.label())?;
-    let dto = state(&app)
-        .and_then(|s| settings::apply(&s.db, &patch))
-        .map_err(|e| command_error(&e))?;
-    // The main window and the interrupts, the windows that may read the settings.
-    if let Err(e) = app.emit("settings:changed", &dto) {
-        tracing::warn!(error = %e, "could not emit settings:changed");
-    }
-    notify(&app);
-    Ok(dto)
+    // The event goes to the main window and the interrupts, the windows that may read settings.
+    let announce = |dto: &SettingsDto| {
+        if let Err(e) = app.emit("settings:changed", dto) {
+            tracing::warn!(error = %e, "could not emit settings:changed");
+        }
+    };
+    state(&app)
+        .and_then(|s| settings::change(&s.db, &patch, announce, || notify(&app)))
+        .map_err(|e| command_error(&e))
 }
 
 /// One shot of `sound` (`bell`, `chime` or `none`) for the Play button (AC6.3).
@@ -373,6 +373,24 @@ mod tests {
                 first.starts_with(&format!("{check}(window.label())?;")),
                 "{name} must start with {check}"
             );
+        }
+    }
+
+    /// `settings_set` saves, announces and wakes through `settings::change` (tested on the rig),
+    /// and hands it `notify`, which wakes the scheduler.
+    #[test]
+    fn settings_set_goes_through_change_and_notify() {
+        let source = include_str!("commands.rs");
+        let start = source
+            .find("pub async fn settings_set(")
+            .unwrap_or(usize::MAX);
+        let body = source.get(start..).unwrap_or_default();
+        let body = body.split("#[tauri::command]").next().unwrap_or_default();
+        for needed in [
+            "settings::change(&s.db, &patch, announce, || notify(&app))",
+            "app.emit(\"settings:changed\", dto)",
+        ] {
+            assert!(body.contains(needed), "settings_set must call {needed}");
         }
     }
 }

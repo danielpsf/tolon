@@ -1372,8 +1372,7 @@ async fn after_a_settings_change(
 ) -> anyhow::Result<bool> {
     let changed = async {
         tokio::time::sleep(StdDuration::from_millis(200)).await;
-        settings::apply(&rig.db, &patch)?;
-        rig.sched.wake();
+        settings::change(&rig.db, &patch, |_| {}, || rig.sched.wake())?;
         for _ in 0..50 {
             if rig.state_of(uid, "lead")?.as_deref() == Some(state) {
                 return Ok(true);
@@ -1575,5 +1574,69 @@ async fn occurrences_join_re_checks_the_link_before_opening() -> TestResult {
     assert!(rig.host().urls().is_empty());
     rig.sched.join_listed(&rig.db, &listed_key(&rig, "page")?)?;
     assert_eq!(rig.host().urls(), ["https://calendar.example.com/e?eid=1"]);
+    Ok(())
+}
+
+// ---- settings::change: announce under the lock, then wake ----------------------------------------
+
+#[tokio::test]
+async fn ac9_1_a_change_announces_then_wakes_and_a_refused_one_does_neither() -> TestResult {
+    let rig = Rig::new(&[], at(13, 0, 0))?;
+    let steps = StdMutex::new(Vec::new());
+    let push = |s: String| steps.lock().unwrap_or_else(PoisonError::into_inner).push(s);
+    let dto = settings::change(
+        &rig.db,
+        &serde_json::json!({ "lead_minutes": 7 }),
+        |dto| push(format!("announce {}", dto.lead_minutes)),
+        || push("wake".to_owned()),
+    )?;
+    assert_eq!(dto.lead_minutes, 7);
+    let refused = settings::change(
+        &rig.db,
+        &serde_json::json!({ "lead_minutes": 0 }),
+        |_| push("announce refused".to_owned()),
+        || push("wake refused".to_owned()),
+    );
+    assert!(refused.is_err());
+    assert_eq!(
+        *steps.lock().unwrap_or_else(PoisonError::into_inner),
+        ["announce 7", "wake"]
+    );
+    Ok(())
+}
+
+#[test]
+fn ac9_1_concurrent_changes_are_announced_in_the_order_they_were_saved() -> TestResult {
+    for _ in 0..20 {
+        let db: Db = StdMutex::new(Store::open_in_memory()?);
+        let announced = StdMutex::new(Vec::new());
+        std::thread::scope(|scope| {
+            for lead in 1..=8u32 {
+                let (db, announced) = (&db, &announced);
+                scope.spawn(move || {
+                    let _ = settings::change(
+                        db,
+                        &serde_json::json!({ "lead_minutes": lead }),
+                        |dto| {
+                            announced
+                                .lock()
+                                .unwrap_or_else(PoisonError::into_inner)
+                                .push(dto.lead_minutes);
+                        },
+                        || {},
+                    );
+                });
+            }
+        });
+        let announced = announced
+            .into_inner()
+            .unwrap_or_else(PoisonError::into_inner);
+        assert_eq!(announced.len(), 8);
+        // The last announcement is what the store holds: no older change was announced late.
+        assert_eq!(
+            announced.last().copied(),
+            Some(settings::get(&db)?.lead_minutes)
+        );
+    }
     Ok(())
 }

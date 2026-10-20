@@ -264,14 +264,35 @@ pub fn get(db: &Db) -> anyhow::Result<SettingsDto> {
 }
 
 /// Validates `raw` as a [`SettingsPatch`], saves every field it names in one transaction, and
-/// returns the settings as they now are. Nothing is saved when any field is refused.
+/// returns the settings as they now are. Nothing is saved when any field is refused. Tests only:
+/// the command goes through [`change`].
+#[cfg(test)]
 pub fn apply(db: &Db, raw: &Value) -> anyhow::Result<SettingsDto> {
+    change(db, raw, |_| {}, || {})
+}
+
+/// What `settings_set` does: [`apply`], then `announce` the new settings while the store is still
+/// locked, so two changes are announced in the order they were saved and the last announcement is
+/// what is stored (AC9.1); then `wake`, once unlocked, so the scheduler re-plans (AC8.3). A refused
+/// patch announces nothing and wakes nothing.
+pub fn change(
+    db: &Db,
+    raw: &Value,
+    announce: impl FnOnce(&SettingsDto),
+    wake: impl FnOnce(),
+) -> anyhow::Result<SettingsDto> {
     let patch: SettingsPatch =
         serde_json::from_value(raw.clone()).map_err(|_| AppError(bad_field(raw)))?;
     let pairs = pairs(patch)?;
-    let store = pipeline::lock(db);
-    store.settings().set_all(&pairs)?;
-    read(&store)
+    let dto = {
+        let store = pipeline::lock(db);
+        store.settings().set_all(&pairs)?;
+        let dto = read(&store)?;
+        announce(&dto);
+        dto
+    };
+    wake();
+    Ok(dto)
 }
 
 /// Every `invalid:` code a patch can get; the UI localises them.
