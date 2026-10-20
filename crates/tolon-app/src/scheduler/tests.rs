@@ -1002,6 +1002,31 @@ async fn ac3_5_a_degraded_system_announces_a_meeting_that_joins_the_open_minute(
 }
 
 #[tokio::test]
+async fn s4_4_a_stale_notification_action_after_a_regroup_does_not_touch_the_larger_group(
+) -> TestResult {
+    let rig = Rig::with_host(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140030", "")],
+        degraded_host(),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let first = rig.host().notices()[0];
+    // Beta joins the open minute: the group is larger and the first notification is stale.
+    rig.tick_at(at(13, 58, 35)).await;
+    assert_eq!(rig.last_show()?.meetings.len(), 2);
+    rig.act_on_notice(at(13, 58, 40), first, Act::Snooze(5))
+        .await?;
+    for uid in ["a", "b"] {
+        assert_eq!(
+            rig.state_of(uid, "lead")?.as_deref(),
+            Some("firing"),
+            "{uid}"
+        );
+    }
+    assert_eq!(rig.host().count("close"), 0);
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_regroup_checks_focus_again() -> TestResult {
     let rig = Rig::new(
         &[("a", "Alpha", "140000", ""), ("b", "Beta", "140030", "")],

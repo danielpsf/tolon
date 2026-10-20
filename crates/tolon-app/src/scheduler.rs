@@ -724,16 +724,16 @@ impl<H: Host> Scheduler<H> {
     /// meeting of the interrupt that notification announced. A notification that is not the current
     /// one (an earlier interrupt, or the same one before its meetings changed) does nothing.
     pub async fn act_on_notice(&self, db: &Db, notice: i32, act: Act) -> anyhow::Result<()> {
-        let key = {
-            let inner = self.inner.lock().await;
-            inner
-                .open
-                .as_ref()
-                .filter(|o| o.notice == Some(notice))
-                .and_then(|o| o.show.meetings.first().map(|m| m.key.clone()))
-        };
+        // One lock from the check to the action: a regroup cannot land in between and hand a stale
+        // button a larger group.
+        let mut inner = self.inner.lock().await;
+        let key = inner
+            .open
+            .as_ref()
+            .filter(|o| o.notice == Some(notice))
+            .and_then(|o| o.show.meetings.first().map(|m| m.key.clone()));
         match key {
-            Some(key) => self.act(db, &key, act).await,
+            Some(key) => self.act_locked(&mut inner, db, &key, act).await,
             None => {
                 tracing::debug!("a notification action for an interrupt that is gone");
                 Ok(())
@@ -750,9 +750,19 @@ impl<H: Host> Scheduler<H> {
     ///   open, re-opened for them; with none left it closes.
     /// - A closed interrupt hands the screen to a waiting minute, if one is Firing.
     pub async fn act(&self, db: &Db, key: &str, act: Act) -> anyhow::Result<()> {
+        let mut inner = self.inner.lock().await;
+        self.act_locked(&mut inner, db, key, act).await
+    }
+
+    async fn act_locked(
+        &self,
+        inner: &mut Inner,
+        db: &Db,
+        key: &str,
+        act: Act,
+    ) -> anyhow::Result<()> {
         interrupt::parse_key(key)?;
         let now = self.host.now();
-        let mut inner = self.inner.lock().await;
         let open = inner
             .open
             .as_ref()
@@ -786,8 +796,8 @@ impl<H: Host> Scheduler<H> {
         // A close may open a waiting minute and a partial join re-opens: new deadlines either way.
         self.wake();
         if rest.is_empty() {
-            self.close(&mut inner);
-            self.present_waiting(&mut inner, db, now).await;
+            self.close(inner);
+            self.present_waiting(inner, db, now).await;
             return Ok(());
         }
         let Some(open) = inner.open.as_mut() else {
@@ -795,7 +805,7 @@ impl<H: Host> Scheduler<H> {
         };
         open.show.meetings = rest;
         open.links.remove(key);
-        self.show_open(&mut inner, now).await;
+        self.show_open(inner, now).await;
         Ok(())
     }
 
