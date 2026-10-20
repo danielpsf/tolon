@@ -5,8 +5,9 @@ mod common;
 use chrono::Duration;
 use common::{at, occ, TestResult};
 use tolon_core::{
-    already_there, apply_rules, dismiss, expand_window, join, snooze, Alarm, AlarmKind, AlarmState,
-    EventId, ExpandOptions, IgnoreReason, IgnoreRules, OccurrenceKey, Verdict,
+    already_there, apply_rules, dismiss, expand_window, join, judge_window, parse_ics, snooze,
+    Alarm, AlarmKind, AlarmState, EventId, ExpandOptions, IgnoreReason, IgnoreRules, OccurrenceKey,
+    ParseOptions, Verdict,
 };
 
 fn key(event: &str) -> TestResult<OccurrenceKey> {
@@ -215,5 +216,107 @@ fn ac8_2_outlook_organizer_plus_one_invitee_is_kept() -> TestResult {
         .map(|(_, v)| v)
         .collect();
     assert!(verdicts.iter().all(|v| *v == Verdict::Keep), "{verdicts:?}");
+    Ok(())
+}
+
+/// One event per reason, plus a kept meeting, all on Thursday 22 Oct 2026. The calendar name is
+/// the owner's address, which is how the parser finds the owner's answer.
+const JUDGED_FEED: &str = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:me@example.com\r\n\
+BEGIN:VEVENT\r\nUID:keep\r\nSUMMARY:Planning\r\nDTSTART:20261022T090000Z\r\nDTEND:20261022T100000Z\r\nATTENDEE:mailto:sam@example.com\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:focus\r\nSUMMARY:Focus time\r\nDTSTART:20261022T100000Z\r\nDTEND:20261022T110000Z\r\nATTENDEE:mailto:sam@example.com\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:allday\r\nSUMMARY:Holiday\r\nDTSTART;VALUE=DATE:20261022\r\nDTEND;VALUE=DATE:20261023\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:cancelled\r\nSUMMARY:Sync\r\nDTSTART:20261022T110000Z\r\nDTEND:20261022T120000Z\r\nSTATUS:CANCELLED\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:declined\r\nSUMMARY:Review\r\nDTSTART:20261022T120000Z\r\nDTEND:20261022T130000Z\r\nATTENDEE;PARTSTAT=DECLINED:mailto:me@example.com\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:solo\r\nSUMMARY:Write-up\r\nDTSTART:20261022T130000Z\r\nDTEND:20261022T140000Z\r\nEND:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+#[test]
+fn s8_1_an_ignored_event_is_listed_with_its_reason() -> TestResult {
+    let events = parse_ics(JUDGED_FEED, &common::cal(), &ParseOptions::default()).events;
+    let from = common::utc(2026, 10, 22, 0, 0)?;
+    let rules = IgnoreRules {
+        without_other_attendees: true,
+        ..IgnoreRules::default()
+    };
+    let judged = judge_window(
+        &events,
+        from,
+        from + Duration::days(1),
+        common::LOCAL,
+        &ExpandOptions::default(),
+        &rules,
+    );
+    let got: Vec<(&str, Option<&str>)> = judged
+        .iter()
+        .map(|(o, v)| {
+            let code = match v {
+                Verdict::Keep => None,
+                Verdict::Ignored(reason) => Some(reason.code()),
+            };
+            (o.title.as_str(), code)
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("Holiday", Some("all_day")),
+            ("Planning", None),
+            ("Focus time", Some("keyword")),
+            ("Sync", Some("cancelled")),
+            ("Review", Some("declined")),
+            ("Write-up", Some("no_attendees")),
+        ]
+    );
+    // What is kept is exactly what the scheduler plans from.
+    let planned: Vec<_> = apply_rules(
+        expand_window(
+            &events,
+            from,
+            from + Duration::days(1),
+            common::LOCAL,
+            &ExpandOptions::default(),
+        ),
+        &rules,
+    )
+    .into_iter()
+    .filter(|(_, v)| *v == Verdict::Keep)
+    .collect();
+    let kept: Vec<_> = judged
+        .into_iter()
+        .filter(|(_, v)| *v == Verdict::Keep)
+        .collect();
+    assert_eq!(kept, planned);
+    Ok(())
+}
+
+#[test]
+fn s8_1_judging_keeps_what_expanding_and_the_rules_keep_for_every_fixture() -> TestResult {
+    let from = common::now()?;
+    let to = from + Duration::days(7);
+    for name in common::FIXTURE_FILES {
+        let events = common::parse_fixture(name)?.events;
+        for opts in [
+            ExpandOptions::default(),
+            ExpandOptions {
+                ignore_cancelled: false,
+                ignore_declined: false,
+                include_all_day: true,
+            },
+        ] {
+            let rules = IgnoreRules::default();
+            let judged = judge_window(&events, from, to, common::LOCAL, &opts, &rules);
+            let planned = apply_rules(
+                expand_window(&events, from, to, common::LOCAL, &opts),
+                &rules,
+            );
+            let kept: Vec<_> = judged.iter().filter(|(_, v)| *v == Verdict::Keep).collect();
+            let want: Vec<_> = planned
+                .iter()
+                .filter(|(_, v)| *v == Verdict::Keep)
+                .collect();
+            assert_eq!(kept, want, "{name}");
+            assert!(judged.len() >= planned.len(), "{name}");
+        }
+    }
     Ok(())
 }

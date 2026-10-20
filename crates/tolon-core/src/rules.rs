@@ -1,10 +1,14 @@
 //! Ignore rules that `expand` does not apply (AC8.2). Cancelled, declined and all-day events
 //! are dropped inside `expand` through `ExpandOptions`; the two rules here need the title and the
-//! attendee count of an occurrence that survived it.
+//! attendee count of an occurrence that survived it. [`judge_window`] runs both and keeps every
+//! occurrence with its verdict, for the panel's muted "ignored" tag (S8.1).
 
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
-use crate::model::Occurrence;
+use crate::expand::{expand_judged, ExpandOptions};
+use crate::model::{Event, Occurrence};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IgnoreRules {
@@ -29,6 +33,23 @@ pub enum IgnoreReason {
     /// The keyword that matched, as the person typed it (trimmed).
     Keyword(String),
     NoOtherAttendees,
+    AllDay,
+    Declined,
+    Cancelled,
+}
+
+impl IgnoreReason {
+    /// The code the UI turns into the muted tag: `keyword`, `no_attendees`, `all_day`, `declined`
+    /// or `cancelled`. The keyword itself stays out: it is close to the title.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Keyword(_) => "keyword",
+            Self::NoOtherAttendees => "no_attendees",
+            Self::AllDay => "all_day",
+            Self::Declined => "declined",
+            Self::Cancelled => "cancelled",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +70,30 @@ pub fn apply_rules(
     occurrences: Vec<Occurrence>,
     rules: &IgnoreRules,
 ) -> Vec<(Occurrence, Verdict)> {
+    judge(occurrences.into_iter().map(|occ| (occ, None)), rules)
+}
+
+/// Every occurrence of `[from, to)` with its verdict: hidden by `opts` (cancelled, declined,
+/// all-day) or by `rules` (keyword, no other attendees), or kept. Same order as `expand_window`;
+/// its `Keep` ones are exactly what `apply_rules(expand_window(..))` keeps.
+pub fn judge_window(
+    events: &[Event],
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+    local: Tz,
+    opts: &ExpandOptions,
+    rules: &IgnoreRules,
+) -> Vec<(Occurrence, Verdict)> {
+    judge(
+        expand_judged(events, from, to, local, opts).into_iter(),
+        rules,
+    )
+}
+
+fn judge(
+    occurrences: impl Iterator<Item = (Occurrence, Option<IgnoreReason>)>,
+    rules: &IgnoreRules,
+) -> Vec<(Occurrence, Verdict)> {
     let keywords: Vec<&str> = rules
         .keywords
         .split(',')
@@ -56,17 +101,17 @@ pub fn apply_rules(
         .filter(|k| !k.is_empty())
         .collect();
     occurrences
-        .into_iter()
-        .map(|occ| {
+        .map(|(occ, hidden)| {
             let title = occ.title.to_lowercase();
-            let verdict =
-                if let Some(k) = keywords.iter().find(|k| title.contains(&k.to_lowercase())) {
-                    Verdict::Ignored(IgnoreReason::Keyword((*k).to_string()))
-                } else if rules.without_other_attendees && occ.people == 0 {
-                    Verdict::Ignored(IgnoreReason::NoOtherAttendees)
-                } else {
-                    Verdict::Keep
-                };
+            let verdict = if let Some(reason) = hidden {
+                Verdict::Ignored(reason)
+            } else if let Some(k) = keywords.iter().find(|k| title.contains(&k.to_lowercase())) {
+                Verdict::Ignored(IgnoreReason::Keyword((*k).to_string()))
+            } else if rules.without_other_attendees && occ.people == 0 {
+                Verdict::Ignored(IgnoreReason::NoOtherAttendees)
+            } else {
+                Verdict::Keep
+            };
             (occ, verdict)
         })
         .collect()

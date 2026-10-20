@@ -20,7 +20,7 @@ pub use model::{
     OccurrenceKey, Override, ParseKeyError, Response,
 };
 pub use parse::{parse_ics, ParseOptions, ParsedCalendar};
-pub use rules::{apply_rules, IgnoreReason, IgnoreRules, Verdict};
+pub use rules::{apply_rules, judge_window, IgnoreReason, IgnoreRules, Verdict};
 pub use schedule::{
     apply_transitions, countdown, group_firing, plan, tick, AlarmSettings, Countdown,
     InterruptGroup, QuietHours, Transition, MAX_LEAD_MINUTES, MIN_LEAD_MINUTES,

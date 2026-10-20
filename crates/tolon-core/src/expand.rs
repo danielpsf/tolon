@@ -9,6 +9,7 @@ use crate::join::detect_join;
 use crate::model::{
     wall_clock, Event, EventStatus, EventTime, JoinTarget, Occurrence, OccurrenceKey, Response,
 };
+use crate::rules::IgnoreReason;
 
 /// How far ahead `expand` looks (AC2.2).
 pub const WINDOW_DAYS: i64 = 7;
@@ -60,11 +61,37 @@ pub fn expand_window(
     local: Tz,
     opts: &ExpandOptions,
 ) -> Vec<Occurrence> {
+    expand_all(events, from, to, local, opts, false)
+        .into_iter()
+        .map(|(occ, _)| occ)
+        .collect()
+}
+
+/// Same as [`expand_window`], but the occurrences `opts` hides stay in, each with the reason, so
+/// the panel can list them with a muted tag (S8.1).
+pub(crate) fn expand_judged(
+    events: &[Event],
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+    local: Tz,
+    opts: &ExpandOptions,
+) -> Vec<(Occurrence, Option<IgnoreReason>)> {
+    expand_all(events, from, to, local, opts, true)
+}
+
+fn expand_all(
+    events: &[Event],
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+    local: Tz,
+    opts: &ExpandOptions,
+    keep_hidden: bool,
+) -> Vec<(Occurrence, Option<IgnoreReason>)> {
     let mut out = Vec::new();
     for event in events {
-        expand_event(event, from, to, local, opts, &mut out);
+        expand_event(event, from, to, local, opts, keep_hidden, &mut out);
     }
-    out.sort_by(|a, b| (a.start, &a.event).cmp(&(b.start, &b.event)));
+    out.sort_by(|(a, _), (b, _)| (a.start, &a.event).cmp(&(b.start, &b.event)));
     out
 }
 
@@ -222,9 +249,12 @@ fn expand_event(
     to: DateTime<Utc>,
     local: Tz,
     opts: &ExpandOptions,
-    out: &mut Vec<Occurrence>,
+    keep_hidden: bool,
+    out: &mut Vec<(Occurrence, Option<IgnoreReason>)>,
 ) {
-    if opts.ignore_cancelled && e.status == EventStatus::Cancelled {
+    // A cancelled series hides its overrides too.
+    let series_cancelled = opts.ignore_cancelled && e.status == EventStatus::Cancelled;
+    if series_cancelled && !keep_hidden {
         return;
     }
     let Some(shape) = Shape::of(e, local) else {
@@ -242,15 +272,23 @@ fn expand_event(
                     start: DateTime<Tz>,
                     end: DateTime<Tz>,
                     original: DateTime<Utc>| {
-        let hidden = (opts.ignore_cancelled && src.status == EventStatus::Cancelled)
-            || (opts.ignore_declined && src.my_response == Some(Response::Declined))
-            || (src.all_day && !opts.include_all_day);
+        let hidden = if series_cancelled
+            || (opts.ignore_cancelled && src.status == EventStatus::Cancelled)
+        {
+            Some(IgnoreReason::Cancelled)
+        } else if opts.ignore_declined && src.my_response == Some(Response::Declined) {
+            Some(IgnoreReason::Declined)
+        } else if src.all_day && !opts.include_all_day {
+            Some(IgnoreReason::AllDay)
+        } else {
+            None
+        };
         let overlaps = start.with_timezone(&Utc) < to
             && (end.with_timezone(&Utc) > from || start.with_timezone(&Utc) >= from);
-        if hidden || !overlaps {
+        if (hidden.is_some() && !keep_hidden) || !overlaps {
             return;
         }
-        out.push(Occurrence {
+        let occ = Occurrence {
             key: OccurrenceKey {
                 event: e.id.clone(),
                 original_start: original,
@@ -262,7 +300,8 @@ fn expand_event(
             all_day: src.all_day,
             join: join.clone(),
             people: src.attendees_count,
-        });
+        };
+        out.push((occ, hidden));
     };
 
     match &e.rrule {
