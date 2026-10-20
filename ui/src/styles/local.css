@@ -269,8 +269,15 @@
 :root[dir="rtl"] .sm-switch input:checked::after {
   transform: translateX(-16px);
 }
-/* Letter-spacing breaks the joins between Arabic letters; Swiss Moss tightens every display size. */
-:root:lang(ar) * {
+/*
+ * Swiss Moss tightens every display size for Latin. Negative tracking breaks the joins between
+ * Arabic letters, crowds Devanagari and Hebrew, and squeezes CJK, which is set solid.
+ */
+:root:lang(ar) *,
+:root:lang(he) *,
+:root:lang(hi) *,
+:root:lang(ja) *,
+:root:lang(zh) * {
   letter-spacing: normal;
 }
 

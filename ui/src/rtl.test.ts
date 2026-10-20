@@ -26,6 +26,11 @@ describe("right to left", () => {
     expect(knob?.body).toContain("translateX(-16px)");
   });
 
+  it.each(["ar", "he", "hi", "ja", "zh"])("resets the Swiss Moss display letter-spacing for :lang(%s)", (lang) => {
+    const reset = rules.find((r) => r.selector.split(/\s*,\s*/).includes(`:root:lang(${lang}) *`));
+    expect(reset?.body).toMatch(/letter-spacing:\s*normal/);
+  });
+
   it.each([
     ["ar", ['"Noto Sans Arabic"', '"Segoe UI"', '"Geeza Pro"']],
     ["hi", ['"Kohinoor Devanagari"', '"Nirmala UI"', '"Noto Sans Devanagari"']],
