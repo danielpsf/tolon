@@ -447,6 +447,21 @@ struct Inner {
     /// id never matches within a run, and a notification left over from an earlier run (the OS may
     /// keep it on screen) is unlikely to match either.
     last_notice: i32,
+    /// When the last preview started, and which sound, for the preview throttle.
+    last_preview: Option<(DateTime<Utc>, Sound)>,
+}
+
+/// Previews closer together than this are dropped, so a held key or fast clicks do not stack sounds.
+pub const PREVIEW_GAP: Duration = Duration::milliseconds(300);
+
+/// How long a preview of `sound` plays. shortcut: the lengths of the bundled sounds as decision
+/// "Alarm sound" gives them; read them from tolon-platform if the sounds change.
+fn preview_length(sound: Sound) -> Duration {
+    match sound {
+        Sound::SoftBell => Duration::milliseconds(1500),
+        Sound::Chime => Duration::seconds(1),
+        Sound::None => Duration::zero(),
+    }
 }
 
 pub struct Scheduler<H> {
@@ -467,6 +482,7 @@ impl<H: Host> Scheduler<H> {
                 repeat: true,
                 degraded_logged: false,
                 last_notice: notice_seed(now),
+                last_preview: None,
             }),
             wake: Notify::new(),
         }
@@ -717,8 +733,20 @@ impl<H: Host> Scheduler<H> {
     }
 
     /// One shot of `sound`, for the settings page's Play button (AC6.3).
-    pub fn preview(&self, sound: Sound) {
+    /// Dropped while an interrupt is open (its own sound is playing), while the last preview
+    /// still plays, and within 300 ms of it. `true` when it played.
+    pub async fn preview(&self, sound: Sound) -> bool {
+        let now = self.host.now();
+        let mut inner = self.inner.lock().await;
+        let busy = inner
+            .last_preview
+            .is_some_and(|(at, last)| now < at + preview_length(last).max(PREVIEW_GAP));
+        if inner.open.is_some() || busy {
+            return false;
+        }
+        inner.last_preview = Some((now, sound));
         self.host.play(sound);
+        true
     }
 
     /// Shows F10's test alarm. A real interrupt that is up is left alone.

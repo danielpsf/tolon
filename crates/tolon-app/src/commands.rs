@@ -264,7 +264,8 @@ pub async fn settings_set(
         .map_err(|e| command_error(&e))
 }
 
-/// One shot of `sound` (`bell`, `chime` or `none`) for the Play button (AC6.3).
+/// One shot of `sound` (`bell`, `chime` or `none`) for the Play button (AC6.3), unless
+/// `Scheduler::preview` drops it.
 #[tauri::command]
 pub async fn sound_preview(
     app: AppHandle,
@@ -277,7 +278,8 @@ pub async fn sound_preview(
     let scheduler = app
         .try_state::<AppScheduler>()
         .ok_or_else(|| command_error(&AppError::NOT_READY.into()))?;
-    scheduler.preview(choice.into());
+    // A dropped preview (another one playing, or an interrupt open) is not an error.
+    scheduler.preview(choice.into()).await;
     Ok(())
 }
 

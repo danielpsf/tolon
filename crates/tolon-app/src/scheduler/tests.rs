@@ -1487,8 +1487,43 @@ async fn ac8_1_quiet_hours_are_off_by_default() -> TestResult {
 #[tokio::test]
 async fn ac6_3_the_preview_plays_once_and_opens_nothing() -> TestResult {
     let rig = Rig::new(&[], at(13, 0, 0))?;
-    rig.sched.preview(Sound::Chime);
+    assert!(rig.sched.preview(Sound::Chime).await);
     assert_eq!(rig.host().calls(), ["play"]);
+    Ok(())
+}
+
+/// A preview at `t` on the rig's clock.
+async fn preview_at(rig: &Rig, t: DateTime<Utc>, sound: Sound) -> bool {
+    rig.host().set_now(t);
+    rig.sched.preview(sound).await
+}
+
+#[tokio::test]
+async fn ac6_3_a_preview_is_dropped_while_one_plays_and_within_300_ms() -> TestResult {
+    let rig = Rig::new(&[], at(13, 0, 0))?;
+    let t = at(13, 0, 0);
+    let ms = Duration::milliseconds;
+    assert!(preview_at(&rig, t, Sound::SoftBell).await);
+    // The soft bell plays 1.5 s: anything before that is dropped, whatever sound it asks for.
+    assert!(!preview_at(&rig, t + ms(299), Sound::Chime).await);
+    assert!(!preview_at(&rig, t + ms(1499), Sound::None).await);
+    assert!(preview_at(&rig, t + ms(1500), Sound::None).await);
+    // "None" plays nothing, so only the 300 ms gap holds the next one back.
+    assert!(!preview_at(&rig, t + ms(1799), Sound::Chime).await);
+    assert!(preview_at(&rig, t + ms(1800), Sound::Chime).await);
+    assert!(!preview_at(&rig, t + ms(2799), Sound::Chime).await);
+    assert_eq!(rig.host().count("play"), 3);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac6_3_a_preview_is_ignored_while_an_interrupt_is_open() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.host().count("open"), 1);
+    let plays = rig.host().count("play");
+    assert!(!preview_at(&rig, at(13, 58, 10), Sound::Chime).await);
+    assert_eq!(rig.host().count("play"), plays);
     Ok(())
 }
 
