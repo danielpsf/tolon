@@ -102,7 +102,7 @@
  */
 .tl-int {
   --tl-u: max(1px, calc(100vmin / 800));
-  --tl-ring: color-mix(in srgb, var(--sm-on-moss) 45%, transparent);
+  --tl-ring: var(--sm-on-moss);
   box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -116,7 +116,16 @@
   user-select: none;
 }
 :root[data-theme="dark"] .tl-int {
-  --tl-ring: color-mix(in srgb, var(--sm-ink) 55%, transparent);
+  --tl-ring: var(--sm-ink);
+}
+/* The quiet button border: a soft line where color-mix() exists, the solid token elsewhere (older WebKitGTK). */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .tl-int {
+    --tl-ring: color-mix(in srgb, var(--sm-on-moss) 45%, transparent);
+  }
+  :root[data-theme="dark"] .tl-int {
+    --tl-ring: color-mix(in srgb, var(--sm-ink) 55%, transparent);
+  }
 }
 .tl-int :focus-visible {
   outline: calc(3 * var(--tl-u)) solid var(--sm-on-moss);
@@ -143,7 +152,9 @@
   flex-direction: column;
   justify-content: center;
   min-height: 0;
-  padding-top: calc(86 * var(--tl-u));
+  /* overflow-y:auto clips on x as well; the side and bottom padding (cancelled by the margin) is room for the focus ring. */
+  margin-inline: calc(-12 * var(--tl-u));
+  padding: calc(86 * var(--tl-u)) calc(12 * var(--tl-u)) calc(12 * var(--tl-u));
   overflow-y: auto;
 }
 .tl-int-head {
@@ -212,8 +223,9 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* moss-deep behind on-moss text: 7.7:1 in light and about 10:1 in dark (ui/src/contrast.test.ts). */
 .tl-int .sm-btn:hover {
-  background: var(--tl-ring);
+  background: var(--sm-moss-deep);
   color: var(--sm-on-moss);
 }
 .tl-int .sm-btn.tl-primary {
