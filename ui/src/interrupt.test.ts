@@ -127,6 +127,23 @@ describe("primary button (AC5.2)", () => {
       expect(hintText(c, "join", false)).not.toContain(c.t.interrupt.hintSpace);
     }
   });
+
+  it("joins the hint sentences per locale: a space, but nothing after 。 in zh-CN and ja", () => {
+    expect(hintText(createCopy("zh-CN"), "join")).toBe("Esc：稍后提醒。Enter：加入。D：关闭。空格键：我已经在会上了。");
+    expect(hintText(createCopy("ja"), "open_event")).toBe(
+      "Esc：再通知。Enter：予定を開く。D：閉じる。スペースキー：すでに参加しています。",
+    );
+    expect(hintText(createCopy("de"), "join")).toBe(
+      "Esc: schlummern. Enter: teilnehmen. D: verwerfen. Leertaste: Ich bin schon dabei.",
+    );
+    for (const locale of LOCALES) {
+      for (const primary of ["join", "open_event", "already_there"] as const) {
+        const text = hintText(createCopy(locale), primary);
+        expect(text).not.toContain("。 ");
+        expect(text).not.toMatch(/\s{2}/);
+      }
+    }
+  });
 });
 
 describe("join host (decisions.md, join links are untrusted)", () => {

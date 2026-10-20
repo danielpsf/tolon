@@ -75,7 +75,8 @@ export function detailsText(c: Copy, meeting: MeetingDto): string {
 export function hintText(c: Copy, primary: PrimaryAction, spaceActive = true): string {
   const { interrupt: t } = c.t;
   const keys = primary === "join" ? t.hintJoin : primary === "open_event" ? t.hintEvent : t.hintAlreadyThere;
-  return spaceActive ? `${keys} ${t.hintSpace}` : keys;
+  // zh-CN and ja end sentences with the full-width "。", which takes no space after it.
+  return spaceActive ? `${keys}${keys.endsWith("。") ? "" : " "}${t.hintSpace}` : keys;
 }
 
 /** "Starts in 2 min" before the start, "Started 3 min ago" after it (AC4.7, S3.4). */
