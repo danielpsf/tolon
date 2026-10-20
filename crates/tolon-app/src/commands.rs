@@ -171,9 +171,9 @@ pub async fn alarms_test(app: AppHandle, window: tauri::WebviewWindow) -> Result
     done.map_err(|e| command_error(&e))
 }
 
-/// The alarm rows, for the WebDriver tests (`cargo run` and debug builds only: a release build does
-/// not contain this command). Keys and states, never titles.
-#[cfg(debug_assertions)]
+/// The alarm rows, for the WebDriver tests. It exists only with the `e2e-loopback` feature, which no
+/// release build can have (decision "End-to-end fetch seam"). Keys and states, never titles.
+#[cfg(feature = "e2e-loopback")]
 #[derive(serde::Serialize)]
 pub struct AlarmStateDto {
     pub key: String,
@@ -182,7 +182,7 @@ pub struct AlarmStateDto {
     pub until: Option<String>,
 }
 
-#[cfg(debug_assertions)]
+#[cfg(feature = "e2e-loopback")]
 #[tauri::command]
 pub async fn alarms_e2e_state(app: AppHandle) -> Result<Vec<AlarmStateDto>, CommandError> {
     let rows = state(&app)

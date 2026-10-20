@@ -81,7 +81,7 @@ fn main() -> anyhow::Result<()> {
             commands::alarms_already_there,
             commands::alarms_current,
             commands::alarms_test,
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "e2e-loopback")]
             commands::alarms_e2e_state,
         ])
         .setup(|app| {

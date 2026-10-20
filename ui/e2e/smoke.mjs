@@ -385,7 +385,7 @@ for (const [name, keys] of KEY_CASES) {
 // ---- The scheduler end to end (L-032) ---------------------------------------------------------
 // A feed with a meeting that starts in 90 s, inside the default 2-minute lead time: the sync wakes the
 // scheduler, which plans the alarm, fires it and opens the interrupt. The state is read from the store
-// through `alarms_e2e_state`, a command that only debug builds contain.
+// through `alarms_e2e_state`, a command that only the e2e build (the fetch seam above) contains.
 
 const stamp = (date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 

@@ -32,6 +32,9 @@ const DEFINITIONS: &[(&str, &str)] = &[
 const EXEMPT: &[&str] = &[
     "crates/tolon-sync/src/ics.rs",
     "crates/tolon-sync/build.rs",
+    // The WebDriver suite's read-only alarm command and its registration (L-032).
+    "crates/tolon-app/src/commands.rs",
+    "crates/tolon-app/src/main.rs",
     "xtask/src/ci.rs",
 ];
 
@@ -252,7 +255,7 @@ mod tests {
     fn gating_sources_and_markdown_may_name_it() {
         let cfg = "#[cfg(feature = \"e2e-loopback\")]\n";
         assert!(violations("crates/tolon-sync/src/ics.rs", cfg).is_empty());
-        assert_eq!(violations("crates/tolon-app/src/main.rs", cfg).len(), 1);
+        assert_eq!(violations("crates/tolon-app/src/pipeline.rs", cfg).len(), 1);
         assert!(violations(
             "docs/decisions.md",
             "the e2e-loopback feature, never --all-features\n"
