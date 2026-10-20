@@ -13,7 +13,7 @@ version = 2
 yanked = "deny"
 ignore = [
     { id = "RUSTSEC-2024-0370", reason = "unmaintained, not a vulnerability; transitive via Tauri 2's gtk-rs 0.18 Linux stack; drop when Tauri moves to gtk-rs >= 0.19 or gtk4" },
-    { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained, not a vulnerability; zbus 5 reaches us on Linux through tauri-plugin-notification (notify-rust) and tauri-plugin-opener (L-032); drop when notify-rust moves to zbus 6" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained, not a vulnerability; zbus 5 reaches Linux builds through tauri-plugin-notification, its backend notify-rust 4.18, and tauri-plugin-opener (L-032); drop when they move to zbus 6" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names unmaintained, not a vulnerability; same zbus 5 path as RUSTSEC-2026-0370" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive unmaintained, not a vulnerability; same zbus 5 path as RUSTSEC-2026-0370" }
 ]
