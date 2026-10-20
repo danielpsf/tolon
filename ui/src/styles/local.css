@@ -316,16 +316,10 @@
 }
 
 /*
- * Right to left (Arabic and Hebrew, docs/decisions.md). Grid, flex and the logical
- * properties above mirror on their own; the Swiss Moss switch places its knob with left and translateX.
+ * Right to left (Arabic and Hebrew, docs/decisions.md): grid, flex and the logical properties above
+ * mirror on their own, and so do Swiss Moss controls (the switch knob uses inset-inline-start).
  */
-:root[dir="rtl"] .sm-switch input::after {
-  left: auto;
-  right: 3px;
-}
-:root[dir="rtl"] .sm-switch input:checked::after {
-  transform: translateX(-16px);
-}
+
 /*
  * Swiss Moss tightens every display size for Latin. Negative tracking breaks the joins between
  * Arabic letters, crowds Devanagari and Hebrew, and squeezes CJK, which is set solid.

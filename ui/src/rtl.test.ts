@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LOCALES, RTL_LOCALES } from "./i18n/locale";
+import swissMoss from "swiss-moss/css/swiss-moss.css?raw";
 import local from "./styles/local.css?raw";
 
 // Arabic and Hebrew are right to left (docs/decisions.md): local.css uses logical
@@ -21,9 +22,10 @@ describe("right to left", () => {
     expect(LOCALES.filter((l) => RTL_LOCALES.has(l))).toEqual(["ar", "he"]);
   });
 
-  it("mirrors the Swiss Moss switch knob", () => {
-    const knob = rules.find((r) => r.selector === ':root[dir="rtl"] .sm-switch input:checked::after');
-    expect(knob?.body).toContain("translateX(-16px)");
+  it("leaves the switch knob to Swiss Moss, which places it with inset-inline-start", () => {
+    expect(swissMoss).toMatch(/\.sm-switch input::after\{[^}]*inset-inline-start:3px/);
+    expect(swissMoss).toMatch(/\.sm-switch input:checked::after\{[^}]*inset-inline-start:19px/);
+    expect(rules.filter((r) => r.selector.includes(".sm-switch input")).map((r) => r.selector)).toEqual([]);
   });
 
   it.each(["ar", "he", "hi", "ja", "zh"])("resets the Swiss Moss display letter-spacing for :lang(%s)", (lang) => {
