@@ -443,27 +443,25 @@ describe("formatting", () => {
   });
 
   it("writes relative copy in every new locale", () => {
-    const pinned: [Locale, string, string, string][] = [
-      ["de", "Vor 1 Min. synchronisiert", "Beginnt in 2 Min.", "Hat vor 3 Min. begonnen"],
-      ["es", "Sincronizado hace 1 min", "Empieza en 2 min", "Empezó hace 3 min"],
-      ["tr", "1 dk. önce eşitlendi", "2 dk. içinde başlıyor", "3 dk. önce başladı"],
-      ["zh-CN", "1分钟前同步", "2分钟后开始", "已开始3分钟"],
-      ["ja", "1 分前に同期しました", "2 分後に開始", "3 分前に開始しました"],
+    // The sentence is pinned; the duration inside it is whatever Intl writes at runtime ("1 Min.",
+    // "1分钟", "2 د" ...), because unit labels change between ICU and CLDR versions.
+    const span = (locale: Locale, minutes: number) =>
+      new Intl.NumberFormat(locale, { style: "unit", unit: "minute", unitDisplay: "short" }).format(minutes);
+    const pinned: [Locale, (d: string) => string, (d: string) => string, (d: string) => string][] = [
+      ["de", (d) => `Vor ${d} synchronisiert`, (d) => `Beginnt in ${d}`, (d) => `Hat vor ${d} begonnen`],
+      ["es", (d) => `Sincronizado hace ${d}`, (d) => `Empieza en ${d}`, (d) => `Empezó hace ${d}`],
+      ["tr", (d) => `${d} önce eşitlendi`, (d) => `${d} içinde başlıyor`, (d) => `${d} önce başladı`],
+      ["zh-CN", (d) => `${d}前同步`, (d) => `${d}后开始`, (d) => `已开始${d}`],
+      ["ja", (d) => `${d}前に同期しました`, (d) => `${d}後に開始`, (d) => `${d}前に開始しました`],
+      ["ar", (d) => `تمت المزامنة منذ ${d}`, (d) => `يبدأ بعد ${d}`, (d) => `بدأ منذ ${d}`],
+      ["hi", (d) => `${d} पहले सिंक हुआ`, (d) => `${d} में शुरू होगी`, (d) => `${d} पहले शुरू हुई`],
+      ["he", (d) => `סונכרן לפני ${d}`, (d) => `מתחילה בעוד ${d}`, (d) => `התחילה לפני ${d}`],
     ];
     for (const [locale, synced, starts, started] of pinned) {
       const c = createCopy(locale);
-      expect(c.syncedAgo(at(-60), now).replace(/\s/g, " ")).toBe(synced);
-      expect(c.startsIn(at(120), now).replace(/\s/g, " ")).toBe(starts);
-      expect(c.startedAgo(at(-180), now).replace(/\s/g, " ")).toBe(started);
-    }
-    // Arabic, Hindi and Hebrew unit labels vary between CLDR versions: check the sentence around Intl's value.
-    for (const locale of ["ar", "hi", "he"] as const) {
-      const c = createCopy(locale);
-      const span = (minutes: number) =>
-        new Intl.NumberFormat(locale, { style: "unit", unit: "minute", unitDisplay: "short" }).format(minutes);
-      expect(c.syncedAgo(at(-60), now)).toBe(c.t.relative.syncedAgo(span(1)));
-      expect(c.startsIn(at(120), now)).toBe(c.t.relative.startsIn(span(2)));
-      expect(c.startedAgo(at(-180), now)).toBe(c.t.relative.startedAgo(span(3)));
+      expect(c.syncedAgo(at(-60), now)).toBe(synced(span(locale, 1)));
+      expect(c.startsIn(at(120), now)).toBe(starts(span(locale, 2)));
+      expect(c.startedAgo(at(-180), now)).toBe(started(span(locale, 3)));
       expect(c.syncedAgo(at(-30), now)).toBe(c.t.relative.syncedJustNow);
     }
     expect(createCopy("ar").syncedAgo(at(-2 * 24 * 3600), now)).toContain("يوم");
