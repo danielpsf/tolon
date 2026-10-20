@@ -55,6 +55,11 @@ before(async () => {
     spawnError = err;
   });
   await waitForDriver(tauriDriver);
+  await startApp();
+});
+
+/** Starts the app in a new WebDriver session; the data dir is tauri-driver's, so it survives a restart. */
+async function startApp() {
   driver = await new Builder()
     .usingServer(driverUrl)
     .withCapabilities({ browserName: "wry", "tauri:options": { application } })
@@ -63,7 +68,7 @@ before(async () => {
   const url = new URL(await driver.getCurrentUrl());
   url.search = "?lang=en-US";
   await driver.get(url.href);
-});
+}
 
 after(async () => {
   await driver?.quit();
@@ -468,4 +473,63 @@ test("s3_3 D dismisses the alarm for good", async () => {
     await pressAndWaitForClose(main, "d");
     assert.equal((await leadOf("e2e-dismiss")).state, "dismissed");
   });
+});
+
+// ---- Settings round trip (L-016 backend, L-017 pages) --------------------------------------------
+// The pages save through `settings_set` on every change (AC9.1); the backend validates and refuses a
+// bad value with `invalid:<field>`, which the page shows as a sentence.
+
+/** Shows a settings page by its route, as the left nav does. */
+async function openPage(id) {
+  await (await find(`nav a[href="#/${id}"]`)).click();
+  await waitFor(`the ${id} page`, async () => (await driver.getCurrentUrl()).endsWith(`#/${id}`));
+}
+
+/** Sets a field's value as typing does for React: the native value setter, then an input event. */
+const typeInto = (input, value) =>
+  driver.executeScript(
+    (field, text) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, text);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    input,
+    value,
+  );
+
+/** The settings as stored, asked from the main window. */
+const storedSettings = () =>
+  driver.executeAsyncScript((done) => {
+    window.__TAURI_INTERNALS__.invoke("settings_get").then(done, (e) => done(JSON.stringify(e)));
+  });
+
+test("ac9_1 the Alarms page saves the lead time at once and it survives a restart", async () => {
+  await openPage("alarms");
+  const lead = await find("#lead-minutes");
+  assert.equal(await lead.getAttribute("value"), "2", "the default lead time");
+  // WebKitGTK's number field ignores select-all over WebDriver, so the value is typed the way React
+  // sees typing: the native setter, then an input event.
+  await typeInto(lead, "7");
+  await waitFor("lead time 7 in the store", async () => (await storedSettings()).lead_minutes === 7);
+
+  // Quit the app and start it again on the same data dir.
+  await driver.quit();
+  await startApp();
+  await openPage("alarms");
+  await waitFor("lead time 7 after the restart", async () => (await (await find("#lead-minutes")).getAttribute("value")) === "7");
+  assert.equal((await storedSettings()).lead_minutes, 7);
+});
+
+test("ac8_1 a quiet-hours time the backend refuses shows the error and keeps the stored time", async () => {
+  await openPage("quiet-hours");
+  const enable = await find('main input[role="switch"]');
+  if (!(await enable.isSelected())) await enable.click();
+  await waitFor("quiet hours on", async () => (await storedSettings()).quiet.enabled === true);
+  const start = await find("#quiet-start");
+  await waitFor("the start field enabled", () => start.isEnabled());
+  // A time with seconds is a valid <input type="time"> value but not HH:MM: only the backend refuses it.
+  await typeInto(start, "09:00:30");
+  const alert = await find("main .sm-alert[role=alert]");
+  await waitFor("the error sentence", async () => (await alert.getText()) === "Enter a time as hours and minutes.");
+  assert.equal((await storedSettings()).quiet.start, "18:00");
+  await waitFor("the stored time back in the field", async () => (await start.getAttribute("value")) === "18:00");
 });
