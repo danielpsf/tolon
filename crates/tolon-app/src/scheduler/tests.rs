@@ -1067,6 +1067,43 @@ async fn ac6_1_the_repeat_can_be_turned_off() -> TestResult {
     Ok(())
 }
 
+/// True when a `wake` is waiting for the loop (the permit is consumed).
+async fn woken(sched: &Scheduler<Fake>) -> bool {
+    tokio::time::timeout(std::time::Duration::from_millis(20), sched.wake.notified())
+        .await
+        .is_ok()
+}
+
+#[tokio::test]
+async fn the_test_alarm_and_every_action_nudge_the_loop_for_their_new_deadlines() -> TestResult {
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140500", "")],
+        at(13, 50, 0),
+    )?;
+    assert!(!woken(&rig.sched).await);
+    rig.sched.show_test().await?;
+    assert!(
+        woken(&rig.sched).await,
+        "the test alarm has a focus check to run"
+    );
+    let key = rig.key(0)?;
+    rig.act(at(13, 50, 5), &key, Act::Dismiss).await?;
+    assert!(woken(&rig.sched).await);
+
+    // A waiting minute opened by a close needs its own check on time.
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.tick_at(at(14, 3, 5)).await;
+    assert!(!woken(&rig.sched).await, "a tick does not nudge itself");
+    let alpha = rig.key(0)?;
+    rig.act(at(14, 3, 10), &alpha, Act::Dismiss).await?;
+    assert!(woken(&rig.sched).await);
+    assert_eq!(
+        rig.sched.deadline().await,
+        Some(at(14, 3, 10) + FOCUS_RECHECK)
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn the_loop_wakes_for_the_focus_check_and_the_next_repeat() -> TestResult {
     let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;

@@ -682,6 +682,9 @@ impl<H: Host> Scheduler<H> {
             self.announce(&mut inner);
         }
         self.sound(&mut inner, now);
+        // The loop must know the new deadlines (focus re-check, sound repeat): it sleeps for the
+        // ones it knew when it last looked.
+        self.wake();
         Ok(())
     }
 
@@ -748,6 +751,8 @@ impl<H: Host> Scheduler<H> {
         if !test {
             apply_action(db, &targets, act, now)?;
         }
+        // A close may open a waiting minute and a partial join re-opens: new deadlines either way.
+        self.wake();
         if rest.is_empty() {
             self.close(&mut inner);
             self.present_waiting(&mut inner, db, now).await;
