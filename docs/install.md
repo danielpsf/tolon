@@ -1,52 +1,73 @@
 # Install Tolon
 
-Tolon is a beta. Download the file for your system from the Releases page, then follow the steps for your OS. Tolon never writes to your calendars and sends nothing anywhere.
+Tolon is a beta. Download the file for your system from the Assets list of the release, then follow the steps for your system below. It takes about two minutes, including your first calendar. Tolon only reads your calendars. It has no analytics and sends no data about you. It contacts your calendar links and GitHub, to check for updates.
 
-## macOS (Apple silicon and Intel, one universal build)
+| System | File to download |
+| --- | --- |
+| macOS, Apple silicon and Intel | `Tolon_<version>_universal.dmg` |
+| Windows | `Tolon_<version>_x64-setup.exe` (or the `.msi`, if your IT team asks for it) |
+| Linux | `Tolon_<version>_amd64.AppImage` (any distribution) or `Tolon_<version>_amd64.deb` (Debian, Ubuntu) |
 
-Tolon is signed by its author, not by Apple, because the project has no paid Apple Developer membership. macOS will say it cannot verify the developer. You approve it once.
+## macOS
+
+Tolon is signed by its author, not by Apple, because the project has no paid Apple Developer membership. macOS therefore says it cannot check Tolon for malware. You approve it once.
 
 1. Open the `.dmg` and drag Tolon into Applications.
-2. Double-click Tolon. macOS says it cannot verify it. Click Done.
-3. Open System Settings, then Privacy & Security, scroll to Security, and click Open Anyway next to Tolon. That button shows for about an hour after step 2.
-4. Confirm with Open and your password. From now on Tolon opens normally.
+2. Open Tolon from Applications. macOS shows a warning that it could not verify Tolon. Click Done. Do not click Move to Trash.
+3. Open System Settings, click Privacy & Security, and scroll down to Security. Click Open Anyway next to Tolon. The button shows for about an hour after step 2. If it is gone, repeat step 2.
+4. Type your Mac password and click OK. Tolon opens its first-run window. From now on Tolon opens like any other app.
 
-Prefer the Terminal? After checking the download against `SHA256SUMS`:
+If you prefer the Terminal, check the download against `SHA256SUMS` first (see "Check your download" below). Then run this line, which removes the quarantine mark that causes the warning:
 
 ```
 xattr -dr com.apple.quarantine /Applications/Tolon.app
 ```
 
-Updates arrive through Tolon itself and are verified with the project's signing key, so you should not have to repeat these steps.
-
 ## Windows
 
-1. Run the `.msi` (or the `.exe` installer).
-2. SmartScreen may say "Windows protected your PC" because the installer is not yet signed by a certificate authority. Click More info, then Run anyway.
-3. Tolon starts in the system tray (bottom right). Click the leaf icon.
+1. Double-click the `.exe` you downloaded.
+2. Windows may show "Windows protected your PC". Tolon is not yet signed by a certificate authority, so Windows does not know the publisher. Click More info, then click Run anyway.
+3. Follow the installer. Tolon opens its first-run window.
+4. After that, Tolon lives in the system tray at the bottom right. If you do not see its icon, click the small arrow to show hidden icons.
 
 ## Linux
 
 AppImage, any distribution:
+
+1. Open a terminal in the folder with the download.
+2. Make the file runnable, then start it:
 
 ```
 chmod +x Tolon_*.AppImage
 ./Tolon_*.AppImage
 ```
 
-Debian and Ubuntu:
+If it does not start and mentions FUSE, install it once with `sudo apt install libfuse2` (Debian and Ubuntu) and try again.
+
+Debian and Ubuntu, with the `.deb`:
 
 ```
-sudo apt install ./tolon_*_amd64.deb
+sudo apt install ./Tolon_*_amd64.deb
 ```
 
-The tray icon needs an AppIndicator-capable panel. On GNOME, install the AppIndicator extension; on KDE it works out of the box.
+Then start Tolon from your applications menu. It opens its first-run window.
 
-## Verify a download
+The tray icon needs a panel that supports AppIndicator icons. KDE works out of the box. On GNOME, install the AppIndicator extension.
+
+## Check your download
+
+This step is optional. It proves the file was not changed on the way to you. Download `SHA256SUMS` from the same release into the same folder as your installer, then run one of these:
 
 ```
-sha256sum -c SHA256SUMS --ignore-missing
+shasum -a 256 -c SHA256SUMS --ignore-missing      # macOS
+sha256sum -c SHA256SUMS --ignore-missing          # Linux
 ```
+
+On Windows, run `Get-FileHash <file>` in PowerShell and compare the result with the line for your file in `SHA256SUMS`.
+
+## Updates
+
+Tolon checks GitHub for a new version and asks before it installs one. Every update is checked against the project's signing key first.
 
 ## Known limits
 
