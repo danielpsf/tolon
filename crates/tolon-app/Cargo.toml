@@ -41,3 +41,6 @@ tempfile = "3.27.0"
 [features]
 # Set by the Tauri CLI for builds: serve the embedded ui/dist instead of devUrl.
 custom-protocol = ["tauri/custom-protocol"]
+# E2E only (WebDriver suite): the app may fetch a feed over http from a loopback fixture server.
+# Never enable it for a release; see tolon-sync.
+e2e-loopback = ["tolon-sync/e2e-loopback"]

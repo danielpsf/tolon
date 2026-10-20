@@ -92,8 +92,10 @@ jobs:
           & "$HOME/.cargo/bin/msedgedriver-tool.exe"
           $PWD.Path >> $env:GITHUB_PATH
       - run: npm --prefix ui ci
+      # The feature lets the debug app fetch the suite's http fixture feed from 127.0.0.1 (S1.1). tolon-sync refuses it
+      # in release builds, and `cargo xtask check-release-features` keeps it off every other path.
       - name: Build debug app
-        run: npm --prefix ui run tauri build -- --debug --no-bundle
+        run: npm --prefix ui run tauri build -- --debug --no-bundle --features e2e-loopback
       - name: Run WebDriver suite (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm --prefix ui run e2e

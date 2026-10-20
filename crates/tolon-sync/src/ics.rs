@@ -8,6 +8,10 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BODY: usize = 5 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 10;
 
+// A release build cannot carry the loopback seam: `debug_assertions` is off there.
+#[cfg(all(feature = "e2e-loopback", not(debug_assertions)))]
+compile_error!("the e2e-loopback feature must never be built in release mode");
+
 /// Keeps scheme and host only; path, query, userinfo and port are dropped.
 pub fn redact_url(url: &str) -> String {
     match Url::parse(url.trim()) {
@@ -91,7 +95,7 @@ impl IcsFetcher {
         let allow_http = cfg.allow_http;
         // Redirects may only land on https (plain http only in tests), so a feed cannot downgrade.
         let policy = redirect::Policy::custom(move |a| {
-            if follow_redirect(a.url().scheme(), a.previous().len(), allow_http) {
+            if follow_redirect(a.url(), a.previous().len(), allow_http) {
                 a.follow()
             } else {
                 a.stop()
@@ -166,9 +170,36 @@ impl IcsFetcher {
     }
 }
 
-/// Redirect target must be https (http only when `allow_http`) and the chain shorter than `MAX_REDIRECTS`.
-fn follow_redirect(target_scheme: &str, hops: usize, allow_http: bool) -> bool {
-    (target_scheme == "https" || (allow_http && target_scheme == "http")) && hops < MAX_REDIRECTS
+/// Redirect target must be https (http only when `http_permitted`) and the chain shorter than `MAX_REDIRECTS`.
+fn follow_redirect(target: &Url, hops: usize, allow_http: bool) -> bool {
+    (target.scheme() == "https" || http_permitted(target, allow_http)) && hops < MAX_REDIRECTS
+}
+
+/// Plain http is never allowed in production. Tests set `allow_http`; the `e2e-loopback` feature
+/// (debug builds only) allows it for loopback hosts alone, so a feed cannot be fetched in the clear
+/// from anywhere else. Redirects use the same rule.
+fn http_permitted(url: &Url, allow_http: bool) -> bool {
+    url.scheme() == "http" && (allow_http || loopback_http(url))
+}
+
+/// `localhost`, or an IP literal in 127.0.0.0/8 or `::1`. Anything else, including names such as
+/// `127.0.0.1.example.com`, is not loopback.
+#[cfg(feature = "e2e-loopback")]
+fn loopback_http(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+/// Without the feature no http host is allowed: production carries no loopback code at all.
+#[cfg(not(feature = "e2e-loopback"))]
+fn loopback_http(_url: &Url) -> bool {
+    false
 }
 
 /// Canonical https form of a subscription URL: `webcal://` becomes `https://`, other schemes are rejected.
@@ -187,7 +218,7 @@ fn map_err(e: reqwest::Error) -> FetchError {
     }
 }
 
-/// `webcal://` becomes `https://`; only https is accepted (http when `allow_http`, tests only).
+/// `webcal://` becomes `https://`; only https is accepted (http: see `http_permitted`).
 fn parse_url(raw: &str, allow_http: bool) -> Result<Url, FetchError> {
     let raw = raw.trim();
     let rewritten;
@@ -199,10 +230,10 @@ fn parse_url(raw: &str, allow_http: bool) -> Result<Url, FetchError> {
         _ => raw,
     };
     let url = Url::parse(raw).map_err(|_| FetchError::InvalidUrl)?;
-    match url.scheme() {
-        "https" => Ok(url),
-        "http" if allow_http => Ok(url),
-        _ => Err(FetchError::UnsupportedScheme),
+    if url.scheme() == "https" || http_permitted(&url, allow_http) {
+        Ok(url)
+    } else {
+        Err(FetchError::UnsupportedScheme)
     }
 }
 
@@ -292,9 +323,10 @@ mod tests {
     #[test]
     fn s1_2_redirect_downgrade_refused() {
         // Production config (allow_http false): https may follow, http may not.
-        assert!(follow_redirect("https", 0, false));
-        assert!(!follow_redirect("http", 0, false));
-        assert!(!follow_redirect("ftp", 0, true));
+        let u = |s: &str| Url::parse(s).unwrap();
+        assert!(follow_redirect(&u("https://example.com/"), 0, false));
+        assert!(!follow_redirect(&u("http://example.com/"), 0, false));
+        assert!(!follow_redirect(&u("ftp://example.com/"), 0, true));
     }
 
     #[tokio::test]
@@ -311,6 +343,104 @@ mod tests {
             .unwrap_err();
         assert_eq!(err, FetchError::Status(302));
         assert_eq!(seen.lock().unwrap().len(), MAX_REDIRECTS); // reqwest counts the first URL in previous()
+    }
+
+    #[cfg(not(feature = "e2e-loopback"))]
+    #[test]
+    fn s1_2_http_to_loopback_is_refused_without_the_e2e_feature() {
+        for raw in [
+            "http://127.0.0.1:8080/a.ics",
+            "http://localhost/a.ics",
+            "http://[::1]/a.ics",
+        ] {
+            assert_eq!(parse_url(raw, false), Err(FetchError::UnsupportedScheme));
+            assert_eq!(normalize_url(raw), Err(FetchError::UnsupportedScheme));
+        }
+    }
+
+    #[cfg(not(feature = "e2e-loopback"))]
+    #[test]
+    fn s1_2_redirect_to_loopback_http_is_refused_without_the_e2e_feature() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        for raw in [
+            "http://127.0.0.1:9/b.ics",
+            "http://localhost/b.ics",
+            "http://[::1]/b.ics",
+        ] {
+            assert!(!follow_redirect(&u(raw), 0, false), "{raw}");
+        }
+    }
+
+    #[cfg(feature = "e2e-loopback")]
+    #[test]
+    fn s1_2_e2e_feature_allows_http_to_loopback_hosts_only() {
+        for raw in [
+            "http://127.0.0.1:8080/a.ics",
+            "http://127.1.2.3/a.ics",
+            "http://[::1]:8080/a.ics",
+            "http://localhost/a.ics",
+            "http://LOCALHOST:9/a.ics",
+        ] {
+            assert!(parse_url(raw, false).is_ok(), "{raw}");
+            assert!(normalize_url(raw).is_ok(), "{raw}");
+        }
+        for raw in [
+            "http://example.com/a.ics",
+            "http://127.0.0.1.example.com/a.ics",
+            "http://localhost.example.com/a.ics",
+            "http://127.0.0.1@example.com/a.ics",
+            "http://10.0.0.1/a.ics",
+            "http://192.168.1.1/a.ics",
+            "http://169.254.169.254/a.ics",
+            "http://0.0.0.0/a.ics",
+            "http://[::ffff:127.0.0.1]/a.ics",
+            "http://[::2]/a.ics",
+            "ftp://127.0.0.1/a.ics",
+        ] {
+            assert_eq!(
+                parse_url(raw, false),
+                Err(FetchError::UnsupportedScheme),
+                "{raw}"
+            );
+        }
+    }
+
+    #[cfg(feature = "e2e-loopback")]
+    #[test]
+    fn s1_2_e2e_feature_redirects_stay_on_loopback() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        assert!(follow_redirect(&u("http://127.0.0.1:9/b.ics"), 0, false));
+        assert!(!follow_redirect(&u("http://example.com/b.ics"), 0, false));
+        assert!(!follow_redirect(&u("http://10.0.0.1/b.ics"), 0, false));
+    }
+
+    #[cfg(feature = "e2e-loopback")]
+    #[tokio::test]
+    async fn s1_1_e2e_feature_fetches_from_loopback_with_the_default_config() {
+        let (base, _) = serve(vec![http("200 OK", "Content-Type: text/calendar\r\n", ICS)]).await;
+        let out = IcsFetcher::new()
+            .unwrap()
+            .fetch(&format!("{base}/a.ics"), None)
+            .await;
+        assert!(matches!(out, Ok(FetchOutcome::Modified { .. })));
+    }
+
+    #[cfg(feature = "e2e-loopback")]
+    #[tokio::test]
+    async fn s1_2_e2e_feature_does_not_follow_a_redirect_off_loopback() {
+        let (base, seen) = serve(vec![http(
+            "302 Found",
+            "Location: http://example.com/x.ics\r\n",
+            "",
+        )])
+        .await;
+        let err = IcsFetcher::new()
+            .unwrap()
+            .fetch(&format!("{base}/a.ics"), None)
+            .await
+            .unwrap_err();
+        assert_eq!(err, FetchError::Status(302));
+        assert_eq!(seen.lock().unwrap().len(), 1);
     }
 
     #[test]
