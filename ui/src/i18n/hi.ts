@@ -13,7 +13,7 @@ export const hi: Messages = {
     quietHours: "शांत समय",
     appearance: "रूप-रंग",
     startup: "स्टार्टअप",
-    about: "परिचय",
+    about: "के बारे में",
     comingSoon: "यह बाद के किसी वर्शन में आएगा।",
   },
   calendars: {

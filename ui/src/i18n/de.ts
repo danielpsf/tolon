@@ -30,7 +30,7 @@ export const de: Messages = {
     ignoreAllDay: "Ganztägige Termine",
     ignoreDeclined: "Termine, die ich abgelehnt habe",
     ignoreSolo: "Termine ohne andere Personen",
-    ignoreMatching: (keywords) => `Termine mit: ${keywords}`,
+    ignoreMatching: (keywords) => `Termine, die zu ${keywords} passen`,
     changesSave: "Änderungen werden sofort gespeichert.",
     nameWithKind: (name, kind) => `${name}, ${kind}`,
     removeLabel: (name) => `Kalender ${name} entfernen`,

@@ -50,7 +50,7 @@ export const zhCN: Messages = {
     joinOn: (host) => `通过 ${host} 加入`,
     openEvent: "打开活动",
     alreadyThere: "我已经在会上了",
-    snooze: (minutes) => `${number.format(minutes)} 分钟后再提醒`,
+    snooze: (minutes) => `${number.format(minutes)}分钟后再提醒`,
     dismiss: "关闭",
     dismissConsequence: "关闭后，此提醒将在这台电脑上静音。",
     hintJoin: "Esc：稍后提醒。Enter：加入。D：关闭。",
