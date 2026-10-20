@@ -25,21 +25,29 @@ class LatestJson(unittest.TestCase):
         "Tolon_0.1.0_x64-setup.exe", "Tolon_0.1.0_x64-setup.exe.sig",
         "Tolon_0.1.0_x64_en-US.msi", "Tolon_0.1.0_x64_en-US.msi.sig",
         "Tolon_0.1.0_amd64.AppImage", "Tolon_0.1.0_amd64.AppImage.sig",
+        "Tolon_0.1.0_amd64.deb", "Tolon_0.1.0_amd64.deb.sig",
     ]
 
-    def test_maps_every_platform_and_prefers_nsis(self):
+    def test_maps_every_platform_key_and_points_plain_windows_at_nsis(self):
         m = ra.latest_json(self.dist(self.FULL), "v0.1.0", "o/r", datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
         self.assertEqual(m["version"], "0.1.0")
         self.assertEqual(m["pub_date"], "2026-01-02T03:04:05Z")
-        self.assertEqual(sorted(m["platforms"]), ["darwin-aarch64", "darwin-x86_64", "linux-x86_64", "windows-x86_64"])
-        self.assertEqual(m["platforms"]["windows-x86_64"]["signature"], "sig-of-Tolon_0.1.0_x64-setup.exe.sig")
+        p = m["platforms"]
+        self.assertEqual(sorted(p), sorted([
+            "darwin-aarch64", "darwin-x86_64", "windows-x86_64", "windows-x86_64-nsis", "windows-x86_64-msi",
+            "linux-x86_64", "linux-x86_64-appimage", "linux-x86_64-deb",
+        ]))
+        self.assertEqual(p["windows-x86_64"], p["windows-x86_64-nsis"])
+        self.assertEqual(p["windows-x86_64"]["signature"], "sig-of-Tolon_0.1.0_x64-setup.exe.sig")
+        self.assertEqual(p["windows-x86_64-msi"]["signature"], "sig-of-Tolon_0.1.0_x64_en-US.msi.sig")
+        self.assertTrue(p["linux-x86_64-deb"]["url"].endswith("/Tolon_0.1.0_amd64.deb"))
         self.assertEqual(m["platforms"]["linux-x86_64"]["url"], "https://github.com/o/r/releases/download/v0.1.0/Tolon_0.1.0_amd64.AppImage")
 
     def test_missing_signature_is_an_error(self):
-        files = [f for f in self.FULL if "AppImage.sig" not in f]
+        files = [f for f in self.FULL if "msi.sig" not in f]
         with self.assertRaises(SystemExit) as e:
             ra.latest_json(self.dist(files), "v0.1.0", "o/r")
-        self.assertIn("linux-x86_64", str(e.exception))
+        self.assertIn("windows-x86_64-msi", str(e.exception))
 
     def test_written_file_is_valid_json(self):
         d = self.dist(self.FULL)

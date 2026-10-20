@@ -19,14 +19,26 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parents[2]
 TAURI_CONF = ROOT / "crates/tolon-app/tauri.conf.json"
 
-# Updater artifact patterns per platform, best first. The artifact is the file with a `.sig` next to it.
-# Tauri 2 signs the installer itself on Windows and the AppImage on Linux; the archive names are the
-# older layout, kept as a fallback.
-PLATFORMS = [
-    (["darwin-aarch64", "darwin-x86_64"], ["*.app.tar.gz"]),
-    (["windows-x86_64"], ["*-setup.exe", "*-setup.nsis.zip", "*.msi", "*.msi.zip"]),
-    (["linux-x86_64"], ["*.AppImage", "*.AppImage.tar.gz"]),
-]
+# Updater manifest keys and the artifact patterns behind them, best first. The artifact is the file with a
+# `.sig` next to it. Tauri 2 signs the installer itself (the AppImage, `-setup.exe`, `.msi`, `.deb`); the
+# archive names are the older layout, kept as a fallback. The updater plugin looks up
+# `{os}-{arch}-{installer}` (windows-x86_64-nsis, linux-x86_64-deb, ...) before the plain `{os}-{arch}`, so a
+# copy installed from an MSI or a deb gets its own file type back. The plain Windows and Linux keys point at
+# NSIS and the AppImage.
+NSIS = ["*-setup.exe", "*-setup.nsis.zip"]
+MSI = ["*.msi", "*.msi.zip"]
+APPIMAGE = ["*.AppImage", "*.AppImage.tar.gz"]
+APP = ["*.app.tar.gz"]
+KEYS = {
+    "darwin-aarch64": APP,
+    "darwin-x86_64": APP,
+    "windows-x86_64": NSIS + MSI,
+    "windows-x86_64-nsis": NSIS,
+    "windows-x86_64-msi": MSI,
+    "linux-x86_64": APPIMAGE,
+    "linux-x86_64-appimage": APPIMAGE,
+    "linux-x86_64-deb": ["*.deb"],
+}
 
 
 def read_versions():
@@ -75,18 +87,17 @@ def latest_json(dist, tag, repo, now=None):
     dist = Path(dist)
     names = sorted(p.name for p in dist.iterdir() if p.is_file())
     platforms = {}
-    for keys, patterns in PLATFORMS:
+    for key, patterns in KEYS.items():
         found = next(
             (n for pat in patterns for n in names if fnmatch.fnmatch(n, pat) and f"{n}.sig" in names),
             None,
         )
         if found is None:
-            raise SystemExit(f"no signed updater artifact for {keys[0]} in {dist} (looked for {patterns} with a .sig)")
-        entry = {
+            raise SystemExit(f"no signed updater artifact for {key} in {dist} (looked for {patterns} with a .sig)")
+        platforms[key] = {
             "signature": (dist / f"{found}.sig").read_text().strip(),
             "url": f"https://github.com/{repo}/releases/download/{tag}/{quote(found)}",
         }
-        platforms.update({k: entry for k in keys})
     pub_date = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
     manifest = {
         "version": tag.removeprefix("v"),
