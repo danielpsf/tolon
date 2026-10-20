@@ -15,6 +15,14 @@ export function formatTime(locale: Locale, at: Instant): string {
   return new Intl.DateTimeFormat(locale, { hour, minute: "2-digit" }).format(at);
 }
 
+/**
+ * The long name of a weekday in the locale (0 Sunday ... 6 Saturday), as Intl writes it: "Saturday",
+ * "sábado", "土曜日". Read from a fixed week in UTC, so the time zone never shifts the day.
+ */
+export function weekdayName(locale: Locale, day: number): string {
+  return new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(Date.UTC(2026, 9, 18 + day));
+}
+
 /** "2 min", "3 hr", "2 days": Intl picks the unit label and its plural. */
 function formatSpan(locale: Locale, minutes: number): string {
   const [value, unit] =

@@ -1,6 +1,6 @@
 // Alarms, Quiet hours, Rules, Appearance, Language and Startup (mockups 03 and 04, F9).
 // Every control saves on change through the settings store (AC9.1); there is no Save button.
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { api, asCommandError } from "../api";
 import { APPEARANCES, SOUNDS, type SettingsDto, type SettingsPatch } from "../api-types";
 import { copy, LOCALES, NATIVE_NAMES, RTL_LOCALES } from "../copy";
@@ -8,7 +8,8 @@ import { SNOOZE_MINUTES } from "../interrupt";
 import { useSettings } from "../store";
 import { addKeywords, MAX_KEYWORD_LENGTH, MAX_KEYWORDS, parseLead, splitTyped } from "../view";
 
-type Save = (patch: SettingsPatch) => void;
+/** Saves a change; resolves true when it was stored, false when it was refused and rolled back. */
+type Save = (patch: SettingsPatch) => Promise<boolean>;
 
 /** Title, subtitle, the last error, the controls once the settings are in, and the save note. */
 function SettingsPage({
@@ -35,7 +36,7 @@ function SettingsPage({
       )}
       {settings && (
         <div className="sm-stack tl-settings">
-          {children(settings, (patch) => void save(patch))}
+          {children(settings, save)}
           <p className="sm-caption">{c.t.calendars.changesSave}</p>
         </div>
       )}
@@ -43,7 +44,7 @@ function SettingsPage({
   );
 }
 
-/** A switch with its label, and a one-line hint under it when there is one. */
+/** A switch with its label, and a one-line hint under it that describes it (aria-describedby). */
 function Switch({
   label,
   hint,
@@ -57,20 +58,26 @@ function Switch({
   disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const hintId = useId();
   return (
-    <label className="sm-switch">
-      <input
-        type="checkbox"
-        role="switch"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span>
+    <div>
+      <label className="sm-switch">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={checked}
+          disabled={disabled}
+          aria-describedby={hint ? hintId : undefined}
+          onChange={(e) => onChange(e.target.checked)}
+        />
         {label}
-        {hint && <span className="sm-caption tl-hint">{hint}</span>}
-      </span>
-    </label>
+      </label>
+      {hint && (
+        <span className="sm-caption tl-hint" id={hintId}>
+          {hint}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -87,43 +94,51 @@ function Check({ label, hint, checked, onChange }: { label: string; hint: string
   );
 }
 
-/** Minutes before the start: saved as soon as the field holds 1 to 60, the stored value back on blur. */
-function LeadMinutes({ value, onSave }: { value: number; onSave: (minutes: number) => void }) {
+/**
+ * Minutes before the start: saved as soon as the field holds 1 to 60. The stored value comes back on
+ * blur, and at once when the save is refused.
+ */
+function LeadMinutes({ value, onSave }: { value: number; onSave: (minutes: number) => Promise<boolean> }) {
   const c = copy();
   const a = c.t.settings.alarms;
   const [draft, setDraft] = useState<string | null>(null);
   const invalid = draft !== null && parseLead(draft) === null;
   return (
     <div className={`sm-field${invalid ? " invalid" : ""}`}>
-      <span className="sm-label" id="lead-heading">
+      <label className="sm-label" htmlFor="lead-minutes">
         {a.takeOver}
-      </span>
+      </label>
       <div className="tl-inline">
         <input
+          id="lead-minutes"
           className="sm-input tl-num"
           type="number"
           inputMode="numeric"
           min={1}
           max={60}
           step={1}
-          aria-label={a.leadLabel}
-          aria-describedby={invalid ? "lead-error" : undefined}
+          aria-describedby={invalid ? "lead-suffix lead-error" : "lead-suffix"}
           aria-invalid={invalid}
           value={draft ?? String(value)}
           onChange={(e) => {
-            setDraft(e.target.value);
-            const minutes = parseLead(e.target.value);
-            if (minutes !== null && minutes !== value) onSave(minutes);
+            const typed = e.target.value;
+            setDraft(typed);
+            const minutes = parseLead(typed);
+            if (minutes === null || minutes === value) return;
+            // A refused value rolls back in the store; show the stored one unless the field changed since.
+            void onSave(minutes).then((saved) => saved || setDraft((now) => (now === typed ? null : now)));
           }}
           onBlur={() => setDraft(null)}
         />
-        <span className="sm-body" aria-hidden="true">
-          {a.leadSuffix}
+        <span className="sm-body" id="lead-suffix">
+          {a.leadSuffix(parseLead(draft ?? "") ?? value)}
         </span>
       </div>
-      <span className="sm-error" id="lead-error">
-        {c.t.errors.invalid.lead_minutes}
-      </span>
+      {invalid && (
+        <span className="sm-error" id="lead-error" role="alert">
+          {c.t.errors.invalid.lead_minutes}
+        </span>
+      )}
     </div>
   );
 }
@@ -200,12 +215,13 @@ export function AlarmsPage() {
 }
 
 export function QuietHoursPage() {
-  const { t } = copy();
+  const c = copy();
+  const { t } = c;
   const q = t.settings.quiet;
   return (
     <SettingsPage title={t.nav.quietHours} subtitle={q.subtitle}>
       {(s, save) => {
-        const quiet = (patch: Partial<SettingsDto["quiet"]>) => save({ quiet: { ...s.quiet, ...patch } });
+        const quiet = (patch: Partial<SettingsDto["quiet"]>) => save({ quiet: patch });
         const time = (field: "start" | "end", label: string) => (
           <div className="sm-field">
             <label className="sm-label" htmlFor={`quiet-${field}`}>
@@ -232,7 +248,8 @@ export function QuietHoursPage() {
               {time("end", q.to)}
             </div>
             <Switch
-              label={q.weekends}
+              // Beta 1 weekends are Saturday and Sunday in every locale (docs/decisions.md).
+              label={q.weekends(c.weekday(6), c.weekday(0))}
               hint={q.weekendsHint}
               checked={s.quiet.weekends}
               disabled={!s.quiet.enabled}
@@ -312,7 +329,7 @@ export function RulesPage() {
   return (
     <SettingsPage title={t.nav.rules} subtitle={r.subtitle}>
       {(s, save) => {
-        const ignore = (patch: Partial<SettingsDto["ignore"]>) => save({ ignore: { ...s.ignore, ...patch } });
+        const ignore = (patch: Partial<SettingsDto["ignore"]>) => save({ ignore: patch });
         return (
           <>
             <div className="sm-choice-group">
@@ -423,7 +440,7 @@ export function StartupPage() {
             onChange={(start_at_login) => save({ start_at_login })}
           />
           {/* shortcut: the backend only stores this preference until L-041 wires start at login; drop the note then. */}
-          <p className="sm-caption">{p.nextBuild}</p>
+          <p className="sm-caption">{p.notAvailable}</p>
         </div>
       )}
     </SettingsPage>

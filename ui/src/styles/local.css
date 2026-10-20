@@ -126,8 +126,10 @@
 .tl-times {
   gap: var(--sm-space-5);
 }
+/* A switch hint sits under the label text: the 40 px track plus the 10 px gap of .sm-switch. */
 .tl-hint {
   display: block;
+  padding-inline-start: 50px;
 }
 .tl-segmented {
   align-self: flex-start;

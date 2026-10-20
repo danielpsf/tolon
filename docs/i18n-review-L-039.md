@@ -147,3 +147,52 @@ Accepted, round 2:
 | tr | `alarms.takeOver` | Ekranı kaplama | Ekranı kapla |
 
 The L-040 nits raised no issue except hi `nav.about` (rejected above). A native review of every catalogue is still required before release.
+
+### L-017 review fixes
+
+After the L-017 review, the implementer changed or added these strings in all 12 catalogues, and the same judge checked them:
+
+- `alarms.play` now says what happens ("Play the sound").
+- `startup.notAvailable` replaces `startup.nextBuild` ("Start at login is not available yet.").
+- `alarms.leadSuffix` is now a function of the minutes, so it agrees with the number in the field. The judge saw the forms for 1, 2, 3, 11 and 60.
+- The de keyword sentence puts the list after a colon.
+- `quiet.weekends` names Saturday and Sunday with `Intl.DateTimeFormat` long weekday names, per the decision "All-day events, weekends and window checks".
+
+en-US is the source and was not judged. The prompt sent rendered strings only, and told the judge that the number is already shown as digits before `leadSuffix`. Round 2 covered every locale, because `quiet.weekends` was added between the two rounds.
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 603 | 359 (338) | 962 | 2.9 | 0 | ok |
+| en-GB | 2 | 705 | 749 (728) | 1454 | 5.0 | 0 | ok |
+| de | 1 | 595 | 719 (698) | 1314 | 21.5 | 0 | ok |
+| de | 2 | 697 | 891 (870) | 1588 | 6.4 | 0 | ok |
+| es | 1 | 601 | 1256 (1235) | 1857 | 16.0 | 0 | ok |
+| es | 2 | 704 | 877 (856) | 1581 | 6.5 | 0 | ok |
+| pt-BR | 1 | 618 | 595 (586) | 1213 | 13.2 | 0 | ok |
+| pt-BR | 2 | 725 | 1058 (1037) | 1783 | 7.3 | 0 | ok |
+| pt-PT | 1 | 631 | 1076 (1055) | 1707 | 7.4 | 0 | ok |
+| pt-PT | 2 | 738 | 1094 (1073) | 1832 | 9.3 | 0 | ok |
+| ar | 1 | 612 | 8999 (8882) | 9611 | 76.0 | 1 | fix |
+| ar | 2 | 717 | 8074 (7979) | 8791 | 51.7 | 1 | fix |
+| tr | 1 | 618 | 1427 (1406) | 2045 | 13.1 | 0 | ok |
+| tr | 2 | 724 | 3513 (3492) | 4237 | 24.3 | 0 | ok |
+| hi | 1 | 624 | 589 (580) | 1213 | 6.2 | 0 | ok |
+| hi | 2 | 725 | 1468 (1383) | 2193 | 13.7 | 1 | fix |
+| zh-CN | 1 | 619 | 1299 (1278) | 1918 | 11.7 | 0 | ok |
+| zh-CN | 2 | 724 | 2168 (2147) | 2892 | 14.6 | 0 | ok |
+| ja | 1 | 592 | 8814 (8311) | 9406 | 76.7 | 5 | fix |
+| ja | 2 | 691 | 1748 (1727) | 2439 | 11.7 | 0 | ok |
+| he | 1 | 658 | 873 (864) | 1531 | 8.2 | 0 | ok |
+| he | 2 | 765 | 1280 (1271) | 2045 | 9.1 | 0 | ok |
+| All (22 calls) | | 14686 | 48926 | 63612 | | 8 | |
+
+Decisions:
+
+| Locale | Round | Key | Judge's point | Decision |
+|---|---|---|---|---|
+| ja | 1 | `alarms.leadSuffix` (5 issues, one per count) | "分前に表示" adds "show" and drops "the start". | Accepted: "分前". |
+| ar | 1 | `alarms.leadSuffix(2)` | The dual "دقيقتان" after the digit 2 is redundant; use the singular. | Applied, then reverted after round 2. |
+| ar | 2 | `alarms.leadSuffix(2)` | After the digit 2, Arabic needs the dual "دقيقتان". | Accepted. The two rounds contradict each other. The dual is what the orchestrator asked for, so the final forms are دقيقة (1, 11 to 60), دقيقتان (2) and دقائق (3 to 10). The native review should confirm. |
+| hi | 2 | `quiet.weekends` | No finite verb. | Accepted: "... शांत रहते हैं". Applied after round 2, with no third call (two-round cap). |
+
+The Hebrew dual is the plain plural "דקות" after the digit, not "שתי דקות" as the review suggested, because "שתי" is the word "two" and the number is already shown in the field. The judge raised no issue on Hebrew.

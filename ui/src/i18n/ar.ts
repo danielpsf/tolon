@@ -62,14 +62,21 @@ export const ar: Messages = {
     alarms: {
       subtitle: "متى يملأ التنبيه الشاشة، وأي صوت يُشغَّل.",
       takeOver: "ملء الشاشة",
-      leadLabel: "الدقائق قبل البدء",
-      leadSuffix: "دقيقة قبل البدء",
+      leadSuffix: (minutes) =>
+        counted(minutes, {
+          zero: () => "دقيقة قبل البدء",
+          one: () => "دقيقة قبل البدء",
+          two: () => "دقيقتان قبل البدء",
+          few: () => "دقائق قبل البدء",
+          many: () => "دقيقة قبل البدء",
+          other: () => "دقيقة قبل البدء",
+        }),
       againAtStart: "مرة أخرى عند البدء إن لم يُغلق",
       sound: "الصوت",
       soundBell: "جرس هادئ",
       soundChime: "رنين",
       soundNone: "بلا صوت",
-      play: "تشغيل",
+      play: "تشغيل الصوت",
       repeat: "التكرار كل 30 ثانية حتى الإغلاق",
       keyboard: "لوحة المفاتيح",
       spaceKey: "المسافة",
@@ -79,7 +86,7 @@ export const ar: Messages = {
       enabled: "تفعيل ساعات الهدوء",
       from: "من",
       to: "إلى",
-      weekends: "هدوء طوال عطلة نهاية الأسبوع",
+      weekends: (saturday, sunday) => `عطلة نهاية الأسبوع (${saturday} و${sunday}) هادئة`,
       weekendsHint: "تبقى عطلة نهاية الأسبوع هادئة طوال اليوم.",
     },
     rules: {
@@ -108,7 +115,7 @@ export const ar: Messages = {
       subtitle: "يمكن أن يبدأ Tolon تلقائيًا، فلا يفوتك اجتماع بعد إعادة التشغيل.",
       atLogin: "تشغيل Tolon عند تسجيل الدخول",
       atLoginHint: "ينتظر Tolon في الخلفية ولا يملأ الشاشة إلا قبل الاجتماع.",
-      nextBuild: "يسري في الإصدار التالي.",
+      notAvailable: "التشغيل عند تسجيل الدخول غير متاح بعد.",
     },
   },
   interrupt: {

@@ -40,10 +40,10 @@ export const MAX_KEYWORD_LENGTH = 64;
 /** Any comma: Latin, Arabic, full-width and ideographic. */
 const SEPARATORS = /[,،，、]/;
 
-/** The list with the typed words added: trimmed, blanks and case-insensitive repeats dropped, at most 50. */
+/** The list with the typed words added: trimmed, cut to 64 code points (not UTF-16 units), blanks and case-insensitive repeats dropped, at most 50. */
 export function addKeywords(list: readonly string[], typed: string): string[] {
   const next = [...list];
-  for (const word of typed.split(SEPARATORS).map((w) => w.trim().slice(0, MAX_KEYWORD_LENGTH))) {
+  for (const word of typed.split(SEPARATORS).map((w) => Array.from(w.trim()).slice(0, MAX_KEYWORD_LENGTH).join(""))) {
     if (!word || next.length >= MAX_KEYWORDS) continue;
     if (!next.some((k) => k.toLowerCase() === word.toLowerCase())) next.push(word);
   }

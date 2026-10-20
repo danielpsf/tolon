@@ -20,6 +20,8 @@ export function createCopy(locale: Locale) {
     syncedAgo: (then: Instant, now?: Instant) => f.syncedAgo(locale, t, then, now),
     startsIn: (start: Instant, now?: Instant) => f.startsIn(locale, t, start, now),
     startedAgo: (start: Instant, now?: Instant) => f.startedAgo(locale, t, start, now),
+    /** 0 Sunday ... 6 Saturday, in the locale's words. */
+    weekday: (day: number) => f.weekdayName(locale, day),
     syncError: (error: SyncError) => f.syncErrorText(t, error),
     commandError: (error: Pick<CommandError, "code">) => f.commandErrorText(t, error),
     syncLogDetail: (detail: string) => f.syncLogDetailText(t, detail),

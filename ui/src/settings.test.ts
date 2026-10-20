@@ -26,6 +26,31 @@ describe("settings pages", () => {
     for (const raw of ["", "0", "61", "2.5", "-1", "1e1", "abc"]) expect(parseLead(raw), raw).toBeNull();
   });
 
+  it.each([
+    ["en-US", ["minute", "minutes", "minutes", "minutes", "minutes"]],
+    ["ar", ["دقيقة", "دقيقتان", "دقائق", "دقيقة", "دقيقة"]],
+    ["he", ["דקה", "דקות", "דקות", "דקות", "דקות"]],
+  ] as const)("AC9.5 the lead time unit agrees with 1, 2, 3, 11 and 60 in %s", (locale, units) => {
+    const suffix = createCopy(locale).t.settings.alarms.leadSuffix;
+    expect([1, 2, 3, 11, 60].map((n) => suffix(n).split(" ")[0])).toEqual(units);
+  });
+
+  it("names the quiet weekend days, Saturday and Sunday, in every locale's words", () => {
+    const label = (locale: Parameters<typeof createCopy>[0]) => {
+      const c = createCopy(locale);
+      return c.t.settings.quiet.weekends(c.weekday(6), c.weekday(0));
+    };
+    expect(label("en-US")).toBe("Weekends (Saturday and Sunday) are quiet");
+    expect(label("de")).toBe("Wochenenden (Samstag und Sonntag) sind ruhig");
+    expect(label("ja")).toBe("週末（土曜日と日曜日）は終日サイレント");
+    for (const locale of LOCALES) {
+      const c = createCopy(locale);
+      expect(label(locale), locale).toContain(c.weekday(6));
+      expect(label(locale), locale).toContain(c.weekday(0));
+      expect(c.weekday(6), locale).not.toBe(c.weekday(0));
+    }
+  });
+
   it("names every shipped language in its own words", () => {
     expect(Object.keys(NATIVE_NAMES).sort()).toEqual([...LOCALES].sort());
     expect(NATIVE_NAMES.ar).toBe("العربية");
@@ -54,6 +79,10 @@ describe("ignore keywords (AC8.2)", () => {
     const full = Array.from({ length: MAX_KEYWORDS }, (_, i) => `w${i}`);
     expect(addKeywords(full, "one more")).toEqual(full);
     expect(addKeywords([], "x".repeat(80))[0]).toHaveLength(64);
+    // 64 code points, never half of a surrogate pair.
+    const kept = addKeywords([], "𝔉".repeat(70))[0];
+    expect(Array.from(kept)).toHaveLength(64);
+    expect(kept).toBe("𝔉".repeat(64));
   });
 
   it("keeps the text after the last comma in the box", () => {
