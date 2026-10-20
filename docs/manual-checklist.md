@@ -3,7 +3,7 @@
 For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, version and your name.
 
 ## macOS
-- [ ] S4.1 Interrupt shows over a full-screen app (test with QuickTime full screen).
+- [ ] S4.1 Interrupt shows over a full-screen app (test with QuickTime full screen) and covers the menu bar and Dock.
 - [ ] S4.2 Two monitors: both show the interrupt; Esc on either hides both.
 - [ ] S4.3 Interrupt has focus on open; Enter joins; D dismisses; Space marks already there.
 - [ ] AC9.4 Start at login switch reflects System Settings, Login Items.
