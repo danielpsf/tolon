@@ -322,13 +322,25 @@ async function openTestInterrupt(main) {
   return handles;
 }
 
-for (const [name, key] of [
-  ["Esc", Key.ESCAPE],
-  ["D", "d"],
-  ["Space", Key.SPACE],
-  ["Enter", Key.ENTER],
-]) {
-  test(`s4_3 ${name} on the focused interrupt closes every interrupt window (AC4.4, AC4.6, S4.2)`, async () => {
+/** What the alarm stubs recorded last (the main window asks: the interrupt window is gone by then). */
+const lastAction = () =>
+  driver.executeAsyncScript((done) => {
+    window.__TAURI_INTERNALS__.invoke("alarms_last_action").then(done, () => done("error"));
+  });
+
+// [name, keys sent to the focused element one after the other, the action the stub must record]
+const KEY_CASES = [
+  ["Esc", [Key.ESCAPE], "snooze:5"],
+  ["D", ["d"], "dismiss"],
+  ["Space", [Key.SPACE], "already_there"],
+  ["Enter", [Key.ENTER], "join"],
+  // Space on Snooze or Dismiss presses that button; it must not mark the meeting joined (AC4.4).
+  ["Tab, Space on Snooze", [Key.TAB, Key.SPACE], "snooze:5"],
+  ["Tab, Tab, Space on Dismiss", [Key.TAB, Key.TAB, Key.SPACE], "dismiss"],
+];
+
+for (const [name, keys, action] of KEY_CASES) {
+  test(`s4_3 ${name} on the interrupt closes every interrupt window and records ${action} (AC4.4, AC4.6, S4.2)`, async () => {
     const main = await driver.getWindowHandle();
     try {
       const handles = await openTestInterrupt(main);
@@ -343,10 +355,22 @@ for (const [name, key] of [
       });
       assert.match(await primary.getText(), /example\.com/);
 
+      // A screen reader announces the dialog by its title and details.
+      const dialog = await driver.executeScript(() => {
+        const main = document.querySelector("main");
+        const named = (attribute) => document.getElementById(main.getAttribute(attribute));
+        return {
+          role: main.getAttribute("role"),
+          label: named("aria-labelledby")?.tagName,
+          description: named("aria-describedby")?.textContent.length > 0,
+        };
+      });
+      assert.deepEqual(dialog, { role: "alertdialog", label: "H1", description: true });
+
       try {
-        await primary.sendKeys(key);
+        for (const key of keys) await (await driver.switchTo().activeElement()).sendKeys(key);
       } catch (e) {
-        // The key can close the window before the driver has its answer; the wait below is the check.
+        // The last key can close the window before the driver has its answer; the wait below is the check.
         if (!(e instanceof error.NoSuchWindowError)) throw e;
       }
       await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
@@ -355,5 +379,6 @@ for (const [name, key] of [
       await driver.switchTo().window(main);
     }
     assert.equal((await driver.getAllWindowHandles()).length, 1);
+    assert.equal(await lastAction(), action);
   });
 }
