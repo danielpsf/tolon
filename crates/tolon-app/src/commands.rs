@@ -9,7 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
-use crate::interrupt::{AlarmShow, InterruptState};
+use crate::interrupt::{AlarmShow, InterruptState, LABEL_PREFIX};
 use crate::pipeline::{self, CalendarDto, Db, ListedDto};
 use crate::scheduler::{Act, Scheduler, TauriHost};
 use crate::settings::{self, SettingsDto, SoundChoice};
@@ -17,7 +17,7 @@ use crate::settings::{self, SettingsDto, SoundChoice};
 /// The scheduler of the running app, managed next to `AppState`.
 pub type AppScheduler = Scheduler<TauriHost>;
 
-/// The settings window: the only one that may start the test alarm or read and change settings.
+/// The settings window: the only one that may start the test alarm or change settings.
 const MAIN_WINDOW: &str = "main";
 
 /// Every command of the settings window starts with this. Any other window, an interrupt or a page
@@ -27,6 +27,16 @@ fn main_only(label: &str) -> Result<(), CommandError> {
         Ok(())
     } else {
         Err(command_error(&AppError::NOT_FOUND.into()))
+    }
+}
+
+/// `settings_get` only: the interrupt windows read the settings too, to render in the person's
+/// appearance and language (AC9.3). Reading is all they get.
+fn main_or_interrupt(label: &str) -> Result<(), CommandError> {
+    if label.starts_with(LABEL_PREFIX) {
+        Ok(())
+    } else {
+        main_only(label)
     }
 }
 
@@ -187,15 +197,15 @@ pub async fn settings_get(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<SettingsDto, CommandError> {
-    main_only(window.label())?;
+    main_or_interrupt(window.label())?;
     state(&app)
         .and_then(|s| settings::get(&s.db))
         .map_err(|e| command_error(&e))
 }
 
-/// Saves the patch at once (AC9.1), tells the settings window (`settings:changed`, the new
-/// settings) and the panel (`occurrences:changed`), and wakes the scheduler so the plan follows
-/// within 15 s (AC8.3). A refused field is `invalid:<field>` and nothing is saved.
+/// Saves the patch at once (AC9.1), tells the windows (`settings:changed`, the full new
+/// `SettingsDto`) and the panel (`occurrences:changed`), and wakes the scheduler so the plan
+/// follows within 15 s (AC8.3). A refused field is `invalid:<field>` and nothing is saved.
 #[tauri::command]
 pub async fn settings_set(
     app: AppHandle,
@@ -206,8 +216,8 @@ pub async fn settings_set(
     let dto = state(&app)
         .and_then(|s| settings::apply(&s.db, &patch))
         .map_err(|e| command_error(&e))?;
-    // The main window only: no other window has settings access.
-    if let Err(e) = app.emit_to(MAIN_WINDOW, "settings:changed", &dto) {
+    // The main window and the interrupts, the windows that may read the settings.
+    if let Err(e) = app.emit("settings:changed", &dto) {
         tracing::warn!(error = %e, "could not emit settings:changed");
     }
     notify(&app);
@@ -267,7 +277,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn settings_commands_answer_only_the_main_window() {
+    fn settings_set_and_sound_preview_answer_only_the_main_window() {
         assert_eq!(main_only("main"), Ok(()));
         for label in ["interrupt-0", "interrupt-main", "Main", "main ", ""] {
             assert_eq!(
@@ -278,15 +288,30 @@ mod tests {
         }
     }
 
-    /// Every command that reads or changes settings, and the test alarm, checks the window first.
     #[test]
-    fn every_main_window_command_checks_the_window_first() {
+    fn settings_get_answers_the_main_window_and_the_interrupts_only() {
+        for label in ["main", "interrupt-0", "interrupt-screen-2"] {
+            assert_eq!(main_or_interrupt(label), Ok(()), "{label:?}");
+        }
+        for label in ["interrupt", "Interrupt-0", "panel", "main-2", ""] {
+            assert_eq!(
+                main_or_interrupt(label),
+                Err(CommandError { code: "not_found" }),
+                "{label:?}"
+            );
+        }
+    }
+
+    /// Every command that reads or changes settings, and the test alarm, checks the window first,
+    /// with the check its access calls for.
+    #[test]
+    fn every_settings_command_checks_the_window_first() {
         let source = include_str!("commands.rs");
-        for name in [
-            "alarms_test",
-            "settings_get",
-            "settings_set",
-            "sound_preview",
+        for (name, check) in [
+            ("alarms_test", "main_only"),
+            ("settings_get", "main_or_interrupt"),
+            ("settings_set", "main_only"),
+            ("sound_preview", "main_only"),
         ] {
             let start = source
                 .find(&format!("pub async fn {name}("))
@@ -298,8 +323,8 @@ mod tests {
                 .map(|(_, rest)| rest.trim_start())
                 .unwrap_or_default();
             assert!(
-                first.starts_with("main_only(window.label())?;"),
-                "{name} must start with the window check"
+                first.starts_with(&format!("{check}(window.label())?;")),
+                "{name} must start with {check}"
             );
         }
     }

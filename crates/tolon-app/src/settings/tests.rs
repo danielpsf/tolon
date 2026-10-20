@@ -356,3 +356,50 @@ fn quiet_hours_reach_the_core_only_while_enabled() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn nested_patches_may_be_complete_or_partial() -> TestResult {
+    let db = db()?;
+    // Complete, as the settings pages send them.
+    let complete = json!({
+        "quiet": { "enabled": true, "start": "20:00", "end": "08:00", "weekends": false },
+        "ignore": { "all_day": false, "declined": true, "cancelled": true, "no_attendees": true,
+                    "keywords": ["Focus"] }
+    });
+    let s = apply(&db, &complete)?;
+    assert_eq!(
+        s.quiet,
+        QuietDto {
+            enabled: true,
+            start: "20:00".into(),
+            end: "08:00".into(),
+            weekends: false
+        }
+    );
+    assert_eq!(
+        s.ignore,
+        IgnoreDto {
+            all_day: false,
+            declined: true,
+            cancelled: true,
+            no_attendees: true,
+            keywords: vec!["Focus".into()]
+        }
+    );
+    // Partial: one nested field changes, the others stay.
+    let s = apply(
+        &db,
+        &json!({ "quiet": { "weekends": true }, "ignore": { "declined": false } }),
+    )?;
+    assert_eq!(
+        (s.quiet.enabled, s.quiet.start.as_str(), s.quiet.weekends),
+        (true, "20:00", true)
+    );
+    assert_eq!(
+        (s.ignore.all_day, s.ignore.declined, s.ignore.no_attendees),
+        (false, false, true)
+    );
+    // An empty nested object changes nothing.
+    assert_eq!(apply(&db, &json!({ "quiet": {}, "ignore": {} }))?, s);
+    Ok(())
+}
