@@ -231,6 +231,12 @@ pub trait Platform: Send + Sync {
     /// Short implementation name, for logs and diagnostics.
     fn name(&self) -> &'static str;
 
+    /// Process-wide setup, once at startup on the main thread, before the first interrupt
+    /// window opens. macOS: the Accessory activation policy (no Dock icon, no app menu), without
+    /// which macOS keeps the interrupt off another app's full-screen Space (L-042). Nothing on
+    /// other OSes.
+    fn prepare_app(&self) -> Result<(), PlatformError>;
+
     /// Connected screens, primary first; on success exactly one has `is_main`. Linux returns
     /// [`PlatformError::Unsupported`]: the app then asks Tauri (`available_monitors`).
     fn screens(&self) -> Result<Vec<Screen>, PlatformError>;
@@ -272,6 +278,10 @@ static STUB_START_AT_LOGIN: AtomicBool = AtomicBool::new(false);
 impl Platform for StubPlatform {
     fn name(&self) -> &'static str {
         "stub"
+    }
+
+    fn prepare_app(&self) -> Result<(), PlatformError> {
+        Ok(())
     }
 
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {

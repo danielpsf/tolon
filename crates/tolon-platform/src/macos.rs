@@ -6,7 +6,10 @@ use crate::monitors::{to_physical_i32, to_physical_u32};
 use crate::{ns_view_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSScreen, NSView, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{
+    NSApplication, NSApplicationActivationPolicy, NSScreen, NSView, NSWindow,
+    NSWindowCollectionBehavior,
+};
 use objc2_foundation::{ns_string, NSError, NSNumber};
 use objc2_service_management::SMAppService;
 use raw_window_handle::HasWindowHandle;
@@ -39,6 +42,22 @@ fn sm_error(call: &'static str, e: &NSError) -> PlatformError {
 impl Platform for MacPlatform {
     fn name(&self) -> &'static str {
         "macos"
+    }
+
+    fn prepare_app(&self) -> Result<(), PlatformError> {
+        let mtm = main_thread()?;
+        // macOS layers only an Accessory (or LSUIElement) app's windows into another app's
+        // full-screen Space; a Regular app's stay off screen there at any level (L-042).
+        if NSApplication::sharedApplication(mtm)
+            .setActivationPolicy(NSApplicationActivationPolicy::Accessory)
+        {
+            Ok(())
+        } else {
+            Err(PlatformError::Os {
+                call: "setActivationPolicy",
+                code: 0,
+            })
+        }
     }
 
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
@@ -74,7 +93,7 @@ impl Platform for MacPlatform {
         &self,
         window: &dyn HasWindowHandle,
     ) -> Result<Raised, PlatformError> {
-        let _mtm = main_thread()?;
+        let mtm = main_thread()?;
         let view = ns_view_of(window)?;
         // SAFETY: an AppKit handle carries a live NSView. `window` is borrowed for this call and
         // we are on the main thread (checked above), so nothing frees the view meanwhile.
@@ -82,6 +101,11 @@ impl Platform for MacPlatform {
         let ns_window: Retained<NSWindow> = view.window().ok_or(PlatformError::NoWindow)?;
         ns_window.setLevel(INTERRUPT_WINDOW_LEVEL);
         ns_window.setCollectionBehavior(NSWindowCollectionBehavior(INTERRUPT_COLLECTION_BEHAVIOR));
+        // An Accessory app is not active when an alarm fires, and a window of an inactive app
+        // does not become key (AC4.4). This call, not the cooperative `activate` (macOS 14), is
+        // the one checked on screen: it takes focus without leaving the full-screen Space (L-042).
+        #[allow(deprecated)]
+        NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
         ns_window.makeKeyAndOrderFront(None);
         // Not yet key is not a refusal: a tray app often becomes key a moment later.
         let focus = if ns_window.isKeyWindow() {
@@ -195,7 +219,8 @@ mod tests {
 
     #[test]
     fn off_main_thread_is_an_error_not_a_crash() {
-        // libtest runs this on a worker thread.
+        // libtest runs this on a worker thread, so the activation policy is never changed here.
         assert_eq!(MacPlatform.screens(), Err(PlatformError::NotMainThread));
+        assert_eq!(MacPlatform.prepare_app(), Err(PlatformError::NotMainThread));
     }
 }

@@ -53,6 +53,10 @@ impl Platform for LinuxPlatform {
         "linux"
     }
 
+    fn prepare_app(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         Err(PlatformError::Unsupported)
     }
