@@ -44,6 +44,25 @@ export const enGB: Messages = {
     adding: "Adding calendar",
     empty: "No calendars yet. Paste an iCal URL to add one.",
   },
+  interrupt: {
+    region: "Meeting alarm",
+    testTitle: "Test alarm",
+    joinCall: "Join the call",
+    joinOn: (host) => `Join on ${host}`,
+    openEvent: "Open the event",
+    alreadyThere: "I am already there",
+    snooze: (minutes) => `Snooze ${number.format(minutes)} min`,
+    dismiss: "Dismiss",
+    dismissConsequence: "Dismissing silences this reminder on this computer.",
+    hintJoin: "Esc snoozes. Enter joins. D dismisses. Space means you are already there.",
+    hintEvent: "Esc snoozes. Enter opens the event. D dismisses. Space means you are already there.",
+    hintAlreadyThere: "Esc snoozes. Enter or Space means you are already there. D dismisses.",
+    timeRange: (start, end) => `${start} to ${end}`,
+    details: (range, provider, people) =>
+      `${range}${provider ? ` on ${provider}` : ""}${
+        people > 0 ? ` with ${number.format(people)} ${plural.select(people) === "one" ? "person" : "people"}` : ""
+      }.`,
+  },
   relative: {
     neverSynced: "Not synced yet",
     syncedJustNow: "Synced just now",
