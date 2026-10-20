@@ -27,3 +27,5 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] AC6.3 Settings, Alarms, "Play" previews the chosen sound once.
 - [ ] AC6.1 The alarm sound repeats about every 30 s while the interrupt is open and stops at once when it closes.
 - [ ] S4.4 An old fallback notification's Join or Snooze does nothing once a later meeting is open.
+- [ ] AC4.4 With an Arabic or Hebrew keyboard layout active, D dismisses the interrupt.
+- [ ] L-039 With the system language set to Arabic or Hebrew, the interrupt and Settings mirror right to left; Hindi, Chinese and Japanese text renders in a system font, not boxes.
