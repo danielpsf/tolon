@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { LOCALES, RTL_LOCALES } from "./i18n/locale";
 import local from "./styles/local.css?raw";
 
-// Arabic is right to left (docs/decisions.md, "Locale list for beta 1"): local.css uses logical
+// Arabic and Hebrew are right to left (docs/decisions.md): local.css uses logical
 // properties, so only the rules written for rtl itself may name a physical side.
 
 const rules = [...local.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
@@ -16,6 +17,10 @@ describe("right to left", () => {
     expect(offenders.map((r) => r.selector)).toEqual([]);
   });
 
+  it("lists exactly ar and he as right-to-left locales", () => {
+    expect(LOCALES.filter((l) => RTL_LOCALES.has(l))).toEqual(["ar", "he"]);
+  });
+
   it("mirrors the Swiss Moss switch knob", () => {
     const knob = rules.find((r) => r.selector === ':root[dir="rtl"] .sm-switch input:checked::after');
     expect(knob?.body).toContain("translateX(-16px)");
@@ -26,6 +31,7 @@ describe("right to left", () => {
     ["hi", ['"Kohinoor Devanagari"', '"Nirmala UI"', '"Noto Sans Devanagari"']],
     ["zh", ['"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans CJK SC"']],
     ["ja", ['"Hiragino Sans"', '"Yu Gothic"', '"Noto Sans CJK JP"']],
+    ["he", ['"Arial Hebrew"', '"Segoe UI"', '"Noto Sans Hebrew"']],
   ])("falls back to system fonts for :lang(%s), Inter first", (lang, fonts) => {
     const body = rules.find((r) => r.selector === `:root:lang(${lang})`)?.body ?? "";
     for (const token of ["--sm-font-sans", "--sm-font-display"]) {

@@ -39,8 +39,8 @@ function strings(t: object): [string, string][] {
 const latn = (text: string) => text.replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660));
 
 describe("catalogues", () => {
-  it("ships en-US, en-GB, pt-BR, pt-PT and the beta 1 list (de, es, ar, tr, hi, zh-CN, ja)", () => {
-    expect(LOCALES).toEqual(["en-US", "en-GB", "pt-BR", "pt-PT", "de", "es", "ar", "tr", "hi", "zh-CN", "ja"]);
+  it("ships en-US, en-GB, pt-BR, pt-PT and the beta 1 list (de, es, ar, tr, hi, zh-CN, ja, he)", () => {
+    expect(LOCALES).toEqual(["en-US", "en-GB", "pt-BR", "pt-PT", "de", "es", "ar", "tr", "hi", "zh-CN", "ja", "he"]);
   });
 
   it.each(LOCALES)("%s has exactly the en-US key set, with the same string or function shape", (locale) => {
@@ -186,6 +186,10 @@ describe("resolveLocale", () => {
     [["ja"], undefined, "ja"],
     [["tr-TR"], undefined, "tr"],
     [["tr-CY"], undefined, "tr"],
+    [["he-IL"], undefined, "he"],
+    [["he"], undefined, "he"],
+    [["iw"], undefined, "he"],
+    [["iw-IL"], undefined, "he"],
     [["fr-FR"], undefined, "en-US"],
     [["ru-RU", "ko-KR"], undefined, "en-US"],
     [[], undefined, "en-US"],
@@ -221,6 +225,7 @@ describe("plurals", () => {
     hi: ["1 घटक छोड़ा गया", "2 घटक छोड़े गए"],
     "zh-CN": ["已跳过 1 个组件", "已跳过 2 个组件"],
     ja: ["1 件のコンポーネントをスキップしました", "2 件のコンポーネントをスキップしました"],
+    he: ["רכיב אחד דולג", "שני רכיבים דולגו"],
   };
   it.each(LOCALES)("%s renders skipped:1 and skipped:2", (locale) => {
     const c = createCopy(locale);
@@ -248,6 +253,29 @@ describe("plurals", () => {
     expect(latn(c.t.interrupt.snooze(5))).toBe("تأجيل 5 دقائق");
     expect(c.t.interrupt.snooze(1)).toBe("تأجيل دقيقة واحدة");
     expect(c.t.interrupt.snooze(2)).toBe("تأجيل دقيقتين");
+  });
+
+  it("uses the three Hebrew plural forms (one, two, other)", () => {
+    const c = createCopy("he");
+    expect(c.syncLogDetail("skipped:1")).toBe("רכיב אחד דולג");
+    expect(c.syncLogDetail("skipped:2")).toBe("שני רכיבים דולגו");
+    expect(c.syncLogDetail("skipped:3")).toBe("3 רכיבים דולגו");
+    expect(c.syncLogDetail("skipped:0")).toBe("0 רכיבים דולגו");
+    expect(c.syncLogDetail("skipped:20")).toBe("20 רכיבים דולגו");
+    expect(c.t.interrupt.details("R", null, 1)).toBe("R, עם אדם אחד.");
+    expect(c.t.interrupt.details("R", null, 2)).toBe("R, עם שני אנשים.");
+    expect(c.t.interrupt.details("R", null, 8)).toBe("R, עם 8 אנשים.");
+    expect(c.t.interrupt.snooze(1)).toBe("דחייה בדקה אחת");
+    expect(c.t.interrupt.snooze(2)).toBe("דחייה בשתי דקות");
+    expect(c.t.interrupt.snooze(5)).toBe("דחייה ב-5 דקות");
+  });
+
+  it("keeps Hebrew instructions gender neutral: action nouns and אפשר with an infinitive", () => {
+    const t = catalogues.he;
+    // Gendered imperatives a translator reaches for first: נסה/נסי, הדבק/הדביקי, הוסף/הוסיפי.
+    for (const [path, text] of strings(t)) expect(text, path).not.toMatch(/(^|\s)(נסה|נסי|הדבק|הדביקי|הוסף|הוסיפי)(\s|$|\.)/);
+    expect(t.errors.command.db_error).toContain("אפשר לנסות שוב");
+    expect(t.calendars.addCalendar).toBe("הוספת יומן");
   });
 
   it("follows the Hindi plural rule, where 0 and 1 are both singular", () => {
@@ -318,6 +346,7 @@ describe("error codes", () => {
     hi: "सिंक विफल: 404",
     "zh-CN": "同步失败：404",
     ja: "同期に失敗しました：404",
+    he: "הסנכרון נכשל: 404",
   };
   it.each(LOCALES)("%s pins the S1.3 sentence for http:404", (locale) => {
     expect(createCopy(locale).syncError({ kind: "http", status: 404 })).toBe(s13[locale]);
@@ -403,7 +432,7 @@ describe("formatting", () => {
   });
 
   it("formats time in the new locales: 24-hour with two digits, 12-hour without the leading zero", () => {
-    for (const locale of ["de", "es", "tr", "zh-CN", "ja"] as const) {
+    for (const locale of ["de", "es", "tr", "zh-CN", "ja", "he"] as const) {
       expect(createCopy(locale).formatTime(morning)).toBe("09:05");
       expect(createCopy(locale).formatTime(afternoon)).toBe("14:05");
     }
@@ -427,8 +456,8 @@ describe("formatting", () => {
       expect(c.startsIn(at(120), now).replace(/\s/g, " ")).toBe(starts);
       expect(c.startedAgo(at(-180), now).replace(/\s/g, " ")).toBe(started);
     }
-    // Arabic and Hindi unit labels vary between CLDR versions: check the sentence around Intl's value.
-    for (const locale of ["ar", "hi"] as const) {
+    // Arabic, Hindi and Hebrew unit labels vary between CLDR versions: check the sentence around Intl's value.
+    for (const locale of ["ar", "hi", "he"] as const) {
       const c = createCopy(locale);
       const span = (minutes: number) =>
         new Intl.NumberFormat(locale, { style: "unit", unit: "minute", unitDisplay: "short" }).format(minutes);

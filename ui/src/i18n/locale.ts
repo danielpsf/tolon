@@ -3,6 +3,7 @@ import { de } from "./de";
 import { enGB } from "./en-GB";
 import { enUS, type Messages } from "./en-US";
 import { es } from "./es";
+import { he } from "./he";
 import { hi } from "./hi";
 import { ja } from "./ja";
 import { ptBR } from "./pt-BR";
@@ -24,6 +25,7 @@ export const catalogues = {
   hi,
   "zh-CN": zhCN,
   ja,
+  he,
 } as const satisfies Record<string, Messages>;
 
 export type Locale = keyof typeof catalogues;
@@ -42,7 +44,13 @@ const BY_LANGUAGE = new Map<string, Locale>([
   ["hi", "hi"],
   ["ja", "ja"],
   ["zh", "zh-CN"],
+  ["he", "he"],
+  // Legacy code for Hebrew. Intl.Locale canonicalises it to "he"; kept for engines that do not.
+  ["iw", "he"],
 ]);
+
+/** Locales written right to left: `<html dir="rtl">`. */
+export const RTL_LOCALES: ReadonlySet<Locale> = new Set<Locale>(["ar", "he"]);
 
 /** One BCP 47 tag to a shipped locale, or null when the language is not shipped. */
 function matchTag(tag: string): Locale | null {

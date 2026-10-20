@@ -259,7 +259,7 @@
 }
 
 /*
- * Right to left (Arabic, docs/decisions.md "Locale list for beta 1"). Grid, flex and the logical
+ * Right to left (Arabic and Hebrew, docs/decisions.md). Grid, flex and the logical
  * properties above mirror on their own; the Swiss Moss switch places its knob with left and translateX.
  */
 :root[dir="rtl"] .sm-switch input::after {
@@ -290,4 +290,8 @@
 :root:lang(ja) {
   --sm-font-sans: Inter, "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
   --sm-font-display: "Inter Tight", Inter, "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
+}
+:root:lang(he) {
+  --sm-font-sans: Inter, "Arial Hebrew", "Segoe UI", "Noto Sans Hebrew", system-ui, sans-serif;
+  --sm-font-display: "Inter Tight", Inter, "Arial Hebrew", "Segoe UI", "Noto Sans Hebrew", system-ui, sans-serif;
 }

@@ -28,6 +28,16 @@ describe("copy", () => {
     expect(documentElement).toEqual({ lang: "ja", dir: "ltr" });
   });
 
+  it("sets <html dir> to rtl for Hebrew, from he-IL and the legacy iw", () => {
+    const documentElement = { lang: "", dir: "" };
+    vi.stubGlobal("document", { documentElement });
+    vi.stubGlobal("navigator", { languages: ["he-IL"] });
+    expect(initCopy().locale).toBe("he");
+    expect(documentElement).toEqual({ lang: "he", dir: "rtl" });
+    expect(initCopy("iw").locale).toBe("he");
+    expect(documentElement.dir).toBe("rtl");
+  });
+
   it("lets the override parameter win", () => {
     vi.stubGlobal("document", { documentElement: { lang: "" } });
     vi.stubGlobal("navigator", { languages: ["pt-PT"] });

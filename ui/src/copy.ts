@@ -2,7 +2,7 @@
 // Logs stay English and never come from a catalogue.
 import type { CommandError, SyncError } from "./api-types";
 import * as f from "./i18n/format";
-import { catalogues, resolveLocale, type Locale } from "./i18n/locale";
+import { catalogues, resolveLocale, RTL_LOCALES, type Locale } from "./i18n/locale";
 
 export type { Messages } from "./i18n/en-US";
 export type { Locale } from "./i18n/locale";
@@ -35,7 +35,7 @@ let current: Copy | undefined;
 
 /**
  * Resolves the locale once: `override` (for example the `lang` query parameter) first, then
- * `navigator.languages`. Sets `<html lang>` and `<html dir>` (rtl for Arabic). Call it at startup
+ * `navigator.languages`. Sets `<html lang>` and `<html dir>` (rtl for Arabic and Hebrew). Call it at startup
  * before the first render.
  */
 export function initCopy(override?: string | null): Copy {
@@ -43,7 +43,7 @@ export function initCopy(override?: string | null): Copy {
   current = createCopy(resolveLocale(systemLanguages, override));
   if (typeof document !== "undefined") {
     document.documentElement.lang = current.locale;
-    document.documentElement.dir = current.locale === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = RTL_LOCALES.has(current.locale) ? "rtl" : "ltr";
   }
   return current;
 }
