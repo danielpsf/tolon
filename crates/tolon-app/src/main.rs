@@ -72,6 +72,7 @@ fn main() -> anyhow::Result<()> {
             commands::alarms_join,
             commands::alarms_already_there,
             commands::alarms_current,
+            commands::alarms_last_action,
             commands::alarms_test,
         ])
         .setup(|app| {

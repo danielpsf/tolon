@@ -111,34 +111,46 @@ pub async fn occurrences_today(app: AppHandle) -> Result<Vec<Occurrence>, Comman
 // `alarms_already_there` act on that one meeting; `alarms_join` opens its link or event page
 // itself (the URL never reaches the webview).
 
-fn act_on(app: &AppHandle, key: &str) -> Result<(), CommandError> {
+/// `action` is remembered for `alarms_last_action` before the windows close.
+fn act_on(app: &AppHandle, key: &str, action: String) -> Result<(), CommandError> {
     interrupt::parse_key(key).map_err(|e| command_error(&e.into()))?;
+    if let Some(state) = app.try_state::<InterruptState>() {
+        state.record(action);
+    }
     interrupt::close_all(app);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn alarms_snooze(app: AppHandle, key: String, minutes: u32) -> Result<(), CommandError> {
-    let _ = minutes; // L-032: update alarm state (Snoozed until now + minutes)
-    act_on(&app, &key)
+    // L-032: update alarm state (Snoozed until now + minutes)
+    act_on(&app, &key, format!("snooze:{minutes}"))
 }
 
 #[tauri::command]
 pub async fn alarms_dismiss(app: AppHandle, key: String) -> Result<(), CommandError> {
     // L-032: update alarm state (Dismissed)
-    act_on(&app, &key)
+    act_on(&app, &key, "dismiss".to_owned())
 }
 
 #[tauri::command]
 pub async fn alarms_join(app: AppHandle, key: String) -> Result<(), CommandError> {
     // L-032: update alarm state (Joined) and open the join link or the event page
-    act_on(&app, &key)
+    act_on(&app, &key, "join".to_owned())
 }
 
 #[tauri::command]
 pub async fn alarms_already_there(app: AppHandle, key: String) -> Result<(), CommandError> {
     // L-032: update alarm state (Joined, no link opened)
-    act_on(&app, &key)
+    act_on(&app, &key, "already_there".to_owned())
+}
+
+/// The last alarm action, so the WebDriver test can tell Esc from D and Space from Enter.
+/// L-032: drop it once the alarm state itself can be read.
+#[tauri::command]
+pub async fn alarms_last_action(app: AppHandle) -> Option<String> {
+    app.try_state::<InterruptState>()
+        .and_then(|s| s.last_action())
 }
 
 /// The interrupt on screen, for a window that loaded after `alarm:show` was emitted.

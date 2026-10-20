@@ -129,12 +129,26 @@ impl AlarmShow {
 #[derive(Default)]
 pub struct InterruptState {
     current: Mutex<Option<AlarmShow>>,
+    /// The last action a person took, until L-032 keeps the real alarm state: `snooze:5`,
+    /// `dismiss`, `join` or `already_there`. The WebDriver test reads it to tell the keys apart.
+    last_action: Mutex<Option<String>>,
 }
 
 impl InterruptState {
     fn set(&self, payload: Option<AlarmShow>) {
         // A poisoned lock only means another thread panicked; the value is still a plain Option.
         *self.current.lock().unwrap_or_else(|p| p.into_inner()) = payload;
+    }
+
+    pub fn record(&self, action: String) {
+        *self.last_action.lock().unwrap_or_else(|p| p.into_inner()) = Some(action);
+    }
+
+    pub fn last_action(&self) -> Option<String> {
+        self.last_action
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     pub fn get(&self) -> Option<AlarmShow> {
@@ -573,6 +587,16 @@ mod tests {
         assert!(parse_key(&meeting.key).is_ok());
         assert!(parse_key("no at sign").is_err());
         Ok(())
+    }
+
+    #[test]
+    fn s4_3_the_state_remembers_the_last_action_after_the_windows_close() {
+        let state = InterruptState::default();
+        assert_eq!(state.last_action(), None);
+        state.record("snooze:5".to_owned());
+        state.record("dismiss".to_owned());
+        state.set(None);
+        assert_eq!(state.last_action().as_deref(), Some("dismiss"));
     }
 
     #[test]
