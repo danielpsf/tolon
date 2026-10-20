@@ -93,9 +93,14 @@ export function startClock(onTick: (now: number) => void, intervalMs = 1000): ()
 /** What a key press asks for; `enter` is resolved against the focused control. */
 export type KeyAction = "enter" | "snooze" | "dismiss" | "already_there";
 
-type KeyLike = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "repeat" | "isComposing">;
+type KeyLike = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "repeat" | "isComposing"> &
+  Partial<Pick<KeyboardEvent, "code">>;
 
-/** Enter, Esc, D and Space (AC4.4). Modified keys, auto-repeat and IME input are ignored. */
+/**
+ * Enter, Esc, D and Space (AC4.4). D is the character or the physical D key (`KeyD`), so it works on
+ * Arabic, Hebrew, Hindi and other layouts (docs/decisions.md, "Clock, digits and keys across locales").
+ * Modified keys, auto-repeat and IME input are ignored.
+ */
 export function keyAction(e: KeyLike): KeyAction | null {
   if (e.repeat || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return null;
   switch (e.key) {
@@ -110,7 +115,8 @@ export function keyAction(e: KeyLike): KeyAction | null {
     case "D":
       return "dismiss";
     default:
-      return null;
+      // Not when KeyD typed another Latin letter: on Dvorak it is "e", and the D character above already dismisses.
+      return e.code === "KeyD" && !/^[a-z]$/i.test(e.key) ? "dismiss" : null;
   }
 }
 

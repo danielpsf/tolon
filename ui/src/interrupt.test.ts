@@ -178,6 +178,20 @@ describe("keys (S4.3, AC4.4)", () => {
     expect(keyAction(press(" "))).toBe("already_there");
   });
 
+  it("S4.3 D dismisses on any layout: the physical KeyD counts when it types another script", () => {
+    expect(keyAction(press("ي", { code: "KeyD" }))).toBe("dismiss"); // Arabic
+    expect(keyAction(press("ג", { code: "KeyD" }))).toBe("dismiss"); // Hebrew
+    expect(keyAction(press("्", { code: "KeyD" }))).toBe("dismiss"); // Hindi InScript
+    expect(keyAction(press("в", { code: "KeyD" }))).toBe("dismiss"); // Russian
+    expect(keyAction(press("d", { code: "KeyD" }))).toBe("dismiss");
+    // Dvorak: KeyD types "e", which must not dismiss; its D character (on KeyH) does.
+    expect(keyAction(press("e", { code: "KeyD" }))).toBeNull();
+    expect(keyAction(press("d", { code: "KeyH" }))).toBe("dismiss");
+    expect(keyAction(press("ي", { code: "KeyS" }))).toBeNull();
+    expect(keyAction(press("ي", { code: "KeyD", ctrlKey: true }))).toBeNull();
+    expect(keyAction(press("ي", { code: "KeyD", repeat: true }))).toBeNull();
+  });
+
   it("AC4.4 ignores other keys, shortcuts, auto-repeat and IME input", () => {
     expect(keyAction(press("x"))).toBeNull();
     expect(keyAction(press("Tab"))).toBeNull();
