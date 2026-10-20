@@ -28,6 +28,7 @@ struct Fake {
     calls: StdMutex<Vec<String>>,
     shows: StdMutex<Vec<AlarmShow>>,
     urls: StdMutex<Vec<String>>,
+    notices: StdMutex<Vec<i32>>,
     focused: AtomicBool,
     degraded: Option<&'static str>,
     fail_open: AtomicBool,
@@ -41,6 +42,7 @@ impl Fake {
             calls: StdMutex::default(),
             shows: StdMutex::default(),
             urls: StdMutex::default(),
+            notices: StdMutex::default(),
             focused: AtomicBool::new(true),
             degraded: None,
             fail_open: AtomicBool::new(false),
@@ -75,6 +77,14 @@ impl Fake {
 
     fn urls(&self) -> Vec<String> {
         self.urls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The identifiers of every notification sent, oldest first.
+    fn notices(&self) -> Vec<i32> {
+        self.notices
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -140,8 +150,12 @@ impl Host for Fake {
         Ok(())
     }
 
-    fn notify(&self, _show: &AlarmShow) {
+    fn notify(&self, _show: &AlarmShow, id: i32) {
         self.log("notify");
+        self.notices
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(id);
     }
 }
 
@@ -215,6 +229,11 @@ impl Rig {
     async fn housekeep_at(&self, t: DateTime<Utc>) {
         self.host().set_now(t);
         self.sched.step(&self.db, false).await;
+    }
+
+    async fn act_on_notice(&self, t: DateTime<Utc>, notice: i32, act: Act) -> anyhow::Result<()> {
+        self.host().set_now(t);
+        self.sched.act_on_notice(&self.db, notice, act).await
     }
 
     async fn act(&self, t: DateTime<Utc>, key: &str, act: Act) -> anyhow::Result<()> {
@@ -882,15 +901,135 @@ async fn windows_that_cannot_open_leave_a_notification_whose_actions_work() -> T
     rig.tick_at(at(13, 58, 5)).await;
     assert_eq!(rig.host().calls(), ["open", "notify", "play"]);
     // The notification's Join and Snooze act on the first meeting.
-    let key = rig
-        .sched
-        .first_key()
-        .await
+    let notice = *rig
+        .host()
+        .notices()
+        .last()
         .ok_or_else(|| anyhow!("the notification is the interrupt"))?;
-    rig.act(at(13, 58, 10), &key, Act::Snooze(SNOOZE_MINUTES))
+    rig.act_on_notice(at(13, 58, 10), notice, Act::Snooze(SNOOZE_MINUTES))
         .await?;
     assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("snoozed"));
     assert_eq!(rig.host().count("stop"), 1);
+    Ok(())
+}
+
+fn degraded_host() -> Fake {
+    let mut host = Fake::new(at(13, 50, 0));
+    host.degraded = Some("wayland_no_takeover");
+    host
+}
+
+#[tokio::test]
+async fn s4_4_a_notification_action_acts_on_the_meeting_it_announced() -> TestResult {
+    let rig = Rig::with_host(&[STANDUP], degraded_host())?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let [notice] = rig.host().notices()[..] else {
+        anyhow::bail!("one notification expected: {:?}", rig.host().notices());
+    };
+    rig.act_on_notice(at(13, 58, 10), notice, Act::Snooze(SNOOZE_MINUTES))
+        .await?;
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("snoozed"));
+    assert_eq!(rig.host().count("close"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s4_4_a_stale_notification_action_is_a_no_op() -> TestResult {
+    let rig = Rig::with_host(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140500", "")],
+        degraded_host(),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let old = rig.host().notices()[0];
+    let alpha = rig.key(0)?;
+    rig.act(at(13, 58, 10), &alpha, Act::Dismiss).await?;
+    // Beta is next on screen, with a notification of its own.
+    rig.tick_at(at(14, 3, 5)).await;
+    let current = *rig.host().notices().last().unwrap_or(&0);
+    assert_ne!(current, old);
+    assert_eq!(rig.state_of("b", "lead")?.as_deref(), Some("firing"));
+
+    // Alpha's notification, still on screen, must not touch Beta; neither must an unknown id.
+    for stale in [old, current + 1, i32::MIN] {
+        rig.act_on_notice(at(14, 3, 10), stale, Act::Join).await?;
+        rig.act_on_notice(at(14, 3, 10), stale, Act::Snooze(5))
+            .await?;
+    }
+    assert_eq!(rig.state_of("b", "lead")?.as_deref(), Some("firing"));
+    assert_eq!(rig.host().count("close"), 1, "only Alpha's dismiss closed");
+    assert!(rig.host().urls().is_empty());
+
+    rig.act_on_notice(at(14, 3, 20), current, Act::Join).await?;
+    assert_eq!(rig.state_of("b", "lead")?.as_deref(), Some("joined"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac3_5_a_degraded_system_announces_a_meeting_that_joins_the_open_minute() -> TestResult {
+    let rig = Rig::with_host(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140030", "")],
+        degraded_host(),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.host().count("notify"), 1);
+    rig.tick_at(at(13, 58, 35)).await;
+    assert_eq!(
+        rig.host().count("notify"),
+        2,
+        "the notification lists both now"
+    );
+    let [first, second] = rig.host().notices()[..] else {
+        anyhow::bail!("two notifications expected");
+    };
+    // The first one is stale: its meetings changed.
+    rig.act_on_notice(at(13, 58, 40), first, Act::Snooze(5))
+        .await?;
+    assert_eq!(rig.host().count("close"), 0);
+    rig.act_on_notice(at(13, 58, 41), second, Act::Snooze(5))
+        .await?;
+    assert_eq!(rig.host().count("close"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_regroup_checks_focus_again() -> TestResult {
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140030", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.housekeep_at(at(13, 58, 6)).await;
+    assert_eq!(rig.host().count("focused"), 1);
+    // Beta joins; the windows are updated, and the check starts over.
+    rig.tick_at(at(13, 58, 35)).await;
+    rig.host().focused.store(false, Ordering::SeqCst);
+    rig.housekeep_at(at(13, 58, 35) + Duration::milliseconds(499))
+        .await;
+    assert_eq!(rig.host().count("notify"), 0);
+    rig.housekeep_at(at(13, 58, 35) + Duration::milliseconds(500))
+        .await;
+    assert_eq!(rig.host().count("focused"), 2);
+    assert_eq!(rig.host().count("notify"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_partial_join_checks_focus_again() -> TestResult {
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140000", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.housekeep_at(at(13, 58, 6)).await;
+    let alpha = rig.key(0)?;
+    rig.act(at(13, 58, 10), &alpha, Act::AlreadyThere).await?;
+    rig.host().focused.store(false, Ordering::SeqCst);
+    assert_eq!(
+        rig.sched.deadline().await,
+        Some(at(13, 58, 10) + FOCUS_RECHECK)
+    );
+    rig.housekeep_at(at(13, 58, 10) + FOCUS_RECHECK).await;
+    assert_eq!(rig.host().count("notify"), 1);
     Ok(())
 }
 

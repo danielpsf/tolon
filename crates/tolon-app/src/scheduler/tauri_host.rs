@@ -154,7 +154,7 @@ impl Host for TauriHost {
         })
     }
 
-    fn notify(&self, show: &AlarmShow) {
+    fn notify(&self, show: &AlarmShow, id: i32) {
         let (title, body) = fallback_text(show);
         let shown = self
             .app
@@ -162,6 +162,7 @@ impl Host for TauriHost {
             .builder()
             .title(title)
             .body(body)
+            .id(id)
             .action_type_id(ACTION_TYPE)
             .show();
         if let Err(e) = shown {
@@ -204,24 +205,25 @@ pub fn setup_fallback_actions(app: &AppHandle) -> anyhow::Result<()> {
             // A click on the notification itself, or an action this build does not know.
             _ => return,
         };
+        // The id says which notification this was; a platform that does not report it gets no action.
+        let Some(notice) = performed.notification().map(|n| n.id()) else {
+            tracing::debug!("a notification action without a notification id was ignored");
+            return;
+        };
         // The handler runs on a plain thread of the notification library.
         let handle = handle.clone();
-        tauri::async_runtime::spawn(async move { fallback_action(&handle, act).await });
+        tauri::async_runtime::spawn(async move { fallback_action(&handle, notice, act).await });
     })?;
     Ok(())
 }
 
-async fn fallback_action(app: &AppHandle, act: Act) {
+async fn fallback_action(app: &AppHandle, notice: i32, act: Act) {
     let Some(scheduler) = app.try_state::<AppScheduler>() else {
         return;
     };
     let result = async {
         let state = commands::state(app)?;
-        let key = scheduler
-            .first_key()
-            .await
-            .ok_or(crate::errors::AppError::NOT_FOUND)?;
-        scheduler.act(&state.db, &key, act).await
+        scheduler.act_on_notice(&state.db, notice, act).await
     }
     .await;
     // The interrupt may have been handled on screen already: that is not an error worth a warning.

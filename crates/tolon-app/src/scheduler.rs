@@ -88,8 +88,9 @@ pub trait Host: Send + Sync {
     fn stop_sound(&self);
     /// Opens an https link in the default browser. The error never carries the URL.
     fn open_url(&self, url: &str) -> anyhow::Result<()>;
-    /// The F4.5 fallback: a system notification with Join and Snooze.
-    fn notify(&self, show: &AlarmShow);
+    /// The F4.5 fallback: a system notification with Join and Snooze. `id` is the notification's
+    /// identifier; the host hands it back with the action (see `Scheduler::act_on_notice`).
+    fn notify(&self, show: &AlarmShow, id: i32);
 }
 
 /// What `Host::open` found out.
@@ -386,8 +387,12 @@ struct Open {
     test: bool,
     last_sound: DateTime<Utc>,
     recheck_at: Option<DateTime<Utc>>,
-    /// The F4.5 notification went out for this interrupt.
+    /// The F4.5 notification went out for the interrupt as it is now.
     notified: bool,
+    /// Identifier of that notification. Its Join and Snooze act only while it is this one: a
+    /// notification of an earlier interrupt, or of the same interrupt before its meetings changed,
+    /// is stale and does nothing.
+    notice: Option<i32>,
 }
 
 fn new_open(
@@ -405,6 +410,7 @@ fn new_open(
         last_sound: now,
         recheck_at: Some(now + FOCUS_RECHECK),
         notified: false,
+        notice: None,
     }
 }
 
@@ -414,6 +420,8 @@ struct Inner {
     sound: Sound,
     repeat: bool,
     degraded_logged: bool,
+    /// The last notification identifier handed out; never reused, so a stale id never matches.
+    last_notice: i32,
 }
 
 pub struct Scheduler<H> {
@@ -432,6 +440,7 @@ impl<H: Host> Scheduler<H> {
                 sound: Sound::SoftBell,
                 repeat: true,
                 degraded_logged: false,
+                last_notice: 0,
             }),
             wake: Notify::new(),
         }
@@ -503,7 +512,8 @@ impl<H: Host> Scheduler<H> {
                         .iter()
                         .filter(|t| t.to == AlarmState::Expired)
                         .count();
-                    self.drop_stale_meetings(&mut inner, &ticked.firing).await;
+                    self.drop_stale_meetings(&mut inner, &ticked.firing, now)
+                        .await;
                     self.present(&mut inner, &ticked.firing, &occs, now).await;
                 }
                 // The next tick tries again; nothing fires from a half-read store.
@@ -545,20 +555,33 @@ impl<H: Host> Scheduler<H> {
 
     /// AC3.5: a meeting of the open minute fired on a later tick; the interrupt lists it too.
     async fn regroup(&self, inner: &mut Inner, group: &InterruptGroup, now: DateTime<Utc>) {
-        let show = AlarmShow::from_group(group);
         if let Some(open) = inner.open.as_mut() {
             open.links = links_of(group);
-            open.show = show.clone();
+            open.show = AlarmShow::from_group(group);
         }
-        if let Err(e) = self.host.open(&show).await {
-            tracing::warn!(error = %e, "could not update the interrupt with a new meeting");
-        }
+        self.show_open(inner, now).await;
         self.sound(inner, now);
     }
 
     async fn open_group(&self, inner: &mut Inner, group: &InterruptGroup, now: DateTime<Utc>) {
         let show = AlarmShow::from_group(group);
-        let mut open = new_open(show.clone(), group.minute, links_of(group), false, now);
+        inner.open = Some(new_open(show, group.minute, links_of(group), false, now));
+        self.show_open(inner, now).await;
+        self.sound(inner, now);
+    }
+
+    /// Opens the windows, or updates them, with what the open interrupt lists now, and applies the
+    /// F4.5 rules. A changed list starts a new focus check and drops the old notification: its
+    /// buttons no longer match what is on screen. A degraded system announces the new list at once;
+    /// windows that cannot open leave the notification as the interrupt.
+    async fn show_open(&self, inner: &mut Inner, now: DateTime<Utc>) {
+        let Some(open) = inner.open.as_mut() else {
+            return;
+        };
+        open.recheck_at = Some(now + FOCUS_RECHECK);
+        open.notified = false;
+        open.notice = None;
+        let show = open.show.clone();
         match self.host.open(&show).await {
             Ok(opened) => {
                 if let Some(reason) = opened.degraded {
@@ -569,25 +592,33 @@ impl<H: Host> Scheduler<H> {
                             "the system cannot cover the screen; using notifications"
                         );
                     }
-                    open.notified = true;
-                    self.host.notify(&show);
+                    self.announce(inner);
                 }
             }
-            // No window at all: the notification is the interrupt, and its actions still work.
             Err(e) => {
                 tracing::warn!(error = %e, "could not open the interrupt window; using a notification");
-                open.recheck_at = None;
-                open.notified = true;
-                self.host.notify(&show);
+                if let Some(open) = inner.open.as_mut() {
+                    open.recheck_at = None;
+                }
+                self.announce(inner);
             }
         }
-        inner.open = Some(open);
-        self.sound(inner, now);
+    }
+
+    /// The F4.5 notification for the open interrupt, under a new identifier.
+    fn announce(&self, inner: &mut Inner) {
+        inner.last_notice = inner.last_notice.wrapping_add(1);
+        let id = inner.last_notice;
+        if let Some(open) = inner.open.as_mut() {
+            open.notified = true;
+            open.notice = Some(id);
+            self.host.notify(&open.show, id);
+        }
     }
 
     /// A meeting in the open interrupt whose alarm is no longer Firing (expired, or the meeting
     /// was deleted or ignored) leaves it; an interrupt with no meeting left closes.
-    async fn drop_stale_meetings(&self, inner: &mut Inner, firing: &[Alarm]) {
+    async fn drop_stale_meetings(&self, inner: &mut Inner, firing: &[Alarm], now: DateTime<Utc>) {
         let live: HashSet<String> = firing.iter().map(|a| a.occurrence.to_string()).collect();
         let Some(open) = inner.open.as_mut().filter(|o| !o.test) else {
             return;
@@ -598,10 +629,7 @@ impl<H: Host> Scheduler<H> {
         if open.show.meetings.is_empty() {
             self.close(inner);
         } else if open.show.meetings.len() != before {
-            let show = open.show.clone();
-            if let Err(e) = self.host.open(&show).await {
-                tracing::warn!(error = %e, "could not update the interrupt");
-            }
+            self.show_open(inner, now).await;
         }
     }
 
@@ -613,12 +641,16 @@ impl<H: Host> Scheduler<H> {
         if open.recheck_at.is_some_and(|at| now >= at) {
             open.recheck_at = None;
             if !open.notified && !self.host.focused().await {
-                open.notified = true;
                 tracing::warn!("the interrupt has no keyboard focus; using a notification too");
-                self.host.notify(&open.show);
+                self.announce(inner);
             }
         }
-        if inner.repeat && open.last_sound + REPEAT_EVERY <= now {
+        if inner.repeat
+            && inner
+                .open
+                .as_ref()
+                .is_some_and(|o| o.last_sound + REPEAT_EVERY <= now)
+        {
             self.sound(inner, now);
         }
     }
@@ -645,21 +677,33 @@ impl<H: Host> Scheduler<H> {
         }
         let show = AlarmShow::sample(now);
         let opened = self.host.open(&show).await?;
-        let mut open = new_open(show, now, HashMap::new(), true, now);
+        inner.open = Some(new_open(show, now, HashMap::new(), true, now));
         if opened.degraded.is_some() {
-            open.notified = true;
-            self.host.notify(&open.show);
+            self.announce(&mut inner);
         }
-        inner.open = Some(open);
         self.sound(&mut inner, now);
         Ok(())
     }
 
-    /// The first meeting of the open interrupt: what the notification's Join action joins.
-    pub async fn first_key(&self) -> Option<String> {
-        let inner = self.inner.lock().await;
-        let open = inner.open.as_ref()?;
-        open.show.meetings.first().map(|m| m.key.clone())
+    /// What a button of the F4.5 notification does: Join joins, and Snooze snoozes, the first
+    /// meeting of the interrupt that notification announced. A notification that is not the current
+    /// one (an earlier interrupt, or the same one before its meetings changed) does nothing.
+    pub async fn act_on_notice(&self, db: &Db, notice: i32, act: Act) -> anyhow::Result<()> {
+        let key = {
+            let inner = self.inner.lock().await;
+            inner
+                .open
+                .as_ref()
+                .filter(|o| o.notice == Some(notice))
+                .and_then(|o| o.show.meetings.first().map(|m| m.key.clone()))
+        };
+        match key {
+            Some(key) => self.act(db, &key, act).await,
+            None => {
+                tracing::debug!("a notification action for an interrupt that is gone");
+                Ok(())
+            }
+        }
     }
 
     /// A person's action. `key` must be a meeting of the open interrupt, else `not_found`.
@@ -714,10 +758,7 @@ impl<H: Host> Scheduler<H> {
         };
         open.show.meetings = rest;
         open.links.remove(key);
-        let show = open.show.clone();
-        if let Err(e) = self.host.open(&show).await {
-            tracing::warn!(error = %e, "could not re-open the interrupt for the remaining meetings");
-        }
+        self.show_open(&mut inner, now).await;
         Ok(())
     }
 
