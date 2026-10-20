@@ -189,7 +189,8 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
         {single ? (
           <div className="tl-int-head">
             <h1 id="tl-int-title" className="sm-display-xl tl-int-title" data-len={titleSize(titleOf(first))}>
-              {titleOf(first)}
+              {/* <bdi>: a feed's title keeps its own direction inside a right-to-left page. */}
+              <bdi>{titleOf(first)}</bdi>
             </h1>
             <p id="tl-int-details" className="tl-int-details">
               {detailsText(c, first)}
@@ -199,7 +200,9 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
           <ul className="tl-int-list">
             {alarm.meetings.map((m) => (
               <li key={m.key} className="tl-int-item" data-key={m.key}>
-                <h2 className="sm-display-l">{titleOf(m)}</h2>
+                <h2 className="sm-display-l">
+                  <bdi>{titleOf(m)}</bdi>
+                </h2>
                 <p className="tl-int-details">{detailsText(c, m)}</p>
                 {joinButton(m, "lg")}
               </li>

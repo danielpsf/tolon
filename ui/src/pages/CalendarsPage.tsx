@@ -233,6 +233,7 @@ export function CalendarsPage() {
               className="sm-input"
               type="text"
               inputMode="url"
+              dir="ltr"
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}

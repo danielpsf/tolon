@@ -2,6 +2,7 @@
  * The only place for Tolon-specific styles (AGENTS.md rule 5).
  * Every change needs a reviewer's sign-off. Use --sm-* tokens only, no hex colours.
  * Fonts are not declared here: main.tsx imports them from @fontsource (see decisions).
+ * Use logical properties (inline-start/end), so the layout mirrors for right to left.
  */
 
 /* Settings shell (mockup 03): a 220 px sidebar and a content column of at most 960 px. */
@@ -81,7 +82,7 @@
 .tl-status {
   color: var(--sm-moss);
   font-size: 13px;
-  text-align: right;
+  text-align: end;
 }
 .tl-status.failed {
   color: var(--sm-signal);
@@ -189,7 +190,7 @@
   padding: 0;
   list-style: none;
 }
-/* Several meetings in the same minute (S3.6): one row each, the meeting on the left and its own Join button on the right. */
+/* Several meetings in the same minute (S3.6): one row each, the meeting at the start and its own Join button at the end. */
 .tl-int-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -243,14 +244,31 @@
 .tl-int-consequence {
   flex: 1 1 calc(280 * var(--tl-u));
   max-width: calc(460 * var(--tl-u));
-  margin: 0 0 0 auto;
+  margin: 0;
+  margin-inline-start: auto;
   font-size: calc(14 * var(--tl-u));
-  text-align: right;
+  text-align: end;
 }
 .tl-int-error {
   position: fixed;
-  right: calc(96 * var(--tl-u));
+  inset-inline-end: calc(96 * var(--tl-u));
   bottom: calc(16 * var(--tl-u));
   margin: 0;
   font-size: calc(14 * var(--tl-u));
+}
+
+/*
+ * Right to left (Arabic, docs/decisions.md "Locale list for beta 1"). Grid, flex and the logical
+ * properties above mirror on their own; the Swiss Moss switch places its knob with left and translateX.
+ */
+:root[dir="rtl"] .sm-switch input::after {
+  left: auto;
+  right: 3px;
+}
+:root[dir="rtl"] .sm-switch input:checked::after {
+  transform: translateX(-16px);
+}
+/* Letter-spacing breaks the joins between Arabic letters; Swiss Moss tightens every display size. */
+:root:lang(ar) * {
+  letter-spacing: normal;
 }

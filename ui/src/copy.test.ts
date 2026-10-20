@@ -18,6 +18,16 @@ describe("copy", () => {
     expect(copy().locale).toBe("pt-PT");
   });
 
+  it("sets <html dir> to rtl for Arabic and back to ltr for any other locale", () => {
+    const documentElement = { lang: "", dir: "" };
+    vi.stubGlobal("document", { documentElement });
+    vi.stubGlobal("navigator", { languages: ["ar-EG"] });
+    expect(initCopy().locale).toBe("ar");
+    expect(documentElement).toEqual({ lang: "ar", dir: "rtl" });
+    expect(initCopy("ja-JP").locale).toBe("ja");
+    expect(documentElement).toEqual({ lang: "ja", dir: "ltr" });
+  });
+
   it("lets the override parameter win", () => {
     vi.stubGlobal("document", { documentElement: { lang: "" } });
     vi.stubGlobal("navigator", { languages: ["pt-PT"] });

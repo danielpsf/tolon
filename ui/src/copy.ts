@@ -35,12 +35,16 @@ let current: Copy | undefined;
 
 /**
  * Resolves the locale once: `override` (for example the `lang` query parameter) first, then
- * `navigator.languages`. Sets `<html lang>`. Call it at startup before the first render.
+ * `navigator.languages`. Sets `<html lang>` and `<html dir>` (rtl for Arabic). Call it at startup
+ * before the first render.
  */
 export function initCopy(override?: string | null): Copy {
   const systemLanguages = typeof navigator === "undefined" ? [] : navigator.languages;
   current = createCopy(resolveLocale(systemLanguages, override));
-  if (typeof document !== "undefined") document.documentElement.lang = current.locale;
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = current.locale;
+    document.documentElement.dir = current.locale === "ar" ? "rtl" : "ltr";
+  }
   return current;
 }
 
