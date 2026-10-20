@@ -107,17 +107,34 @@ fn violations(rel: &str, text: &str) -> Vec<String> {
     found
 }
 
-/// A release build is a plain release-profile build, and the tag run re-checks this very rule.
+/// Short forms of `--debug` and `--features` (tauri build: `-d`, `-f`; cargo: `-F`).
+const SHORT_FLAGS: &[&str] = &["-d", "-f", "-F"];
+
+/// Jobs that must not start before `preflight` (secrets, tag, version and feature checks) has passed.
+const NEEDS_PREFLIGHT: &[&str] = &["build", "publish"];
+
+/// A release build is a plain release-profile build, the tag run re-checks this very rule, and no
+/// job builds or publishes before `preflight` passed.
 fn release_workflow_violations(rel: &str, text: &str) -> Vec<String> {
     let mut found = Vec::new();
     for (i, line) in text.lines().enumerate() {
         let line = line.trim();
+        let n = i + 1;
+        // `--features=x` is covered by the same prefix.
         for flag in ["--features", "--debug"] {
             if line.contains(flag) {
                 found.push(format!(
-                    "{rel}:{}: `{flag}` is not allowed in the release workflow",
-                    i + 1
+                    "{rel}:{n}: `{flag}` is not allowed in the release workflow"
                 ));
+            }
+        }
+        if !line.starts_with('#') {
+            for token in line.split_whitespace() {
+                if SHORT_FLAGS.contains(&token) {
+                    found.push(format!(
+                        "{rel}:{n}: `{token}` (short for --debug or --features) is not allowed in the release workflow"
+                    ));
+                }
             }
         }
     }
@@ -126,11 +143,23 @@ fn release_workflow_violations(rel: &str, text: &str) -> Vec<String> {
             "{rel}: must contain the step `{RELEASE_SELF_CHECK}`"
         ));
     }
+    let jobs = split_jobs(text);
+    for name in NEEDS_PREFLIGHT {
+        let ok = jobs.iter().any(|(job, body)| {
+            job == name
+                && body
+                    .iter()
+                    .any(|l| l.starts_with("    needs:") && l.contains("preflight"))
+        });
+        if !ok {
+            found.push(format!("{rel}: job `{name}` must have `needs: preflight`"));
+        }
+    }
     found
 }
 
-/// A job that builds with the feature must not upload an artifact: the build could leave the repo.
-fn artifact_violations(rel: &str, text: &str) -> Vec<String> {
+/// The jobs of a workflow as (name, body lines); a job header is a two-space-indented `name:` under `jobs:`.
+fn split_jobs(text: &str) -> Vec<(&str, Vec<&str>)> {
     let mut jobs: Vec<(&str, Vec<&str>)> = Vec::new();
     let mut in_jobs = false;
     for line in text.lines() {
@@ -146,7 +175,13 @@ fn artifact_violations(rel: &str, text: &str) -> Vec<String> {
             body.push(line);
         }
     }
-    jobs.iter()
+    jobs
+}
+
+/// A job that builds with the feature must not upload an artifact: the build could leave the repo.
+fn artifact_violations(rel: &str, text: &str) -> Vec<String> {
+    split_jobs(text)
+        .iter()
         .filter(|(_, body)| {
             body.iter().any(|l| l.contains(FEATURE))
                 && body.iter().any(|l| l.contains("upload-artifact"))
@@ -204,7 +239,7 @@ mod tests {
 
     const CI_E2E: &str = "jobs:\n  e2e:\n    steps:\n      - name: Build debug app\n        run: npm --prefix ui run tauri build -- --debug --no-bundle --features e2e-loopback\n";
 
-    const RELEASE_OK: &str = "      - name: Check\n        run: cargo xtask check-release-features\n      - run: npm run tauri build -- --ci\n";
+    const RELEASE_OK: &str = "jobs:\n  preflight:\n    steps:\n      - name: Check\n        run: cargo xtask check-release-features\n  build:\n    needs: preflight\n    steps:\n      - run: npm run tauri build -- --ci\n  publish:\n    needs: [preflight, build]\n    steps:\n      - run: gh release create\n";
 
     #[test]
     fn release_workflow_may_not_pass_the_feature() {
@@ -217,12 +252,44 @@ mod tests {
     #[test]
     fn release_workflow_must_self_check_and_build_in_release_mode() {
         assert!(violations(RELEASE_WORKFLOW, RELEASE_OK).is_empty());
-        let no_check = "      - run: npm run tauri build -- --ci\n";
-        assert_eq!(violations(RELEASE_WORKFLOW, no_check).len(), 1);
+        let no_check = RELEASE_OK.replace("cargo xtask check-release-features", "true");
+        assert_eq!(violations(RELEASE_WORKFLOW, &no_check).len(), 1);
         let debug = format!("{RELEASE_OK}      - run: npm run tauri build -- --debug\n");
         assert_eq!(violations(RELEASE_WORKFLOW, &debug).len(), 1);
         let features = format!("{RELEASE_OK}      - run: cargo build --features foo\n");
         assert_eq!(violations(RELEASE_WORKFLOW, &features).len(), 1);
+    }
+
+    #[test]
+    fn release_workflow_rejects_the_short_and_equals_flag_forms() {
+        for flag in ["-d", "-f", "-F", "--features=foo", "-f foo"] {
+            let yml = format!("{RELEASE_OK}      - run: npm run tauri build -- --ci {flag}\n");
+            assert_eq!(violations(RELEASE_WORKFLOW, &yml).len(), 1, "{flag}");
+        }
+        // Words that merely contain the letters, and prose in comments, are fine.
+        let fine = format!(
+            "{RELEASE_OK}      - run: find . -type f -printf x\n      # -d and -f in a comment\n"
+        );
+        assert!(violations(RELEASE_WORKFLOW, &fine).is_empty());
+    }
+
+    #[test]
+    fn release_build_and_publish_need_preflight() {
+        for job in ["build", "publish"] {
+            let (head, rest) = RELEASE_OK
+                .split_once(&format!("  {job}:\n"))
+                .unwrap_or_default();
+            // Drop the `needs:` line of that job only.
+            let (needs, tail) = rest.split_once('\n').unwrap_or_default();
+            assert!(needs.starts_with("    needs:"));
+            let yml = format!("{head}  {job}:\n{tail}");
+            let found = violations(RELEASE_WORKFLOW, &yml);
+            assert_eq!(found.len(), 1, "{job}: {found:?}");
+            assert!(found[0].contains(job));
+        }
+        // `publish` that needs only `build` does not name preflight.
+        let only_build = RELEASE_OK.replace("[preflight, build]", "build");
+        assert_eq!(violations(RELEASE_WORKFLOW, &only_build).len(), 1);
     }
 
     #[test]
