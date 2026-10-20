@@ -380,3 +380,63 @@ fn stored_alarms(
     stored.extend(strays);
     stored
 }
+
+/// 24 Oct 2026 00:00 in Berlin (22:00 UTC the day before): the next 48 hours hold the end of
+/// summer time (25 Oct, 03:00 CEST to 02:00 CET) and a weekend.
+fn berlin_base() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-10-23T22:00:00Z")
+        .map(|t| t.with_timezone(&Utc))
+        .unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
+}
+
+const TWO_DAYS: i64 = 48 * 3600;
+const STEP: i64 = 60;
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(cases().min(128)))]
+
+    /// AC8.1 over 48 hours in Europe/Berlin across the DST change, a tick every minute, no pause
+    /// and no actions: a meeting that starts outside quiet hours fires exactly once, as soon as a
+    /// tick between its due time and its expiry is outside them; one that starts inside them never
+    /// fires. The due time is the lead time, or the start when the lead time is quiet.
+    #[test]
+    fn ac8_1_a_meeting_outside_quiet_hours_fires_exactly_once_across_dst(
+        starts in prop::collection::vec(0i64..TWO_DAYS, 0..6),
+        settings in alarm_settings(),
+        q in (0u32..1440, 0u32..1440, any::<bool>()),
+        phase in 0i64..STEP,
+    ) {
+        let Some(q) = quiet_hours(q).map(|q| QuietHours { tz: Tz::Europe__Berlin, ..q }) else {
+            return Ok(());
+        };
+        let occs: Vec<Occurrence> = starts
+            .iter()
+            .enumerate()
+            .map(|(i, s)| occ(&format!("m{i}"), berlin_base() + Duration::seconds(*s), 2))
+            .collect();
+        let first = berlin_base() - Duration::hours(2);
+        let mut alarms = plan(&occs, &settings, &[], first);
+        let ticks: Vec<DateTime<Utc>> = (0..=(TWO_DAYS + 3 * 3600) / STEP)
+            .map(|i| first + Duration::seconds(phase + i * STEP))
+            .collect();
+        let mut fires: HashMap<OccurrenceKey, u32> = HashMap::new();
+        for now in &ticks {
+            let transitions = tick(&alarms, *now, None, Some(&q));
+            for t in transitions.iter().filter(|t| t.fires()) {
+                *fires.entry(t.occurrence.clone()).or_default() += 1;
+            }
+            apply_transitions(&mut alarms, &transitions);
+        }
+        for o in &occs {
+            let lead = alarms
+                .iter()
+                .find(|a| a.occurrence == o.key && a.kind == AlarmKind::Lead)
+                .ok_or_else(|| TestCaseError::fail("no lead alarm"))?;
+            let due = if q.is_quiet(lead.at) { lead.at.max(lead.start) } else { lead.at };
+            let open = !q.is_quiet(lead.start)
+                && ticks.iter().any(|t| *t >= due && *t < lead.expires_at() && !q.is_quiet(*t));
+            let n = fires.get(&o.key).copied().unwrap_or(0);
+            prop_assert_eq!(n, u32::from(open), "{:?} due {} quiet {:?}", o.start, due, q);
+        }
+    }
+}
