@@ -96,6 +96,60 @@
   margin-top: var(--sm-space-5);
 }
 
+/* Settings pages (mockup 04): short fields sit in a row with their text; a switch can carry a one-line hint. */
+.tl-settings {
+  margin-top: var(--sm-space-5);
+}
+.tl-settings .sm-tag-input {
+  max-width: 560px;
+}
+.tl-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sm-space-3);
+}
+.tl-inline .sm-switch {
+  margin-inline-start: var(--sm-space-2);
+}
+.sm-input.tl-num {
+  width: 64px;
+  text-align: center;
+}
+.sm-select.tl-short {
+  width: 300px;
+  max-width: 100%;
+}
+.sm-input.tl-time {
+  width: 140px;
+}
+.tl-times {
+  gap: var(--sm-space-5);
+}
+.tl-hint {
+  display: block;
+}
+.tl-segmented {
+  align-self: flex-start;
+}
+.tl-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--sm-space-3) var(--sm-space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tl-keys li {
+  display: flex;
+  align-items: center;
+  gap: var(--sm-space-3);
+}
+.tl-keys .sm-kbd {
+  min-width: 60px;
+  text-align: center;
+}
+
 /*
  * Interrupt window (mockup 01): full-bleed moss in both themes. `--sm-moss` is the fill and
  * `--sm-on-moss` the text; Swiss Moss flips both for dark, so one rule set serves light and dark.

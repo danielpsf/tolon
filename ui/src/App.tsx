@@ -2,16 +2,27 @@ import { useEffect, useState } from "react";
 import { Bell } from "./Bell";
 import { copy } from "./copy";
 import { CalendarsPage } from "./pages/CalendarsPage";
-import { startCalendarsFeed } from "./store";
+import {
+  AlarmsPage,
+  AppearancePage,
+  LanguagePage,
+  QuietHoursPage,
+  RulesPage,
+  StartupPage,
+} from "./pages/SettingsPages";
+import { startCalendarsFeed, useSettings } from "./store";
 import pkg from "../package.json";
 
-const PAGES = [
-  { id: "calendars", key: "calendars" },
-  { id: "alarms", key: "alarms" },
-  { id: "quiet-hours", key: "quietHours" },
-  { id: "appearance", key: "appearance" },
-  { id: "startup", key: "startup" },
-  { id: "about", key: "about" },
+// One topic per page (AC9.2). About has no page yet.
+export const PAGES = [
+  { id: "calendars", key: "calendars", Page: CalendarsPage },
+  { id: "alarms", key: "alarms", Page: AlarmsPage },
+  { id: "quiet-hours", key: "quietHours", Page: QuietHoursPage },
+  { id: "rules", key: "rules", Page: RulesPage },
+  { id: "appearance", key: "appearance", Page: AppearancePage },
+  { id: "language", key: "language", Page: LanguagePage },
+  { id: "startup", key: "startup", Page: StartupPage },
+  { id: "about", key: "about", Page: null },
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
@@ -33,6 +44,8 @@ function useRoute(): PageId {
 }
 
 export function App() {
+  // A new language re-renders every page from the new catalogue (copy() reads the active one).
+  useSettings((s) => s.settings?.locale);
   const { t } = copy();
   const route = useRoute();
   useEffect(() => {
@@ -58,8 +71,8 @@ export function App() {
         <span className="sm-caption tl-version">v{pkg.version}</span>
       </aside>
       <main className="tl-main" aria-label={t.nav[page.key]}>
-        {route === "calendars" ? (
-          <CalendarsPage />
+        {page.Page ? (
+          <page.Page />
         ) : (
           <>
             <h1 className="sm-display-m">{t.nav[page.key]}</h1>
