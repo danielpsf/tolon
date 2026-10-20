@@ -1,7 +1,7 @@
 // The only file that talks to Tauri: commands in, events out (docs/architecture.md, "Tauri commands").
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AlarmShowDto, CalendarDto, CommandError } from "./api-types";
+import type { AlarmShowDto, CalendarDto, CommandError, SettingsDto, SettingsPatch, Sound } from "./api-types";
 
 export const api = {
   calendarsList: () => invoke<CalendarDto[]>("calendars_list"),
@@ -14,7 +14,14 @@ export const api = {
   alarmsDismiss: (key: string) => invoke<void>("alarms_dismiss", { key }),
   alarmsJoin: (key: string) => invoke<void>("alarms_join", { key }),
   alarmsAlreadyThere: (key: string) => invoke<void>("alarms_already_there", { key }),
+  settingsGet: () => invoke<SettingsDto>("settings_get"),
+  /** Saves at once (AC9.1) and answers with every setting as stored. */
+  settingsSet: (patch: SettingsPatch) => invoke<SettingsDto>("settings_set", { patch }),
+  /** Plays the sound once (AC6.3). */
+  soundPreview: (sound: Sound) => invoke<void>("sound_preview", { sound }),
 };
+
+export const onSettingsChanged = (handler: () => void): Promise<UnlistenFn> => listen("settings:changed", handler);
 
 export const onCalendarsChanged = (handler: () => void): Promise<UnlistenFn> =>
   listen("calendars:changed", handler);

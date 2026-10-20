@@ -28,9 +28,9 @@ export const COMMAND_ERROR_CODES = [
 
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
 
-/** What a rejected command carries. */
+/** What a rejected command carries. `settings_set` refuses a value with `invalid:<field>`. */
 export interface CommandError {
-  code: CommandErrorCode;
+  code: CommandErrorCode | `invalid:${string}`;
 }
 
 export interface CalendarDto {
@@ -70,3 +70,47 @@ export interface AlarmShowDto {
   test: boolean;
   meetings: MeetingDto[];
 }
+
+// The settings contract (docs/decisions.md, "Overnight M3 plan and the settings contract"):
+// `settings_get`, `settings_set` and `sound_preview` in tolon-app.
+
+export const SOUNDS = ["bell", "chime", "none"] as const;
+export type Sound = (typeof SOUNDS)[number];
+
+export const APPEARANCES = ["auto", "light", "dark"] as const;
+export type Appearance = (typeof APPEARANCES)[number];
+
+export interface QuietHoursDto {
+  enabled: boolean;
+  /** "HH:MM", local time. */
+  start: string;
+  end: string;
+  /** Saturday and Sunday stay quiet all day. */
+  weekends: boolean;
+}
+
+export interface IgnoreDto {
+  all_day: boolean;
+  declined: boolean;
+  cancelled: boolean;
+  no_attendees: boolean;
+  /** Trimmed, at most 50 of up to 64 characters each; matched case-insensitively. */
+  keywords: string[];
+}
+
+export interface SettingsDto {
+  /** 1 to 60 (AC9.5). */
+  lead_minutes: number;
+  again_at_start: boolean;
+  sound: Sound;
+  sound_repeat: boolean;
+  quiet: QuietHoursDto;
+  ignore: IgnoreDto;
+  appearance: Appearance;
+  /** A shipped catalogue, or null to follow the system. */
+  locale: string | null;
+  start_at_login: boolean;
+}
+
+/** Every field optional; the view always sends `quiet` and `ignore` whole. */
+export type SettingsPatch = Partial<SettingsDto>;
