@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Require the updater signing secrets
         env:
           KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -31,7 +33,9 @@ jobs:
         run: python3 -m unittest discover -s .github/scripts
       - name: Tag, versions and updater config agree
         run: python3 .github/scripts/release_assets.py check-tag "$GITHUB_REF_NAME"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install --profile minimal
       - name: Release builds stay free of test seams
@@ -73,13 +77,17 @@ jobs:
             expect: "*.AppImage *.deb"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Linux build deps (Tauri 2)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl wget file libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev patchelf xdg-utils
       # No Rust or npm cache here on purpose: a cache written by another ref must not shape a release binary.
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install --profile minimal
       - name: Add both macOS targets (universal build)
@@ -114,12 +122,14 @@ jobs:
           retention-days: 7
   publish:
     name: draft release
-    needs: build
+    needs: [preflight, build]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -137,8 +147,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            echo "::error::A release for $GITHUB_REF_NAME already exists. Delete it (and the draft assets) before pushing the tag again."
+          # `gh release view` does not find drafts; the releases list does.
+          set -o pipefail
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate | jq -r --arg tag "$GITHUB_REF_NAME" '.[] | select(.tag_name == $tag) | .id')
+          if [ -n "$existing" ]; then
+            echo "::error::A release or draft for $GITHUB_REF_NAME already exists (id $existing). Delete it, then push the tag again."
             exit 1
           fi
           # Not marked pre-release: the updater endpoint is releases/latest/download/latest.json, and GitHub's "latest" skips pre-releases.
