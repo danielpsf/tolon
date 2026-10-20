@@ -6,6 +6,7 @@ import { copy } from "../copy";
 import {
   countdownText,
   detailsText,
+  handlesKey,
   hintText,
   keyAction,
   nextFocusIndex,
@@ -52,6 +53,10 @@ function useAlarm(): AlarmShowDto | null {
 /** Every button the focus trap cycles through, in tab order. */
 const CONTROLS = "[data-action]";
 
+/** What the button holding the focus does, or null when focus is on the page itself. */
+const actionOf = (el: Element | null): Action | null =>
+  (el?.closest<HTMLElement>(CONTROLS)?.dataset.action as Action | undefined) ?? null;
+
 /** The page: waits for an interrupt, then shows it. A new interrupt is a new view, so no state carries over. */
 export function InterruptPage() {
   const alarm = useAlarm();
@@ -69,6 +74,7 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
   const root = useRef<HTMLElement>(null);
   const busy = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState<Action | null>(null);
 
   // The interrupt opens on its primary button (AC4.4).
   useEffect(() => {
@@ -102,14 +108,15 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
       return;
     }
     const wanted = keyAction(e);
-    if (!wanted) return;
+    // Space on Snooze or Dismiss is left to the button: it must not mark the meeting as joined.
+    if (!wanted || !handlesKey(wanted, actionOf(document.activeElement))) return;
     // A handled key never reaches the focused button, so Space cannot also click it.
     e.preventDefault();
     const meeting = meetingAt(document.activeElement);
     if (wanted !== "enter") return void run(wanted, meeting);
     // Enter does what the focused button says; with no button focused it takes the primary action.
-    const focused = document.activeElement?.closest<HTMLElement>(CONTROLS);
-    if (focused) focused.click();
+    const button = document.activeElement?.closest<HTMLElement>(CONTROLS);
+    if (button) button.click();
     else void run(primaryAction(meeting.join), meeting);
   };
 
@@ -120,9 +127,11 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
   });
   useEffect(() => {
     const down = (e: KeyboardEvent) => latest.current(e);
-    // Some webviews click a button on Space key-up; the key-down above already took the key.
+    // Some webviews click a button on Space key-up; the key-down above already took the key,
+    // unless focus is on Snooze or Dismiss, where that click is the point.
     const up = (e: KeyboardEvent) => {
-      if (e.key === " " || e.key === "Spacebar") e.preventDefault();
+      const space = e.key === " " || e.key === "Spacebar";
+      if (space && handlesKey("already_there", actionOf(document.activeElement))) e.preventDefault();
     };
     window.addEventListener("keydown", down, true);
     window.addEventListener("keyup", up, true);
@@ -160,8 +169,12 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
       className="tl-int"
       role="alertdialog"
       aria-modal="true"
-      aria-label={t.region}
+      // One meeting: the dialog is announced by its title and details. Several: by its name.
+      aria-label={single ? undefined : t.region}
+      aria-labelledby={single ? "tl-int-title" : undefined}
+      aria-describedby={single ? "tl-int-details" : undefined}
       data-screen={screen}
+      onFocus={(e) => setFocused(actionOf(e.target))}
       onBlur={keepFocus}
     >
       <header className="tl-int-top">
@@ -175,10 +188,12 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
       <section className="tl-int-body">
         {single ? (
           <div className="tl-int-head">
-            <h1 className="sm-display-xl tl-int-title" data-len={titleSize(titleOf(first))}>
+            <h1 id="tl-int-title" className="sm-display-xl tl-int-title" data-len={titleSize(titleOf(first))}>
               {titleOf(first)}
             </h1>
-            <p className="tl-int-details">{detailsText(c, first)}</p>
+            <p id="tl-int-details" className="tl-int-details">
+              {detailsText(c, first)}
+            </p>
           </div>
         ) : (
           <ul className="tl-int-list">
@@ -191,7 +206,7 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
             ))}
           </ul>
         )}
-        <p className="tl-int-hint">{hintText(c, primaryAction(first.join))}</p>
+        <p className="tl-int-hint">{hintText(c, primaryAction(first.join), handlesKey("already_there", focused))}</p>
       </section>
 
       <footer className="tl-int-actions">

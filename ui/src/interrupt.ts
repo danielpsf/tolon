@@ -68,10 +68,14 @@ export function detailsText(c: Copy, meeting: MeetingDto): string {
   return c.t.interrupt.details(range, provider, meeting.people);
 }
 
-/** The key hint line follows what Enter does for the first meeting. */
-export function hintText(c: Copy, primary: PrimaryAction): string {
+/**
+ * The key hint line follows what Enter does for the first meeting. It names Space only while Space
+ * would mean "I am already there" (`spaceActive`), not while a Snooze or Dismiss button has focus.
+ */
+export function hintText(c: Copy, primary: PrimaryAction, spaceActive = true): string {
   const { interrupt: t } = c.t;
-  return primary === "join" ? t.hintJoin : primary === "open_event" ? t.hintEvent : t.hintAlreadyThere;
+  const keys = primary === "join" ? t.hintJoin : primary === "open_event" ? t.hintEvent : t.hintAlreadyThere;
+  return spaceActive ? `${keys} ${t.hintSpace}` : keys;
 }
 
 /** "Starts in 2 min" before the start, "Started 3 min ago" after it (AC4.7, S3.4). */
@@ -108,6 +112,15 @@ export function keyAction(e: KeyLike): KeyAction | null {
     default:
       return null;
   }
+}
+
+/**
+ * Whether the page takes `wanted` itself. Space is "I am already there" (AC4.4) only from the
+ * primary button or with nothing focused; on Snooze or Dismiss it activates that button, as
+ * it would anywhere, so it can never mark a meeting joined by accident.
+ */
+export function handlesKey(wanted: KeyAction, focused: Action | null): boolean {
+  return !(wanted === "already_there" && (focused === "snooze" || focused === "dismiss"));
 }
 
 /** Tab order inside a group of `count` controls, wrapping at both ends: the focus trap. */

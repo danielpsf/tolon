@@ -5,6 +5,7 @@ import { createCopy, LOCALES } from "./copy";
 import {
   countdownText,
   detailsText,
+  handlesKey,
   hintText,
   joinHost,
   keyAction,
@@ -114,7 +115,17 @@ describe("primary button (AC5.2)", () => {
   it("S5.2 the key hint says what Enter does", () => {
     expect(hintText(en, "join")).toContain("Enter joins");
     expect(hintText(en, "open_event")).toContain("Enter opens the event");
-    expect(hintText(en, "already_there")).toContain("Enter or Space means you are already there");
+    expect(hintText(en, "already_there")).toContain("Enter: I am already there");
+  });
+
+  it("AC4.4 the hint names Space only while Space means 'I am already there'", () => {
+    expect(hintText(en, "join", true)).toBe("Esc snoozes. Enter joins. D dismisses. Space: I am already there.");
+    expect(hintText(en, "join", false)).toBe("Esc snoozes. Enter joins. D dismisses.");
+    for (const locale of LOCALES) {
+      const c = createCopy(locale);
+      expect(hintText(c, "join", true)).toContain(c.t.interrupt.hintSpace);
+      expect(hintText(c, "join", false)).not.toContain(c.t.interrupt.hintSpace);
+    }
   });
 });
 
@@ -184,6 +195,27 @@ describe("keys (S4.3, AC4.4)", () => {
     expect(nextFocusIndex(-1, 3, false)).toBe(0);
     expect(nextFocusIndex(-1, 3, true)).toBe(2);
     expect(nextFocusIndex(0, 0, false)).toBe(-1);
+  });
+});
+
+describe("Space (AC4.4)", () => {
+  it("AC4.4 means 'I am already there' from a primary button or with nothing focused", () => {
+    for (const focused of ["join", "open_event", "already_there", null] as const) {
+      expect(handlesKey("already_there", focused)).toBe(true);
+    }
+  });
+
+  it("AC4.4 on Snooze or Dismiss it is left to the button, so it never marks a meeting joined", () => {
+    expect(handlesKey("already_there", "snooze")).toBe(false);
+    expect(handlesKey("already_there", "dismiss")).toBe(false);
+  });
+
+  it("AC4.4 Enter, Esc and D stay the page's own wherever the focus is", () => {
+    for (const wanted of ["enter", "snooze", "dismiss"] as const) {
+      for (const focused of ["join", "snooze", "dismiss", null] as const) {
+        expect(handlesKey(wanted, focused)).toBe(true);
+      }
+    }
   });
 });
 

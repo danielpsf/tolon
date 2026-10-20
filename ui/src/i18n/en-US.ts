@@ -54,9 +54,10 @@ export const enUS = {
     snooze: (minutes: number) => `Snooze ${number.format(minutes)} min`,
     dismiss: "Dismiss",
     dismissConsequence: "Dismissing silences this reminder on this computer.",
-    hintJoin: "Esc snoozes. Enter joins. D dismisses. Space means you are already there.",
-    hintEvent: "Esc snoozes. Enter opens the event. D dismisses. Space means you are already there.",
-    hintAlreadyThere: "Esc snoozes. Enter or Space means you are already there. D dismisses.",
+    hintJoin: "Esc snoozes. Enter joins. D dismisses.",
+    hintEvent: "Esc snoozes. Enter opens the event. D dismisses.",
+    hintAlreadyThere: "Esc snoozes. Enter: I am already there. D dismisses.",
+    hintSpace: "Space: I am already there.",
     timeRange: (start: string, end: string) => `${start} to ${end}`,
     details: (range: string, provider: string | null, people: number) =>
       `${range}${provider ? ` on ${provider}` : ""}${

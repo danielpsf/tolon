@@ -54,9 +54,10 @@ export const ptBR: Messages = {
     snooze: (minutes) => `Adiar ${number.format(minutes)} min`,
     dismiss: "Dispensar",
     dismissConsequence: "Dispensar silencia este lembrete neste computador.",
-    hintJoin: "Esc adia. Enter entra na chamada. D dispensa. Espaço indica que você já está lá.",
-    hintEvent: "Esc adia. Enter abre o evento. D dispensa. Espaço indica que você já está lá.",
-    hintAlreadyThere: "Esc adia. Enter ou Espaço indica que você já está lá. D dispensa.",
+    hintJoin: "Esc adia. Enter entra na chamada. D dispensa.",
+    hintEvent: "Esc adia. Enter abre o evento. D dispensa.",
+    hintAlreadyThere: "Esc adia. Enter: já estou lá. D dispensa.",
+    hintSpace: "Espaço: já estou lá.",
     timeRange: (start, end) => `${start} a ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` em ${provider}` : ""}${
