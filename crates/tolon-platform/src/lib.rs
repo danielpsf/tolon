@@ -262,8 +262,9 @@ pub trait Platform: Send + Sync {
 
 /// Implementation for CI and tests: one fixed 1440x900 primary screen at 2x; raising does
 /// nothing and reports no focus; the login item is one flag in memory, shared by the process
-/// like the one login item of a real machine, so tests that set it must not run in parallel. It is also what unknown OSes get, so it reports
-/// `Degraded(Unsupported)`: nothing here can cover the screen.
+/// like the one login item of a real machine, so tests that set it must not run in parallel. It
+/// is also what unknown OSes get, so it reports `Degraded(Unsupported)`: nothing here can cover
+/// the screen.
 pub struct StubPlatform;
 
 static STUB_START_AT_LOGIN: AtomicBool = AtomicBool::new(false);

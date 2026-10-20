@@ -1,6 +1,6 @@
 //! macOS implementation on AppKit. Every call needs the main thread.
 
-use crate::login::from_sm_app_service_status;
+use crate::login::{from_sm_app_service_status, sm_call_for, sm_error_means_done, SmCall};
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
 use crate::{ns_view_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
@@ -105,12 +105,23 @@ impl Platform for MacPlatform {
 
     fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError> {
         main_thread()?;
-        // SAFETY: as in `start_at_login`; the error is returned, not thrown.
+        // SAFETY: as in `start_at_login`; the errors are returned, not thrown.
         let service = unsafe { SMAppService::mainAppService() };
-        if enabled {
-            unsafe { service.registerAndReturnError() }.map_err(|e| sm_error("register", &e))
-        } else {
-            unsafe { service.unregisterAndReturnError() }.map_err(|e| sm_error("unregister", &e))
+        let call = sm_call_for(
+            from_sm_app_service_status(unsafe { service.status() }.0),
+            enabled,
+        );
+        let result = match call {
+            SmCall::Nothing => return Ok(()),
+            SmCall::Register => unsafe { service.registerAndReturnError() },
+            SmCall::Unregister => unsafe { service.unregisterAndReturnError() },
+        };
+        match result {
+            Err(e) if !sm_error_means_done(call, e.code()) => Err(sm_error(
+                if enabled { "register" } else { "unregister" },
+                &e,
+            )),
+            _ => Ok(()),
         }
     }
 }
@@ -144,6 +155,23 @@ mod tests {
         ] {
             assert_eq!(from_sm_app_service_status(raw.0), state);
         }
+    }
+
+    #[test]
+    fn ac9_4_error_codes_match_service_management() {
+        use objc2_service_management as sm;
+        assert!(sm_error_means_done(
+            SmCall::Register,
+            sm::kSMErrorLaunchDeniedByUser as isize
+        ));
+        assert!(sm_error_means_done(
+            SmCall::Register,
+            sm::kSMErrorAlreadyRegistered as isize
+        ));
+        assert!(sm_error_means_done(
+            SmCall::Unregister,
+            sm::kSMErrorJobNotFound as isize
+        ));
     }
 
     // libtest runs these on a worker thread, so the main-thread check answers before any

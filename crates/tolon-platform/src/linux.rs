@@ -15,7 +15,9 @@
 //! new X11 dependency, and Tauri's `available_monitors` already reads them. An error, not an
 //! empty list, so a successful result always has exactly one main screen.
 
-use crate::login::{autostart_file, read_autostart, remove_autostart, write_autostart};
+use crate::login::{
+    appimage_program, autostart_file, read_autostart, remove_autostart, write_autostart,
+};
 use crate::session::{detect_session, session_of_handle, takeover_for};
 use crate::{Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
 use raw_window_handle::HasWindowHandle;
@@ -27,7 +29,7 @@ fn env(name: &str) -> Option<String> {
     std::env::var(name).ok()
 }
 
-/// The autostart file and the program it must start. `$APPIMAGE` wins over the running exe,
+/// The autostart file and the program it must start. An absolute `$APPIMAGE` wins over the running exe,
 /// which inside an AppImage is a temporary mount that is gone after the next start. A Flatpak
 /// sandbox has its own config home that the host never reads, so it is unsupported here.
 fn login_target() -> Result<(PathBuf, String), PlatformError> {
@@ -36,8 +38,8 @@ fn login_target() -> Result<(PathBuf, String), PlatformError> {
     }
     let file = autostart_file(env("XDG_CONFIG_HOME").as_deref(), env("HOME").as_deref())
         .ok_or_else(|| PlatformError::Io("no config directory: HOME is not set".into()))?;
-    let exe = match env("APPIMAGE").filter(|p| !p.is_empty()) {
-        Some(p) => p,
+    let exe = match appimage_program(env("APPIMAGE").as_deref()) {
+        Some(p) => p.to_owned(),
         None => std::env::current_exe()
             .map_err(|e| PlatformError::Io(e.to_string()))?
             .to_string_lossy()
@@ -153,6 +155,15 @@ mod tests {
         assert_eq!(LinuxPlatform.start_at_login()?, StartAtLogin::Disabled);
         LinuxPlatform.set_start_at_login(false)?;
         assert!(!file.exists());
+
+        // A relative $APPIMAGE is ignored: the entry names the running exe instead.
+        std::env::set_var("APPIMAGE", "Relative.AppImage");
+        LinuxPlatform.set_start_at_login(true)?;
+        let written =
+            std::fs::read_to_string(&file).map_err(|e| PlatformError::Io(e.to_string()))?;
+        assert!(!written.contains("Relative.AppImage"));
+        assert_eq!(LinuxPlatform.start_at_login()?, StartAtLogin::Enabled);
+        LinuxPlatform.set_start_at_login(false)?;
 
         std::env::set_var("FLATPAK_ID", "dev.tolon.desktop");
         assert_eq!(

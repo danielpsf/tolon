@@ -13,18 +13,21 @@
 //! even when the OS refuses focus. In that case `raise_above_everything` still returns `Ok`, with
 //! `Raised { focus: Focus::No }`; the app decides whether to add the F4.5 notification.
 
-use crate::login::{windows_run_value, windows_run_value_is};
+use crate::login::{startup_approved_disabled, windows_run_value, windows_run_value_is};
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
 use crate::{hwnd_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
 use windows::core::{w, BOOL, PCWSTR};
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{
+    ERROR_FILE_NOT_FOUND, ERROR_UNSUPPORTED_TYPE, HWND, LPARAM, RECT,
+};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
 };
 use windows::Win32::System::Registry::{
-    RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ,
+    RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_ROUTINE_FLAGS,
+    REG_SZ, RRF_RT_REG_BINARY, RRF_RT_REG_SZ,
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
@@ -140,46 +143,66 @@ fn current_exe() -> Result<String, PlatformError> {
         .map_err(|e| PlatformError::Io(e.to_string()))
 }
 
-/// The `Tolon` value of the `Run` key, or `None` when it is not there.
-fn read_run_value() -> Result<Option<String>, PlatformError> {
+/// Where Task Manager, Startup apps keeps its on/off choice for a `Run` value. Tolon reads it
+/// and never writes it.
+const APPROVED_KEY: PCWSTR =
+    w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run");
+
+/// The raw data of the `Tolon` value under `key`, read with the type filter `flags`. `None` when
+/// the value is not there or holds another type (`ERROR_UNSUPPORTED_TYPE`): both mean nothing
+/// usable is set.
+fn read_value(key: PCWSTR, flags: REG_ROUTINE_FLAGS) -> Result<Option<Vec<u8>>, PlatformError> {
     let mut bytes = 0u32;
     // SAFETY: with no data buffer the call only reports the size in `bytes`, a live u32.
     let size = unsafe {
         RegGetValueW(
             HKEY_CURRENT_USER,
-            RUN_KEY,
+            key,
             RUN_VALUE,
-            RRF_RT_REG_SZ,
+            flags,
             None,
             None,
             Some(&mut bytes),
         )
     };
-    if size == ERROR_FILE_NOT_FOUND {
+    if size == ERROR_FILE_NOT_FOUND || size == ERROR_UNSUPPORTED_TYPE {
         return Ok(None);
     }
     size.ok().map_err(|e| os_error("RegGetValueW", &e))?;
-    let mut buf = vec![0u16; (bytes as usize).div_ceil(2)];
-    // SAFETY: `buf` holds `bytes` bytes (rounded up to whole u16) and stays alive for the call.
-    unsafe {
+    let mut buf = vec![0u8; bytes as usize];
+    // SAFETY: `buf` holds `bytes` bytes and stays alive for the call.
+    let read = unsafe {
         RegGetValueW(
             HKEY_CURRENT_USER,
-            RUN_KEY,
+            key,
             RUN_VALUE,
-            RRF_RT_REG_SZ,
+            flags,
             None,
             Some(buf.as_mut_ptr().cast()),
             Some(&mut bytes),
         )
+    };
+    if read == ERROR_FILE_NOT_FOUND || read == ERROR_UNSUPPORTED_TYPE {
+        return Ok(None);
     }
-    .ok()
-    .map_err(|e| os_error("RegGetValueW", &e))?;
-    let len = (bytes as usize / 2).min(buf.len());
-    Ok(Some(
-        String::from_utf16_lossy(&buf[..len])
+    read.ok().map_err(|e| os_error("RegGetValueW", &e))?;
+    buf.truncate(bytes as usize);
+    Ok(Some(buf))
+}
+
+/// The `Tolon` value of the `Run` key as text, or `None`.
+fn read_run_value() -> Result<Option<String>, PlatformError> {
+    Ok(read_value(RUN_KEY, RRF_RT_REG_SZ)?.map(|raw| {
+        let units: Vec<u16> = raw
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
+            .collect();
+        String::from_utf16_lossy(&units)
             .trim_end_matches('\0')
-            .to_owned(),
-    ))
+            .to_owned()
+    }))
 }
 
 impl Platform for WindowsPlatform {
@@ -241,12 +264,19 @@ impl Platform for WindowsPlatform {
         Takeover::Full
     }
 
-    /// Enabled only when the value starts this exe: an entry left by a moved install is off.
+    /// Enabled only when the value starts this exe (an entry left by a moved install is off) and
+    /// the person has not turned it off in Task Manager, Startup apps.
     fn start_at_login(&self) -> Result<StartAtLogin, PlatformError> {
         let exe = current_exe()?;
-        Ok(match read_run_value()? {
-            Some(v) if windows_run_value_is(&v, &exe) => StartAtLogin::Enabled,
-            _ => StartAtLogin::Disabled,
+        let run = read_run_value()?.is_some_and(|v| windows_run_value_is(&v, &exe));
+        if !run {
+            return Ok(StartAtLogin::Disabled);
+        }
+        let approved = read_value(APPROVED_KEY, RRF_RT_REG_BINARY)?;
+        Ok(if approved.is_some_and(|d| startup_approved_disabled(&d)) {
+            StartAtLogin::Disabled
+        } else {
+            StartAtLogin::Enabled
         })
     }
 

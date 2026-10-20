@@ -21,8 +21,8 @@ objc2 = "0.6"
 # Only the AppKit classes used, to keep compile time and the lockfile small.
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSColor", "NSRunningApplication", "NSGraphics", "NSResponder", "NSScreen", "NSText", "NSTextField", "NSControl", "NSView", "NSWindow"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSGeometry", "NSString", "NSValue"] }
-# Only SMAppService (start at login); default features would also pull objc2-security and block2.
-objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService"] }
+# Only SMAppService and its error codes (start at login); default features would also pull objc2-security and block2.
+objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService", "SMErrors"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Same 0.62 that wry and tauri already pull in, so the lockfile gains an edge, not a crate.
