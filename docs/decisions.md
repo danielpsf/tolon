@@ -166,3 +166,6 @@ The maintainer handed the project over for an unattended run and asked that the 
 
 ## 2026-10-21 Tolon is an accessory app on macOS (overnight)
 The orchestrator's screen check found that a regular app's windows cannot appear over another app's full-screen Space, even with CanJoinAllSpaces and FullScreenAuxiliary (L-042). (overnight) Tolon runs with the Accessory activation policy on macOS: no Dock icon and no app menu, the tray icon (L-015) is the way in, and the settings window still opens and takes focus when asked. This matches F7, where the tray is the only trace after first run (AC10.2).
+
+## 2026-10-21 Releases use the Tauri CLI, not tauri-action (L-020)
+(overnight) The release workflow calls the Tauri CLI directly in a `build` job per OS and publishes from a separate `publish` job, so only that job holds `contents: write`. A `preflight` job checks the signing secrets, the tag against all version numbers, `check-release-features`, and that the key opens and matches the pubkey in `tauri.conf.json` (key id D3C5EBF2CE6A842B, the maintainer's `~/.tauri/tolon.key`). Releases are created as drafts and are not marked pre-release, because the updater reads `releases/latest/download/latest.json` and GitHub's "latest" skips pre-releases. This replaces "tauri-action for releases" in `docs/architecture.md`.
