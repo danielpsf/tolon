@@ -56,8 +56,18 @@ interface SettingsState {
   /** The last failed load, save or sound preview, cleared by the next change. */
   error: CommandError | null;
   load: () => Promise<void>;
-  /** Shows the change at once, saves it, and rolls back to the stored settings when the save fails. */
-  save: (patch: SettingsPatch) => Promise<void>;
+  /** Shows the change at once, saves it, and rolls back to the stored settings when the save fails. True when saved. */
+  save: (patch: SettingsPatch) => Promise<boolean>;
+}
+
+/** The settings with a patch applied; `quiet` and `ignore` merge field by field. */
+export function withPatch(settings: SettingsDto, patch: SettingsPatch): SettingsDto {
+  return {
+    ...settings,
+    ...patch,
+    quiet: { ...settings.quiet, ...patch.quiet },
+    ignore: { ...settings.ignore, ...patch.ignore },
+  };
 }
 
 // The settings as the backend last answered, how many saves are on their way, the number of the
@@ -72,19 +82,21 @@ export const useSettings = create<SettingsState>((set, get) => ({
   error: null,
   load: async () => {
     try {
-      stored = await api.settingsGet();
-      // A save on its way answers with newer settings; do not flash the older ones meanwhile.
-      if (saving === 0) set({ settings: stored });
+      const answer = await api.settingsGet();
+      // A save on its way answers with newer settings: keep its answer, and do not flash the older ones.
+      if (saving > 0) return;
+      stored = answer;
+      set({ settings: stored });
     } catch (e) {
       set({ error: asCommandError(e) });
     }
   },
   save: async (patch) => {
     const shown = get().settings;
-    if (!shown) return;
+    if (!shown) return false;
     const mine = ++newest;
     saving++;
-    set({ settings: { ...shown, ...patch }, error: null });
+    set({ settings: withPatch(shown, patch), error: null });
     let error: CommandError | null = null;
     try {
       const answer = await api.settingsSet(patch);
@@ -100,6 +112,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
     // or the last save to settle puts the stored settings back, which also rolls back a failed change.
     if (mine === newest || saving === 0) set({ settings: stored });
     if (error) set({ error });
+    return error === null;
   },
 }));
 

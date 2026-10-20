@@ -112,5 +112,8 @@ export interface SettingsDto {
   start_at_login: boolean;
 }
 
-/** Every field optional; the view always sends `quiet` and `ignore` whole. */
-export type SettingsPatch = Partial<SettingsDto>;
+/** Every field optional, `quiet` and `ignore` field by field too: send only what changed. */
+export type SettingsPatch = Partial<Omit<SettingsDto, "quiet" | "ignore">> & {
+  quiet?: Partial<QuietHoursDto>;
+  ignore?: Partial<IgnoreDto>;
+};

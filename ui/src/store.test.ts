@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, onSettingsChanged } from "./api";
 import type { SettingsDto } from "./api-types";
 import { copy } from "./copy";
-import { resetSettings, startSettingsFeed, useSettings } from "./store";
+import { resetSettings, startSettingsFeed, useSettings, withPatch } from "./store";
 import { applyAppearance } from "./theme";
 
 vi.mock("./api", async (original) => ({
@@ -100,6 +100,38 @@ describe("saving settings (AC9.1)", () => {
     await two;
     expect(shown()).toEqual({ ...stored, sound: "none" });
     expect(useSettings.getState().error).toEqual({ code: "db_error" });
+  });
+
+  it("sends only the changed quiet or ignore field and merges it into the page", async () => {
+    vi.mocked(api.settingsSet).mockResolvedValueOnce({ ...stored, quiet: { ...stored.quiet, enabled: true } });
+    const saving = useSettings.getState().save({ quiet: { enabled: true } });
+    expect(api.settingsSet).toHaveBeenCalledWith({ quiet: { enabled: true } });
+    expect(shown()?.quiet).toEqual({ ...stored.quiet, enabled: true });
+    await saving;
+    expect(withPatch(stored, { ignore: { keywords: [] } }).ignore).toEqual({ ...stored.ignore, keywords: [] });
+  });
+
+  it("resolves false for a refused save, so the field can show the stored value again", async () => {
+    vi.mocked(api.settingsSet).mockRejectedValueOnce({ code: "invalid:lead_minutes" });
+    await expect(useSettings.getState().save({ lead_minutes: 7 })).resolves.toBe(false);
+    vi.mocked(api.settingsSet).mockResolvedValueOnce({ ...stored, lead_minutes: 7 });
+    await expect(useSettings.getState().save({ lead_minutes: 7 })).resolves.toBe(true);
+  });
+
+  it("keeps a save's answer when a reload answers while the save is on its way", async () => {
+    const answer = later<SettingsDto>();
+    vi.mocked(api.settingsSet).mockReturnValueOnce(answer.promise);
+    const saving = useSettings.getState().save({ lead_minutes: 9 });
+    vi.mocked(api.settingsGet).mockResolvedValueOnce(stored);
+    await useSettings.getState().load();
+    expect(shown()?.lead_minutes).toBe(9);
+    answer.resolve({ ...stored, lead_minutes: 9 });
+    await saving;
+    expect(shown()?.lead_minutes).toBe(9);
+    // A failed save after that rolls back to the save's answer, not the reload's older one.
+    vi.mocked(api.settingsSet).mockRejectedValueOnce({ code: "db_error" });
+    await useSettings.getState().save({ lead_minutes: 10 });
+    expect(shown()?.lead_minutes).toBe(9);
   });
 
   it("does nothing before the settings are loaded", async () => {
