@@ -210,12 +210,12 @@ impl Platform for WindowsPlatform {
         "windows"
     }
 
-    /// Needs the process to be per-monitor DPI aware (Tauri's manifest is) for real scales; an
-    /// unaware process sees virtualised coordinates at 96 DPI, which stay consistent.
     fn prepare_app(&self) -> Result<(), PlatformError> {
         Ok(())
     }
 
+    /// Needs the process to be per-monitor DPI aware (Tauri's manifest is) for real scales; an
+    /// unaware process sees virtualised coordinates at 96 DPI, which stay consistent.
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         let mut found: Vec<RawMonitor> = Vec::new();
         // SAFETY: `found` outlives the call and nothing else touches it meanwhile; `collect`
