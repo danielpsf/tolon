@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "interrupt",
+  "description": "The interrupt windows may listen to alarm:show and alarm:hide. Nothing else: no dialog, fs or shell permissions.",
+  "windows": ["interrupt-*"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}
