@@ -148,6 +148,7 @@
 .tl-keys .sm-kbd {
   min-width: 60px;
   text-align: center;
+  white-space: nowrap;
 }
 
 /*
