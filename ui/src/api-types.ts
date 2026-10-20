@@ -44,3 +44,29 @@ export interface CalendarDto {
   last_sync_at: string | null;
   last_error: SyncError | null;
 }
+
+/** Where a meeting's join button leads. The URL stays in Rust; the page only gets the host (AC1.3). */
+export type JoinDto =
+  | { kind: "link"; host: string; recognised: boolean }
+  | { kind: "event_page" }
+  | { kind: "none" };
+
+/** One meeting of an interrupt: `MeetingDto` in crates/tolon-app/src/interrupt.rs. */
+export interface MeetingDto {
+  /** The occurrence key, sent back by the alarm commands. */
+  key: string;
+  title: string;
+  /** RFC 3339 with an offset. */
+  start: string;
+  end: string;
+  join: JoinDto;
+  /** Attendee count; names never arrive. */
+  people: number;
+}
+
+/** The `alarm:show` payload and the answer to `alarms_current`: every meeting of one start minute (AC3.5). */
+export interface AlarmShowDto {
+  /** The test alarm: the page shows its own title instead of `title`. */
+  test: boolean;
+  meetings: MeetingDto[];
+}

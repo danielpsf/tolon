@@ -44,6 +44,26 @@ export const enUS = {
     adding: "Adding calendar",
     empty: "No calendars yet. Paste an iCal URL to add one.",
   },
+  interrupt: {
+    region: "Meeting alarm",
+    testTitle: "Test alarm",
+    joinCall: "Join the call",
+    joinOn: (host: string) => `Join on ${host}`,
+    openEvent: "Open the event",
+    alreadyThere: "I am already there",
+    snooze: (minutes: number) => `Snooze ${number.format(minutes)} min`,
+    dismiss: "Dismiss",
+    dismissConsequence: "Dismissing silences this reminder on this computer.",
+    hintJoin: "Esc snoozes. Enter joins. D dismisses.",
+    hintEvent: "Esc snoozes. Enter opens the event. D dismisses.",
+    hintAlreadyThere: "Esc snoozes. Enter: I am already there. D dismisses.",
+    hintSpace: "Space: I am already there.",
+    timeRange: (start: string, end: string) => `${start} to ${end}`,
+    details: (range: string, provider: string | null, people: number) =>
+      `${range}${provider ? ` on ${provider}` : ""}${
+        people > 0 ? ` with ${number.format(people)} ${plural.select(people) === "one" ? "person" : "people"}` : ""
+      }.`,
+  },
   relative: {
     neverSynced: "Not synced yet",
     syncedJustNow: "Synced just now",

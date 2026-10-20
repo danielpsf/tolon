@@ -10,6 +10,7 @@ use tolon_core::Occurrence;
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
+use crate::interrupt::{self, AlarmShow, InterruptState};
 use crate::pipeline::{self, CalendarDto, Db};
 
 pub struct AppState {
@@ -98,4 +99,71 @@ pub async fn occurrences_today(app: AppHandle) -> Result<Vec<Occurrence>, Comman
     let today =
         state(&app).and_then(|s| pipeline::today(&s.db, Utc::now(), pipeline::local_zone()));
     today.map_err(|e| command_error(&e))
+}
+
+// ---- Alarm actions (L-010) --------------------------------------------------------------------
+// Stubs: each checks the key, closes every interrupt window (AC4.6) and returns. L-032 replaces the
+// marked line with the real state change.
+//
+// Contract for L-032. `key` is `MeetingDto::key` (an `OccurrenceKey`). `alarms_snooze` and
+// `alarms_dismiss` act on every meeting of the interrupt on screen (`InterruptState`), because the
+// window offers one Snooze and one Dismiss for the whole group (S3.6). `alarms_join` and
+// `alarms_already_there` act on that one meeting; `alarms_join` opens its link or event page
+// itself (the URL never reaches the webview).
+
+/// `action` is remembered for `alarms_last_action` before the windows close.
+fn act_on(app: &AppHandle, key: &str, action: String) -> Result<(), CommandError> {
+    interrupt::parse_key(key).map_err(|e| command_error(&e.into()))?;
+    if let Some(state) = app.try_state::<InterruptState>() {
+        state.record(action);
+    }
+    interrupt::close_all(app);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn alarms_snooze(app: AppHandle, key: String, minutes: u32) -> Result<(), CommandError> {
+    // L-032: update alarm state (Snoozed until now + minutes)
+    act_on(&app, &key, format!("snooze:{minutes}"))
+}
+
+#[tauri::command]
+pub async fn alarms_dismiss(app: AppHandle, key: String) -> Result<(), CommandError> {
+    // L-032: update alarm state (Dismissed)
+    act_on(&app, &key, "dismiss".to_owned())
+}
+
+#[tauri::command]
+pub async fn alarms_join(app: AppHandle, key: String) -> Result<(), CommandError> {
+    // L-032: update alarm state (Joined) and open the join link or the event page
+    act_on(&app, &key, "join".to_owned())
+}
+
+#[tauri::command]
+pub async fn alarms_already_there(app: AppHandle, key: String) -> Result<(), CommandError> {
+    // L-032: update alarm state (Joined, no link opened)
+    act_on(&app, &key, "already_there".to_owned())
+}
+
+/// The last alarm action, so the WebDriver test can tell Esc from D and Space from Enter.
+/// L-032: drop it once the alarm state itself can be read.
+#[tauri::command]
+pub async fn alarms_last_action(app: AppHandle) -> Option<String> {
+    app.try_state::<InterruptState>()
+        .and_then(|s| s.last_action())
+}
+
+/// The interrupt on screen, for a window that loaded after `alarm:show` was emitted.
+#[tauri::command]
+pub async fn alarms_current(app: AppHandle) -> Option<AlarmShow> {
+    app.try_state::<InterruptState>().and_then(|s| s.get())
+}
+
+/// Opens a sample interrupt on every screen (F10's test alarm, and the WebDriver test for the keys).
+#[tauri::command]
+pub async fn alarms_test(app: AppHandle) -> Result<(), CommandError> {
+    let platform = interrupt::native();
+    let screens = interrupt::screens(&app, platform).await;
+    interrupt::open_interrupts(&app, platform, &screens, &AlarmShow::sample(Utc::now()))
+        .map_err(|e| command_error(&e))
 }

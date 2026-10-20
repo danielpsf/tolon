@@ -3,6 +3,7 @@
 
 mod commands;
 mod errors;
+mod interrupt;
 mod pipeline;
 mod refresh;
 
@@ -57,6 +58,7 @@ fn main() -> anyhow::Result<()> {
         .try_init();
 
     tauri::Builder::default()
+        .manage(interrupt::InterruptState::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::calendars_list,
@@ -65,6 +67,13 @@ fn main() -> anyhow::Result<()> {
             commands::calendars_set_enabled,
             commands::calendars_sync_now,
             commands::occurrences_today,
+            commands::alarms_snooze,
+            commands::alarms_dismiss,
+            commands::alarms_join,
+            commands::alarms_already_there,
+            commands::alarms_current,
+            commands::alarms_last_action,
+            commands::alarms_test,
         ])
         .setup(|app| {
             // A store that cannot open or migrate stops the app; it never runs on a half-applied

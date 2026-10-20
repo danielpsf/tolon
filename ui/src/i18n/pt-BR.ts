@@ -44,6 +44,26 @@ export const ptBR: Messages = {
     adding: "Adicionando calendário",
     empty: "Nenhum calendário ainda. Cole uma URL iCal para adicionar um.",
   },
+  interrupt: {
+    region: "Alarme de reunião",
+    testTitle: "Alarme de teste",
+    joinCall: "Entrar na chamada",
+    joinOn: (host) => `Entrar em ${host}`,
+    openEvent: "Abrir o evento",
+    alreadyThere: "Já estou lá",
+    snooze: (minutes) => `Adiar ${number.format(minutes)} min`,
+    dismiss: "Dispensar",
+    dismissConsequence: "Dispensar silencia este lembrete neste computador.",
+    hintJoin: "Esc adia. Enter entra na chamada. D dispensa.",
+    hintEvent: "Esc adia. Enter abre o evento. D dispensa.",
+    hintAlreadyThere: "Esc adia. Enter: já estou lá. D dispensa.",
+    hintSpace: "Espaço: já estou lá.",
+    timeRange: (start, end) => `${start} a ${end}`,
+    details: (range, provider, people) =>
+      `${range}${provider ? ` em ${provider}` : ""}${
+        people > 0 ? ` com ${number.format(people)} ${plural.select(people) === "one" ? "pessoa" : "pessoas"}` : ""
+      }.`,
+  },
   relative: {
     neverSynced: "Ainda não sincronizado",
     syncedJustNow: "Sincronizado agora mesmo",

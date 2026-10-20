@@ -44,6 +44,10 @@ describe("catalogues", () => {
       t.relative.startsIn("2 min"),
       t.relative.startedAgo("3 min"),
       t.syncLog.skipped(2),
+      t.interrupt.joinOn("example.com"),
+      t.interrupt.snooze(5),
+      t.interrupt.timeRange("14:00", "14:45"),
+      t.interrupt.details("14:00 to 14:45", "Zoom", 3),
       t.errors.sync.http(500),
       t.errors.sync.httpHint(401, "x"),
     ];

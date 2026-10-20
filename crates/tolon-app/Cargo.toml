@@ -28,8 +28,8 @@ iana-time-zone = "0.1.65"
 tracing = "0.1"
 # Without a subscriber the warn lines are dropped; stderr only, level info.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
-# Sleep in the refresh loop; Tauri's async runtime is tokio.
-tokio = { version = "1", features = ["time"] }
+# Sleep in the refresh loop; a oneshot carries the screen list back from the main thread. Tauri's async runtime is tokio.
+tokio = { version = "1", features = ["time", "sync"] }
 # Blocking error dialog when the database cannot be opened or migrated.
 tauri-plugin-dialog = "2"
 
