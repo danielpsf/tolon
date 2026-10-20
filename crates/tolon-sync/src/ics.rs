@@ -1,6 +1,5 @@
 //! Conditional ICS fetch. Every URL that reaches a log or an error goes through `redact_url`.
 
-use std::net::IpAddr;
 use std::time::Duration;
 
 use reqwest::{header, redirect, StatusCode, Url};
@@ -180,18 +179,27 @@ fn follow_redirect(target: &Url, hops: usize, allow_http: bool) -> bool {
 /// (debug builds only) allows it for loopback hosts alone, so a feed cannot be fetched in the clear
 /// from anywhere else. Redirects use the same rule.
 fn http_permitted(url: &Url, allow_http: bool) -> bool {
-    url.scheme() == "http" && (allow_http || (cfg!(feature = "e2e-loopback") && is_loopback(url)))
+    url.scheme() == "http" && (allow_http || loopback_http(url))
 }
 
 /// `localhost`, or an IP literal in 127.0.0.0/8 or `::1`. Anything else, including names such as
 /// `127.0.0.1.example.com`, is not loopback.
-fn is_loopback(url: &Url) -> bool {
+#[cfg(feature = "e2e-loopback")]
+fn loopback_http(url: &Url) -> bool {
     let Some(host) = url.host_str() else {
         return false;
     };
     let host = host.trim_start_matches('[').trim_end_matches(']');
     host.eq_ignore_ascii_case("localhost")
-        || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+/// Without the feature no http host is allowed: production carries no loopback code at all.
+#[cfg(not(feature = "e2e-loopback"))]
+fn loopback_http(_url: &Url) -> bool {
+    false
 }
 
 /// Canonical https form of a subscription URL: `webcal://` becomes `https://`, other schemes are rejected.
@@ -347,6 +355,19 @@ mod tests {
         ] {
             assert_eq!(parse_url(raw, false), Err(FetchError::UnsupportedScheme));
             assert_eq!(normalize_url(raw), Err(FetchError::UnsupportedScheme));
+        }
+    }
+
+    #[cfg(not(feature = "e2e-loopback"))]
+    #[test]
+    fn s1_2_redirect_to_loopback_http_is_refused_without_the_e2e_feature() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        for raw in [
+            "http://127.0.0.1:9/b.ics",
+            "http://localhost/b.ics",
+            "http://[::1]/b.ics",
+        ] {
+            assert!(!follow_redirect(&u(raw), 0, false), "{raw}");
         }
     }
 
