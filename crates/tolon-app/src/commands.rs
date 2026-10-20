@@ -150,10 +150,8 @@ pub async fn alarms_current(app: AppHandle) -> Option<AlarmShow> {
 /// Opens a sample interrupt on every screen (F10's test alarm, and the WebDriver test for the keys).
 #[tauri::command]
 pub async fn alarms_test(app: AppHandle) -> Result<(), CommandError> {
-    let shown = interrupt::open_interrupts(
-        &app,
-        &interrupt::screens(&app),
-        &AlarmShow::sample(Utc::now()),
-    );
-    shown.map_err(|e| command_error(&e))
+    let platform = interrupt::native();
+    let screens = interrupt::screens(&app, platform).await;
+    interrupt::open_interrupts(&app, platform, &screens, &AlarmShow::sample(Utc::now()))
+        .map_err(|e| command_error(&e))
 }
