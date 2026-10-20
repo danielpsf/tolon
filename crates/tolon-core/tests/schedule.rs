@@ -605,8 +605,8 @@ fn ac8_1_quiet_hours_cover_the_window_across_midnight_and_weekends() -> TestResu
     assert!(!night.is_quiet(utc(2026, 10, 24, 14, 0)?));
     assert!(!weekend.is_quiet(utc(2026, 10, 22, 14, 0)?));
 
-    // Nothing fires inside the window; the alarm fires on the first tick after it, if the
-    // meeting is still inside its own window.
+    // A meeting that starts inside the window never fires, also not after the window ends while
+    // its own window is still open; the alarm stays planned (the tray lists it) until it expires.
     let alarms = plan(
         &[occ("early", at(7, 25)?, 3)],
         &settings(2, false),
@@ -614,7 +614,10 @@ fn ac8_1_quiet_hours_cover_the_window_across_midnight_and_weekends() -> TestResu
         at(1, 0)?,
     );
     assert!(tick(&alarms, at(7, 24)?, None, Some(&night)).is_empty());
-    assert_eq!(tick(&alarms, at(7, 30)?, None, Some(&night)).len(), 1);
+    assert!(tick(&alarms, at(7, 30)?, None, Some(&night)).is_empty());
+    let t = tick(&alarms, at(7, 35)?, None, Some(&night));
+    assert_eq!(t.len(), 1);
+    assert_eq!(t[0].to, AlarmState::Expired);
 
     // Expiry is not suppressed: still quiet at 07:11, but the 07:00 meeting's window closed at 07:10.
     let missed = plan(
@@ -626,5 +629,102 @@ fn ac8_1_quiet_hours_cover_the_window_across_midnight_and_weekends() -> TestResu
     let t = tick(&missed, at(7, 11)?, None, Some(&night));
     assert_eq!(t.len(), 1);
     assert_eq!(t[0].to, AlarmState::Expired);
+    Ok(())
+}
+
+/// Tick with quiet hours at `now` and apply the result.
+fn quiet_step(alarms: &mut [Alarm], now: DateTime<Utc>, q: &QuietHours) -> Vec<Transition> {
+    let transitions = tick(alarms, now, None, Some(q));
+    apply_transitions(alarms, &transitions);
+    transitions
+}
+
+#[test]
+fn ac8_1_an_alarm_due_inside_quiet_hours_comes_at_the_start_of_a_meeting_after_them() -> TestResult
+{
+    let night = quiet((18, 0), (9, 0), false)?;
+    // 09:00 meeting, lead 2 min: the lead time 08:58 is quiet, the start is not.
+    for again_at_start in [false, true] {
+        let mut alarms = plan(
+            &[occ("standup", at(9, 0)?, 3)],
+            &settings(2, again_at_start),
+            &[],
+            at(1, 0)?,
+        );
+        assert!(quiet_step(&mut alarms, at(8, 58)?, &night).is_empty());
+        assert!(quiet_step(&mut alarms, at(8, 59)?, &night).is_empty());
+        let fired = quiet_step(&mut alarms, at(9, 0)?, &night);
+        assert_eq!(
+            fired.iter().filter(|t| t.fires()).count(),
+            1,
+            "one interrupt at the start, again_at_start {again_at_start}"
+        );
+        assert_eq!(alarms[0].state, firing(at(9, 0)?));
+    }
+    // Quiet hours that end before the meeting starts leave a lead time after them alone.
+    let mut alarms = plan(
+        &[occ("later", at(9, 30)?, 3)],
+        &settings(2, false),
+        &[],
+        at(1, 0)?,
+    );
+    assert!(quiet_step(&mut alarms, at(9, 27)?, &night).is_empty());
+    assert_eq!(quiet_step(&mut alarms, at(9, 28)?, &night).len(), 1);
+    Ok(())
+}
+
+#[test]
+fn ac8_1_nothing_fires_inside_quiet_hours_on_a_weekend() -> TestResult {
+    let weekends = quiet((18, 0), (9, 0), true)?;
+    // Saturday 24 Oct 2026, 14:00: inside the weekend, outside the daily window.
+    let saturday = utc(2026, 10, 24, 14, 0)?;
+    let mut alarms = plan(
+        &[occ("sat", saturday, 3)],
+        &settings(2, true),
+        &[],
+        saturday - chrono::Duration::hours(1),
+    );
+    for minute in 0..20 {
+        let now = saturday - chrono::Duration::minutes(5) + chrono::Duration::minutes(minute);
+        assert!(quiet_step(&mut alarms, now, &weekends)
+            .iter()
+            .all(|t| !t.fires()));
+    }
+    assert!(alarms.iter().all(|a| a.state == AlarmState::Expired));
+    Ok(())
+}
+
+/// Quiet hours read local wall-clock time, so a window keeps its hours across a DST change.
+#[test]
+fn ac8_1_quiet_hours_follow_local_time_across_dst() -> TestResult {
+    let berlin = |start: (u32, u32), end: (u32, u32)| -> TestResult<QuietHours> {
+        Ok(QuietHours {
+            tz: LOCAL,
+            ..quiet(start, end, false)?
+        })
+    };
+    // Sunday 29 Mar 2026: 02:00 local jumps to 03:00 (00:59 UTC is 01:59 CET, 01:00 UTC is 03:00 CEST).
+    let spring = berlin((1, 30), (3, 30))?;
+    assert!(!spring.is_quiet(utc(2026, 3, 29, 0, 29)?), "01:29 CET");
+    assert!(spring.is_quiet(utc(2026, 3, 29, 0, 30)?), "01:30 CET");
+    assert!(spring.is_quiet(utc(2026, 3, 29, 1, 0)?), "03:00 CEST");
+    assert!(spring.is_quiet(utc(2026, 3, 29, 1, 29)?), "03:29 CEST");
+    assert!(!spring.is_quiet(utc(2026, 3, 29, 1, 30)?), "03:30 CEST");
+    // A window inside the missing hour is empty that night.
+    let gap = berlin((2, 15), (2, 45))?;
+    for minute in 0..180 {
+        let t = utc(2026, 3, 29, 0, 0)? + chrono::Duration::minutes(minute);
+        assert!(!gap.is_quiet(t), "{t}");
+    }
+    // Sunday 25 Oct 2026: 03:00 CEST goes back to 02:00 CET, so 02:00 to 03:00 local happens twice.
+    let autumn = berlin((2, 0), (3, 0))?;
+    assert!(autumn.is_quiet(utc(2026, 10, 25, 0, 30)?), "02:30 CEST");
+    assert!(autumn.is_quiet(utc(2026, 10, 25, 1, 30)?), "02:30 CET");
+    assert!(!autumn.is_quiet(utc(2026, 10, 25, 2, 0)?), "03:00 CET");
+    // 18:00 to 09:00 across the change: the night is an hour longer, still 18:00 to 09:00 local.
+    let night = berlin((18, 0), (9, 0))?;
+    assert!(night.is_quiet(utc(2026, 10, 24, 16, 0)?), "18:00 CEST");
+    assert!(night.is_quiet(utc(2026, 10, 25, 7, 59)?), "08:59 CET");
+    assert!(!night.is_quiet(utc(2026, 10, 25, 8, 0)?), "09:00 CET");
     Ok(())
 }

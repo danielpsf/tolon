@@ -169,6 +169,10 @@ impl Transition {
 /// - While `pause_until` is in the future or `quiet` covers `now`, nothing fires, and nothing
 ///   is lost: an alarm due meanwhile fires on the first tick after, if its window is still
 ///   open, otherwise it expires. Expiry is not suppressed.
+/// - Quiet hours (AC8.1) also go by the meeting: one that starts inside them never fires, also
+///   not after they end; its alarms expire silently. A Scheduled alarm whose own time falls
+///   inside them, for a meeting that starts outside, waits for the start: the meeting's single
+///   alarm then comes at the start, also when "again at the start" is off.
 /// - A Joined alarm closes the other alarms of its occurrence, so joining at the lead alarm
 ///   silences "again at the start". Dismissing does not: that is what the second alarm is for.
 /// - One interrupt per meeting: a Start alarm that would fire while the Lead alarm of the same
@@ -190,7 +194,7 @@ pub fn tick(
         .collect();
     let next: Vec<Option<AlarmState>> = alarms
         .iter()
-        .map(|a| next_state(a, now, muted, joined.contains(&a.occurrence)))
+        .map(|a| next_state(a, now, muted, joined.contains(&a.occurrence), quiet))
         .collect();
     // Occurrences whose Lead alarm is, or is about to be, on screen or waiting out a snooze.
     let lead_busy: HashSet<&OccurrenceKey> = alarms
@@ -239,6 +243,7 @@ fn next_state(
     now: DateTime<Utc>,
     muted: bool,
     sibling_joined: bool,
+    quiet: Option<&QuietHours>,
 ) -> Option<AlarmState> {
     if a.state.is_final() {
         return None;
@@ -246,12 +251,14 @@ fn next_state(
     if sibling_joined || now >= a.expires_at() {
         return Some(AlarmState::Expired);
     }
+    let quiet_at = |t| quiet.is_some_and(|q| q.is_quiet(t));
     let due = match a.state {
+        AlarmState::Scheduled if quiet_at(a.at) => now >= a.at.max(a.start),
         AlarmState::Scheduled => now >= a.at,
         AlarmState::Snoozed { until } => now >= until,
         _ => false,
     };
-    (due && !muted).then_some(AlarmState::Firing { since: now })
+    (due && !muted && !quiet_at(a.start)).then_some(AlarmState::Firing { since: now })
 }
 
 /// Write `transitions` into `alarms`, matching on `(occurrence, kind)`.

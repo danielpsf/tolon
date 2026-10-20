@@ -203,6 +203,61 @@ proptest! {
         }
     }
 
+    /// AC8.1: with quiet hours on, nothing fires while they cover `now`, no alarm of a meeting
+    /// that starts inside them ever fires, and an alarm whose time they cover fires no earlier
+    /// than its meeting's start.
+    #[test]
+    fn ac8_1_quiet_hours_hold_every_alarm_they_cover(
+        occs in occurrences(),
+        settings in alarm_settings(),
+        q in (0u32..1440, 0u32..1440, any::<bool>()),
+        nows in prop::collection::vec(-600i64..10_000, 1..40),
+    ) {
+        let Some(q) = quiet_hours(q) else { return Ok(()) };
+        let mut alarms = plan(&occs, &settings, &[], base());
+        let mut nows = nows;
+        nows.sort_unstable();
+        for now in nows {
+            let now = secs(now);
+            let transitions = tick(&alarms, now, None, Some(&q));
+            for t in transitions.iter().filter(|t| t.fires()) {
+                prop_assert!(!q.is_quiet(now), "fired at {now} inside quiet hours");
+                let a = alarms
+                    .iter()
+                    .find(|a| a.occurrence == t.occurrence && a.kind == t.kind)
+                    .ok_or_else(|| TestCaseError::fail("a transition without an alarm"))?;
+                prop_assert!(!q.is_quiet(a.start), "a meeting inside quiet hours fired: {a:?}");
+                if q.is_quiet(a.at) {
+                    prop_assert!(now >= a.start, "fired before the start: {a:?} at {now}");
+                }
+            }
+            apply_transitions(&mut alarms, &transitions);
+        }
+    }
+
+    /// AC8.1 across DST: in a zone with summer time, a window and its mirror image (end to
+    /// start) split every instant of the year between them, exactly one each, unless empty.
+    #[test]
+    fn ac8_1_a_window_and_its_complement_cover_every_instant_once_across_dst(
+        start in 0u32..1440,
+        end in 0u32..1440,
+        offset in 0i64..(366 * 24 * 3600),
+    ) {
+        let time = |m: u32| NaiveTime::from_hms_opt(m / 60, m % 60, 0);
+        let (Some(s), Some(e)) = (time(start), time(end)) else { return Ok(()) };
+        let window = |start, end| QuietHours { start, end, weekends: false, tz: Tz::Europe__Berlin };
+        let jan1 = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .map_err(|e| TestCaseError::fail(e.to_string()))?
+            .with_timezone(&Utc);
+        let t = jan1 + Duration::seconds(offset);
+        let (a, b) = (window(s, e).is_quiet(t), window(e, s).is_quiet(t));
+        if s == e {
+            prop_assert!(!a && !b);
+        } else {
+            prop_assert!(a != b, "{s}-{e} at {t}: {a} {b}");
+        }
+    }
+
     /// `plan(plan(x)) == plan(x)`, from stored alarms in any state, planned under other settings
     /// (so some are stale or missing) and mixed with alarms of occurrences that are gone.
     #[test]
