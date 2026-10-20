@@ -6,7 +6,7 @@ Tolon is a beta. Download the file for your system from the Assets list of the r
 | --- | --- |
 | macOS 13 Ventura or newer, Apple silicon and Intel | `Tolon_<version>_universal.dmg` |
 | Windows | `Tolon_<version>_x64-setup.exe` (or the `.msi`, if your IT team asks for it) |
-| Linux, tested on Ubuntu 22.04 and 24.04 | `Tolon_<version>_amd64.AppImage` (any distribution) or `Tolon_<version>_amd64.deb` (Debian, Ubuntu) |
+| Linux, built on Ubuntu 22.04 | `Tolon_<version>_amd64.AppImage` (any distribution) or `Tolon_<version>_amd64.deb` (Debian, Ubuntu) |
 
 ## macOS
 
@@ -81,6 +81,4 @@ Tolon checks GitHub for a new version and asks before it installs one, once the 
 - Windows: Windows may not let Tolon take the keyboard from the program you are using. Tolon always shows the alarm on top. But Enter, Esc, D and Space may do nothing until you click the alarm or press Alt+Tab to it. The buttons always work. A program in full-screen mode, such as some games, may still draw over the alarm.
 - Linux with Wayland: the system may not let Tolon cover the whole screen. Tolon then shows a notification with Join and Snooze and plays the alarm sound instead. Sessions that use X11 get the full-screen alarm.
 - Linux: Tolon needs a graphical session.
-- Linux: start at login does not work when Tolon runs as a Flatpak.
 - Windows: if you turn Tolon off in Task Manager, under Startup apps, Windows keeps it off until you turn it on there again. The Start at login switch in Tolon cannot override that.
-- A copy of Tolon started with `cargo run` cannot set itself up to start at login. Install it from the release instead.
