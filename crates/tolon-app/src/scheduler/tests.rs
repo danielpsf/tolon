@@ -1,0 +1,1032 @@
+//! The scheduler against a fake clock and a fake host: no Tauri, no window, no sound.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex as StdMutex, PoisonError};
+
+use anyhow::anyhow;
+use chrono::TimeZone;
+use tolon_core::{
+    countdown, parse_ics, CalendarId, Countdown, ParseOptions, EXPIRY_MINUTES, MAX_LEAD_MINUTES,
+    MIN_LEAD_MINUTES,
+};
+use tolon_store::{AlarmRow, Store, TERMINAL_STATES};
+
+use super::*;
+use crate::pipeline::feed_events;
+
+type TestResult = anyhow::Result<()>;
+
+fn at(h: u32, m: u32, s: u32) -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 10, 20, h, m, s)
+        .single()
+        .unwrap_or(DateTime::<Utc>::MIN_UTC)
+}
+
+/// Records every call the scheduler makes, in order, and can be told to misbehave.
+struct Fake {
+    now: StdMutex<DateTime<Utc>>,
+    calls: StdMutex<Vec<String>>,
+    shows: StdMutex<Vec<AlarmShow>>,
+    urls: StdMutex<Vec<String>>,
+    focused: AtomicBool,
+    degraded: Option<&'static str>,
+    fail_open: AtomicBool,
+    fail_url: AtomicBool,
+}
+
+impl Fake {
+    fn new(now: DateTime<Utc>) -> Self {
+        Self {
+            now: StdMutex::new(now),
+            calls: StdMutex::default(),
+            shows: StdMutex::default(),
+            urls: StdMutex::default(),
+            focused: AtomicBool::new(true),
+            degraded: None,
+            fail_open: AtomicBool::new(false),
+            fail_url: AtomicBool::new(false),
+        }
+    }
+
+    fn log(&self, call: &str) {
+        self.calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(call.to_owned());
+    }
+
+    fn calls(&self) -> Vec<String> {
+        self.calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn count(&self, call: &str) -> usize {
+        self.calls().iter().filter(|c| *c == call).count()
+    }
+
+    fn shows(&self) -> Vec<AlarmShow> {
+        self.shows
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn urls(&self) -> Vec<String> {
+        self.urls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn set_now(&self, t: DateTime<Utc>) {
+        *self.now.lock().unwrap_or_else(PoisonError::into_inner) = t;
+    }
+}
+
+impl Host for Fake {
+    fn now(&self) -> DateTime<Utc> {
+        *self.now.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn zone(&self) -> Tz {
+        Tz::UTC
+    }
+
+    fn open(&self, show: &AlarmShow) -> impl Future<Output = anyhow::Result<Opened>> + Send {
+        self.log("open");
+        self.shows
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(show.clone());
+        let answer = if self.fail_open.load(Ordering::SeqCst) {
+            Err(anyhow!("no window"))
+        } else {
+            Ok(Opened {
+                degraded: self.degraded,
+            })
+        };
+        async move { answer }
+    }
+
+    fn focused(&self) -> impl Future<Output = bool> + Send {
+        self.log("focused");
+        let focused = self.focused.load(Ordering::SeqCst);
+        async move { focused }
+    }
+
+    fn close(&self) {
+        self.log("close");
+    }
+
+    fn play(&self, _sound: Sound) {
+        self.log("play");
+    }
+
+    fn stop_sound(&self) {
+        self.log("stop");
+    }
+
+    fn open_url(&self, url: &str) -> anyhow::Result<()> {
+        if self.fail_url.load(Ordering::SeqCst) {
+            return Err(anyhow!("no browser"));
+        }
+        self.log("url");
+        self.urls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(url.to_owned());
+        Ok(())
+    }
+
+    fn notify(&self, _show: &AlarmShow) {
+        self.log("notify");
+    }
+}
+
+/// One event: uid, title, start `HHMMSS` today (UTC), and extra property lines.
+type Seed<'a> = (&'a str, &'a str, &'a str, &'a str);
+
+fn ics(events: &[Seed<'_>]) -> String {
+    let body: String = events
+        .iter()
+        .map(|(uid, title, start, extra)| {
+            format!(
+                "BEGIN:VEVENT\r\nUID:{uid}\r\nSUMMARY:{title}\r\nDTSTART:20261020T{start}Z\r\nDTEND:20261020T235900Z\r\n{extra}END:VEVENT\r\n"
+            )
+        })
+        .collect();
+    format!("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n{body}END:VCALENDAR\r\n")
+}
+
+struct Rig {
+    db: Db,
+    sched: Scheduler<Fake>,
+}
+
+impl Rig {
+    fn new(events: &[Seed<'_>], now: DateTime<Utc>) -> anyhow::Result<Self> {
+        Self::with_host(events, Fake::new(now))
+    }
+
+    fn with_host(events: &[Seed<'_>], host: Fake) -> anyhow::Result<Self> {
+        let db: Db = StdMutex::new(Store::open_in_memory()?);
+        {
+            let store = pipeline::lock(&db);
+            let cal = store.calendars().insert(
+                "ics",
+                "Test",
+                Some("https://example.com/a.ics"),
+                true,
+                "t",
+            )?;
+            let parsed = parse_ics(
+                &ics(events),
+                &CalendarId(cal.id.clone()),
+                &ParseOptions::default(),
+            );
+            store
+                .events()
+                .replace_for_calendar(&cal.id, &feed_events(parsed.events)?, "t")?;
+        }
+        Ok(Self {
+            db,
+            sched: Scheduler::new(host),
+        })
+    }
+
+    fn host(&self) -> &Fake {
+        &self.sched.host
+    }
+
+    fn setting(&self, key: &str, value: serde_json::Value) -> TestResult {
+        pipeline::lock(&self.db).settings().set(key, &value)?;
+        Ok(())
+    }
+
+    /// A full tick at `t`.
+    async fn tick_at(&self, t: DateTime<Utc>) -> StepReport {
+        self.host().set_now(t);
+        self.sched.step(&self.db, true).await
+    }
+
+    /// Housekeeping only (focus re-check, sound repeat) at `t`.
+    async fn housekeep_at(&self, t: DateTime<Utc>) {
+        self.host().set_now(t);
+        self.sched.step(&self.db, false).await;
+    }
+
+    async fn act(&self, t: DateTime<Utc>, key: &str, act: Act) -> anyhow::Result<()> {
+        self.host().set_now(t);
+        self.sched.act(&self.db, key, act).await
+    }
+
+    /// `(uid, kind, state)` of every stored alarm.
+    fn states(&self) -> anyhow::Result<Vec<(String, String, String)>> {
+        let rows = pipeline::lock(&self.db).alarms().list()?;
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let uid = r
+                    .occurrence_key
+                    .split_once(':')
+                    .and_then(|(_, rest)| rest.split_once('@'))
+                    .map(|(uid, _)| uid.to_owned())
+                    .unwrap_or_default();
+                (uid, r.kind, r.state)
+            })
+            .collect())
+    }
+
+    fn state_of(&self, uid: &str, kind: &str) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .states()?
+            .into_iter()
+            .find(|(u, k, _)| u == uid && k == kind)
+            .map(|(_, _, s)| s))
+    }
+
+    fn until_of(&self, uid: &str) -> anyhow::Result<Option<String>> {
+        let rows = pipeline::lock(&self.db).alarms().list()?;
+        Ok(rows
+            .into_iter()
+            .find(|r| r.occurrence_key.contains(&format!(":{uid}@")) && r.kind == "lead")
+            .and_then(|r| r.until))
+    }
+
+    fn last_show(&self) -> anyhow::Result<AlarmShow> {
+        self.host()
+            .shows()
+            .pop()
+            .ok_or_else(|| anyhow!("nothing was shown"))
+    }
+
+    fn key(&self, index: usize) -> anyhow::Result<String> {
+        self.last_show()?
+            .meetings
+            .get(index)
+            .map(|m| m.key.clone())
+            .ok_or_else(|| anyhow!("no meeting {index} in the interrupt"))
+    }
+}
+
+const STANDUP: Seed<'static> = ("standup", "Standup", "140000", "");
+const MEET: &str = "https://meet.google.com/abc-defg-hij";
+const MEET_LOCATION: &str = "LOCATION:https://meet.google.com/abc-defg-hij\r\n";
+
+fn with_link<'a>(uid: &'a str, start: &'a str, location: &'a str) -> Seed<'a> {
+    (uid, uid, start, location)
+}
+
+// ---- F3 ----------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn s3_1_fires_within_15_s_of_the_lead_time() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    // Lead time 2 minutes, meeting at 14:00: the alarm is due at 13:58:00.
+    assert_eq!(rig.tick_at(at(13, 57, 50)).await.fired, 0);
+    assert_eq!(rig.host().count("open"), 0);
+    // The next tick is 15 s later at the latest.
+    let report = rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(report.fired, 1);
+    assert_eq!(rig.host().count("open"), 1);
+    assert_eq!(rig.last_show()?.meetings[0].title, "Standup");
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("firing"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn lead_time_comes_from_the_setting() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.setting(LEAD_MINUTES, serde_json::json!(5))?;
+    assert_eq!(rig.tick_at(at(13, 54, 50)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(13, 55, 5)).await.fired, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s3_2_snooze_returns() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+
+    rig.act(at(13, 58, 10), &key, Act::Snooze(5)).await?;
+    assert_eq!(rig.host().count("close"), 1, "the interrupt hides");
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("snoozed"));
+    assert_eq!(
+        rig.until_of("standup")?.as_deref(),
+        Some("2026-10-20T14:03:10Z")
+    );
+
+    // Not yet at 14:03:05, back at the next tick after 14:03:10.
+    assert_eq!(rig.tick_at(at(14, 3, 5)).await.fired, 0);
+    assert_eq!(rig.host().count("open"), 1);
+    assert_eq!(rig.tick_at(at(14, 3, 20)).await.fired, 1);
+    assert_eq!(rig.host().count("open"), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s3_3_dismiss_survives_a_restart() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Dismiss).await?;
+    assert_eq!(
+        rig.state_of("standup", "lead")?.as_deref(),
+        Some("dismissed")
+    );
+
+    // A new process: the scheduler is rebuilt, only the store is left.
+    let restarted = Scheduler::new(Fake::new(at(13, 58, 30)));
+    restarted.host.set_now(at(13, 59, 0));
+    let report = restarted.step(&rig.db, true).await;
+    assert_eq!(report.fired, 0);
+    assert!(
+        restarted.host.calls().is_empty(),
+        "{:?}",
+        restarted.host.calls()
+    );
+    restarted.host.set_now(at(14, 0, 15));
+    assert_eq!(restarted.step(&rig.db, true).await.fired, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac3_3_a_snoozed_alarm_fires_at_its_time_after_a_restart() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Snooze(5)).await?;
+
+    let restarted = Scheduler::new(Fake::new(at(14, 0, 0)));
+    assert_eq!(restarted.step(&rig.db, true).await.fired, 0);
+    restarted.host.set_now(at(14, 3, 20));
+    assert_eq!(restarted.step(&rig.db, true).await.fired, 1);
+    assert_eq!(restarted.host.count("open"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s3_4_wake_inside_the_window_fires_with_the_started_minutes() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    assert!(!rig.tick_at(at(13, 50, 0)).await.woke);
+    // Asleep from 13:50 to 14:03.
+    let report = rig.tick_at(at(14, 3, 0)).await;
+    assert!(report.woke);
+    assert_eq!(report.fired, 1);
+    assert_eq!(rig.host().count("open"), 1);
+    let start =
+        DateTime::parse_from_rfc3339(&rig.last_show()?.meetings[0].start)?.with_timezone(&Utc);
+    assert_eq!(
+        countdown(start, at(14, 3, 0)),
+        Countdown::StartedAgo { minutes: 3 }
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn s3_5_wake_outside_the_window_expires() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 50, 0)).await;
+    assert_eq!(
+        rig.state_of("standup", "lead")?.as_deref(),
+        Some("scheduled")
+    );
+    // Asleep from 13:50 to 14:30, 20 minutes past the start.
+    let report = rig.tick_at(at(14, 30, 0)).await;
+    assert!(report.woke);
+    assert_eq!(report.fired, 0);
+    assert_eq!(report.expired, 1);
+    assert!(rig.host().calls().is_empty(), "{:?}", rig.host().calls());
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("expired"));
+    // The next tick prunes it: the meeting is long over.
+    rig.tick_at(at(14, 30, 15)).await;
+    assert!(rig.states()?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn s3_6_two_meetings_in_the_same_minute_make_one_group() -> TestResult {
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140000", "")],
+        at(13, 50, 0),
+    )?;
+    let report = rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(report.fired, 2);
+    assert_eq!(rig.host().count("open"), 1, "one interrupt");
+    let titles: Vec<String> = rig
+        .last_show()?
+        .meetings
+        .into_iter()
+        .map(|m| m.title)
+        .collect();
+    assert_eq!(titles, ["Alpha", "Beta"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac3_5_lead_alarms_on_different_ticks_merge_into_the_open_group() -> TestResult {
+    // Same start minute, 30 s apart: their lead alarms are due 30 s apart and land on two ticks.
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140030", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.last_show()?.meetings.len(), 1);
+    assert_eq!(rig.host().count("play"), 1);
+
+    let report = rig.tick_at(at(13, 58, 35)).await;
+    assert_eq!(report.fired, 1);
+    let show = rig.last_show()?;
+    let titles: Vec<&str> = show.meetings.iter().map(|m| m.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["Alpha", "Beta"],
+        "the second meeting joined the open interrupt"
+    );
+    assert_eq!(rig.host().count("close"), 0, "never closed and reopened");
+    assert_eq!(rig.host().count("play"), 2, "the new meeting is heard");
+    Ok(())
+}
+
+#[tokio::test]
+async fn another_start_minute_waits_for_the_open_interrupt() -> TestResult {
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140500", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    // Beta is due at 14:03 while Alpha is still up: Alpha's interrupt is not touched.
+    let report = rig.tick_at(at(14, 3, 5)).await;
+    assert_eq!(report.fired, 1);
+    assert_eq!(rig.host().count("open"), 1);
+    assert_eq!(rig.state_of("b", "lead")?.as_deref(), Some("firing"));
+
+    // Dismissing Alpha hands the screen to Beta at once.
+    rig.act(at(14, 3, 10), &key, Act::Dismiss).await?;
+    assert_eq!(rig.host().count("open"), 2);
+    assert_eq!(rig.last_show()?.meetings[0].title, "Beta");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac3_2_an_interrupt_closes_when_its_meeting_expires() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.tick_at(at(14, 9, 50)).await;
+    assert_eq!(rig.host().count("close"), 0);
+    // Ten minutes after the start with no action (AC3.2).
+    let report = rig.tick_at(at(14, 10, 5)).await;
+    assert_eq!(report.expired, 1);
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().count("stop"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rule_from_the_settings_keeps_a_meeting_from_firing() -> TestResult {
+    let rig = Rig::new(&[("f", "Focus time", "140000", "")], at(13, 50, 0))?;
+    assert_eq!(
+        rig.tick_at(at(13, 58, 5)).await.fired,
+        0,
+        "the default keywords include Focus"
+    );
+    assert!(rig.states()?.is_empty());
+    rig.setting(IGNORE_KEYWORDS, serde_json::json!(""))?;
+    assert_eq!(rig.tick_at(at(13, 58, 20)).await.fired, 1);
+    Ok(())
+}
+
+// ---- F4, F5 ------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn s4_3_join_opens_the_validated_url_and_already_there_opens_nothing() -> TestResult {
+    let events = [with_link("call", "140000", MEET_LOCATION)];
+    let rig = Rig::new(&events, at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    assert_eq!(rig.host().urls(), [MEET]);
+    assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("joined"));
+    assert_eq!(rig.host().count("close"), 1);
+
+    let rig = Rig::new(&events, at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::AlreadyThere).await?;
+    assert!(rig.host().urls().is_empty());
+    assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("joined"));
+    assert_eq!(rig.host().count("close"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s4_3_the_event_page_opens_when_there_is_no_call_link() -> TestResult {
+    let page = "https://calendar.example.com/event?eid=1";
+    let rig = Rig::new(
+        &[with_link("page", "140000", &format!("URL:{page}\r\n"))],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    assert_eq!(rig.host().urls(), [page]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s4_3_an_event_page_that_is_not_https_is_never_opened() -> TestResult {
+    let rig = Rig::new(
+        &[with_link("page", "140000", "URL:file:///etc/passwd\r\n")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    assert!(rig.host().urls().is_empty());
+    assert_eq!(rig.state_of("page", "lead")?.as_deref(), Some("joined"));
+    Ok(())
+}
+
+#[test]
+fn only_plain_https_links_are_openable() {
+    for good in [
+        "https://meet.google.com/abc-defg-hij",
+        "https://us02web.zoom.us/j/123456789?pwd=x",
+        "https://example.com:8443/path#frag",
+    ] {
+        assert!(openable(good), "{good}");
+    }
+    for bad in [
+        "http://example.com/a",
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "https://",
+        "https:///path",
+        "https://user@example.com/a",
+        "https://example.com\\@evil.com/a",
+        "https://exa mple.com/a",
+        "https://example.com/a\nb",
+        "https://[::1]/a",
+        "HTTPS://example.com/a",
+    ] {
+        assert!(!openable(bad), "{bad}");
+    }
+    assert!(!openable(&format!(
+        "https://example.com/{}",
+        "a".repeat(9000)
+    )));
+}
+
+#[tokio::test]
+async fn a_link_that_cannot_open_leaves_the_interrupt_and_the_alarm_alone() -> TestResult {
+    let events = [with_link("call", "140000", MEET_LOCATION)];
+    let rig = Rig::new(&events, at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.host().fail_url.store(true, Ordering::SeqCst);
+    let Err(e) = rig.act(at(13, 58, 10), &key, Act::Join).await else {
+        anyhow::bail!("a link that cannot open must fail the command");
+    };
+    assert_eq!(e.downcast_ref::<AppError>(), Some(&AppError::INTERNAL));
+    assert_eq!(rig.host().count("close"), 0);
+    assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("firing"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn snooze_minutes_are_clamped_to_1_through_60() -> TestResult {
+    for (asked, minutes) in [(0, 1), (1, 1), (5, 5), (60, 60), (61, 60), (u32::MAX, 60)] {
+        let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+        rig.tick_at(at(13, 58, 5)).await;
+        let key = rig.key(0)?;
+        rig.act(at(13, 59, 0), &key, Act::Snooze(asked)).await?;
+        let until = DateTime::parse_from_rfc3339(
+            &rig.until_of("standup")?
+                .ok_or_else(|| anyhow!("not snoozed"))?,
+        )?
+        .with_timezone(&Utc);
+        assert_eq!(
+            until,
+            at(13, 59, 0) + Duration::minutes(i64::from(minutes)),
+            "asked for {asked}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn snooze_and_dismiss_cover_every_meeting_of_the_group() -> TestResult {
+    for act in [Act::Snooze(5), Act::Dismiss] {
+        let rig = Rig::new(
+            &[("a", "Alpha", "140000", ""), ("b", "Beta", "140000", "")],
+            at(13, 50, 0),
+        )?;
+        rig.tick_at(at(13, 58, 5)).await;
+        // The key of either meeting stands for the group.
+        let key = rig.key(1)?;
+        rig.act(at(13, 58, 10), &key, act).await?;
+        let want = if matches!(act, Act::Dismiss) {
+            "dismissed"
+        } else {
+            "snoozed"
+        };
+        for uid in ["a", "b"] {
+            assert_eq!(rig.state_of(uid, "lead")?.as_deref(), Some(want), "{uid}");
+        }
+        assert_eq!(rig.host().count("close"), 1);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_dismissed_lead_alarm_still_lets_the_start_alarm_fire() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.setting(AGAIN_AT_START, serde_json::json!(true))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Dismiss).await?;
+    assert_eq!(
+        rig.state_of("standup", "start")?.as_deref(),
+        Some("scheduled")
+    );
+    assert_eq!(rig.tick_at(at(14, 0, 5)).await.fired, 1);
+    assert_eq!(rig.host().count("open"), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_unknown_key_gives_not_found() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    // Nothing is open yet.
+    let Err(e) = rig
+        .act(at(13, 50, 0), "x@2026-10-20T14:00:00Z", Act::Dismiss)
+        .await
+    else {
+        anyhow::bail!("no interrupt is open");
+    };
+    assert_eq!(e.downcast_ref::<AppError>(), Some(&AppError::NOT_FOUND));
+
+    rig.tick_at(at(13, 58, 5)).await;
+    for key in ["x@2026-10-20T14:00:00Z", "not a key", ""] {
+        for act in [Act::Snooze(5), Act::Dismiss, Act::Join, Act::AlreadyThere] {
+            let Err(e) = rig.act(at(13, 58, 10), key, act).await else {
+                anyhow::bail!("{key:?} is not in the open group");
+            };
+            assert_eq!(
+                e.downcast_ref::<AppError>(),
+                Some(&AppError::NOT_FOUND),
+                "{key:?}"
+            );
+        }
+    }
+    assert_eq!(
+        rig.host().count("close"),
+        0,
+        "a refused key changes nothing"
+    );
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("firing"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_partial_join_reopens_the_interrupt_for_the_meetings_left() -> TestResult {
+    let rig = Rig::new(
+        &[
+            with_link("a", "140000", MEET_LOCATION),
+            ("b", "Beta", "140000", ""),
+        ],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let alpha = rig.key(0)?;
+    let beta = rig.key(1)?;
+    assert_eq!(rig.host().count("open"), 1);
+
+    rig.act(at(13, 58, 10), &alpha, Act::Join).await?;
+    assert_eq!(rig.host().urls(), [MEET]);
+    assert_eq!(rig.host().count("close"), 0, "Beta is still firing");
+    assert_eq!(rig.host().count("open"), 2, "re-opened");
+    let show = rig.last_show()?;
+    assert_eq!(show.meetings.len(), 1);
+    assert_eq!(show.meetings[0].key, beta);
+    assert_eq!(rig.state_of("a", "lead")?.as_deref(), Some("joined"));
+    assert_eq!(rig.state_of("b", "lead")?.as_deref(), Some("firing"));
+    // The joined key is no longer in the group.
+    assert!(rig.act(at(13, 58, 11), &alpha, Act::Dismiss).await.is_err());
+
+    rig.act(at(13, 58, 12), &beta, Act::AlreadyThere).await?;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().count("stop"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn joining_closes_the_start_alarm_of_the_same_meeting() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.setting(AGAIN_AT_START, serde_json::json!(true))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::AlreadyThere).await?;
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("joined"));
+    assert_eq!(rig.state_of("standup", "start")?.as_deref(), Some("joined"));
+    assert_eq!(rig.tick_at(at(14, 0, 5)).await.fired, 0);
+    Ok(())
+}
+
+// ---- F4.5 --------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn focus_no_triggers_the_fallback() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.host().focused.store(false, Ordering::SeqCst);
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.host().count("notify"), 0, "not before the re-check");
+    // Too early: 400 ms after the open.
+    rig.host()
+        .set_now(at(13, 58, 5) + Duration::milliseconds(400));
+    rig.sched.step(&rig.db, false).await;
+    assert_eq!(rig.host().count("notify"), 0);
+    rig.housekeep_at(at(13, 58, 5) + Duration::milliseconds(500))
+        .await;
+    assert_eq!(rig.host().count("notify"), 1);
+    // Once per interrupt.
+    rig.housekeep_at(at(13, 58, 7)).await;
+    assert_eq!(rig.host().count("notify"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_window_that_has_focus_needs_no_fallback() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.housekeep_at(at(13, 58, 6)).await;
+    assert_eq!(rig.host().count("focused"), 1, "the check ran");
+    assert_eq!(rig.host().count("notify"), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn degraded_takeover_triggers_the_fallback_with_the_windows_and_the_sound() -> TestResult {
+    let mut host = Fake::new(at(13, 50, 0));
+    host.degraded = Some("wayland_no_takeover");
+    let rig = Rig::with_host(&[STANDUP], host)?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.host().calls(), ["open", "notify", "play"]);
+    // The re-check finds nothing left to do.
+    rig.housekeep_at(at(13, 58, 6)).await;
+    assert_eq!(rig.host().count("notify"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn windows_that_cannot_open_leave_a_notification_whose_actions_work() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.host().fail_open.store(true, Ordering::SeqCst);
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.host().calls(), ["open", "notify", "play"]);
+    // The notification's Join and Snooze act on the first meeting.
+    let key = rig
+        .sched
+        .first_key()
+        .await
+        .ok_or_else(|| anyhow!("the notification is the interrupt"))?;
+    rig.act(at(13, 58, 10), &key, Act::Snooze(SNOOZE_MINUTES))
+        .await?;
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("snoozed"));
+    assert_eq!(rig.host().count("stop"), 1);
+    Ok(())
+}
+
+// ---- F6 ----------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn ac6_1_the_sound_plays_on_open_repeats_every_30_s_and_stops_on_close() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 0)).await;
+    assert_eq!(rig.host().count("play"), 1, "once when the interrupt opens");
+    rig.housekeep_at(at(13, 58, 29)).await;
+    assert_eq!(rig.host().count("play"), 1);
+    rig.housekeep_at(at(13, 58, 30)).await;
+    assert_eq!(rig.host().count("play"), 2);
+    rig.housekeep_at(at(13, 58, 59)).await;
+    assert_eq!(rig.host().count("play"), 2);
+    rig.housekeep_at(at(13, 59, 0)).await;
+    assert_eq!(rig.host().count("play"), 3);
+
+    let key = rig.key(0)?;
+    rig.act(at(13, 59, 1), &key, Act::Dismiss).await?;
+    assert_eq!(rig.host().count("stop"), 1, "stopped on close");
+    rig.housekeep_at(at(13, 59, 40)).await;
+    assert_eq!(rig.host().count("play"), 3, "no repeat after the close");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac6_1_the_repeat_can_be_turned_off() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.setting(SOUND_REPEAT, serde_json::json!(false))?;
+    rig.tick_at(at(13, 58, 0)).await;
+    rig.housekeep_at(at(14, 0, 0)).await;
+    assert_eq!(rig.host().count("play"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_loop_wakes_for_the_focus_check_and_the_next_repeat() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    assert_eq!(rig.sched.deadline().await, None, "nothing is open");
+    rig.tick_at(at(13, 58, 0)).await;
+    assert_eq!(
+        rig.sched.deadline().await,
+        Some(at(13, 58, 0) + FOCUS_RECHECK)
+    );
+    rig.housekeep_at(at(13, 58, 1)).await;
+    assert_eq!(rig.sched.deadline().await, Some(at(13, 58, 30)));
+    Ok(())
+}
+
+// ---- F10 ---------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_test_alarm_opens_a_sample_that_every_action_can_close() -> TestResult {
+    let rig = Rig::new(&[], at(13, 50, 0))?;
+    rig.sched.show_test().await?;
+    assert!(rig.last_show()?.test);
+    assert_eq!(rig.host().count("play"), 1);
+    let key = rig.key(0)?;
+    rig.act(at(13, 50, 5), &key, Act::Join).await?;
+    assert!(rig.host().urls().is_empty(), "the sample has no link");
+    assert_eq!(rig.host().count("close"), 1);
+    assert!(rig.states()?.is_empty(), "no alarm row behind it");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_real_interrupt_is_not_replaced_by_the_test_alarm_but_replaces_it() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.sched.show_test().await?;
+    assert_eq!(rig.host().count("open"), 1, "the test alarm stood back");
+
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.host().set_now(at(13, 57, 0));
+    rig.sched.show_test().await?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.last_show()?.meetings[0].title, "Standup");
+    Ok(())
+}
+
+// ---- Persistence, pins -------------------------------------------------------------------------
+
+#[test]
+fn alarm_rows_round_trip_through_every_state() -> TestResult {
+    let occurrence: OccurrenceKey = "cal:evt@2026-10-20T14:00:00Z".parse()?;
+    for state in [
+        AlarmState::Scheduled,
+        AlarmState::Firing {
+            since: at(13, 58, 0),
+        },
+        AlarmState::Snoozed {
+            until: at(14, 3, 0),
+        },
+        AlarmState::Dismissed,
+        AlarmState::Joined,
+        AlarmState::Expired,
+    ] {
+        let alarm = Alarm {
+            occurrence: occurrence.clone(),
+            at: at(13, 58, 0),
+            start: at(14, 0, 0),
+            kind: AlarmKind::Lead,
+            state,
+        };
+        assert_eq!(from_row(&to_row(&alarm, at(13, 59, 0))), Some(alarm));
+    }
+    let broken = AlarmRow {
+        occurrence_key: "no key".into(),
+        kind: "lead".into(),
+        at: "x".into(),
+        start: "x".into(),
+        state: "firing".into(),
+        state_at: "x".into(),
+        until: None,
+    };
+    assert_eq!(from_row(&broken), None);
+    Ok(())
+}
+
+#[test]
+fn the_stores_terminal_states_are_the_cores_final_states() {
+    let core: Vec<&str> = [
+        AlarmState::Dismissed,
+        AlarmState::Joined,
+        AlarmState::Expired,
+    ]
+    .iter()
+    .map(AlarmState::name)
+    .collect();
+    assert_eq!(core, TERMINAL_STATES);
+}
+
+#[test]
+fn ac3_2_the_stores_prune_uses_the_cores_expiry_minutes() -> TestResult {
+    let store = Store::open_in_memory()?;
+    let start = at(14, 0, 0);
+    let row = |key: &str| AlarmRow {
+        occurrence_key: key.into(),
+        kind: "lead".into(),
+        at: ts(start - Duration::minutes(2)),
+        start: ts(start),
+        state: "dismissed".into(),
+        state_at: ts(start),
+        until: None,
+    };
+    store.alarms().upsert(&row("k"))?;
+    let expiry = start + Duration::minutes(EXPIRY_MINUTES);
+    // One second before the core's expiry the row stays; one second after, it goes.
+    assert_eq!(
+        store
+            .alarms()
+            .prune_before(&ts(expiry - Duration::seconds(1)))?,
+        0
+    );
+    assert_eq!(
+        store.alarms().prune_before(&ts(expiry))?,
+        0,
+        "the cutoff is exclusive"
+    );
+    assert_eq!(
+        store
+            .alarms()
+            .prune_before(&ts(expiry + Duration::seconds(1)))?,
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn lead_time_limits_are_the_cores() {
+    assert_eq!((MIN_LEAD_MINUTES, MAX_LEAD_MINUTES), (1, 60));
+}
+
+// ---- Capabilities ------------------------------------------------------------------------------
+
+#[test]
+fn no_webview_capability_grants_opener_or_notification_commands() -> TestResult {
+    for (name, text) in [
+        ("default", include_str!("../../capabilities/default.json")),
+        (
+            "interrupt",
+            include_str!("../../capabilities/interrupt.json"),
+        ),
+    ] {
+        let json: serde_json::Value = serde_json::from_str(text)?;
+        let permissions: Vec<&str> = json["permissions"]
+            .as_array()
+            .ok_or_else(|| anyhow!("{name} has no permissions"))?
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+        assert_eq!(
+            permissions,
+            ["core:event:allow-listen", "core:event:allow-unlisten"],
+            "{name}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_meeting_that_leaves_the_feed_takes_its_alarm_and_the_interrupt_with_it() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.host().count("open"), 1);
+    {
+        let store = pipeline::lock(&rig.db);
+        let cal = store
+            .calendars()
+            .list()?
+            .pop()
+            .ok_or_else(|| anyhow!("no calendar"))?;
+        store.events().replace_for_calendar(&cal.id, &[], "t2")?;
+    }
+    rig.tick_at(at(13, 58, 20)).await;
+    assert!(rig.states()?.is_empty(), "{:?}", rig.states()?);
+    assert_eq!(rig.host().count("close"), 1);
+    Ok(())
+}
+
+#[test]
+fn the_opener_plugin_is_never_registered() -> TestResult {
+    // `open_url` is called from Rust; registering the plugin would add commands to the webview.
+    let main = include_str!("../main.rs");
+    assert!(
+        !main.contains("tauri_plugin_opener"),
+        "register nothing from the opener plugin"
+    );
+    Ok(())
+}

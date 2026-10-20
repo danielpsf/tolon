@@ -10,8 +10,15 @@ use tolon_core::Occurrence;
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
-use crate::interrupt::{self, AlarmShow, InterruptState};
+use crate::interrupt::{AlarmShow, InterruptState};
 use crate::pipeline::{self, CalendarDto, Db};
+use crate::scheduler::{Act, Scheduler, TauriHost};
+
+/// The scheduler of the running app, managed next to `AppState`.
+pub type AppScheduler = Scheduler<TauriHost>;
+
+/// The settings window: the only one that may start the test alarm.
+const MAIN_WINDOW: &str = "main";
 
 pub struct AppState {
     pub db: Db,
@@ -24,8 +31,12 @@ pub fn state(app: &AppHandle) -> anyhow::Result<State<'_, AppState>> {
         .ok_or_else(|| AppError::NOT_READY.into())
 }
 
-/// Tells the UI to reload the calendar list and today's occurrences. The payload is empty.
+/// Tells the UI to reload the calendar list and today's occurrences, and the scheduler to re-plan
+/// at once (AC8.3). The payload is empty. A settings command (L-016) must call this too.
 pub fn notify(app: &AppHandle) {
+    if let Some(scheduler) = app.try_state::<AppScheduler>() {
+        scheduler.wake();
+    }
     for event in ["calendars:changed", "occurrences:changed"] {
         if let Err(e) = app.emit(event, ()) {
             tracing::warn!(event, error = %e, "could not emit event");
@@ -101,56 +112,42 @@ pub async fn occurrences_today(app: AppHandle) -> Result<Vec<Occurrence>, Comman
     today.map_err(|e| command_error(&e))
 }
 
-// ---- Alarm actions (L-010) --------------------------------------------------------------------
-// Stubs: each checks the key, closes every interrupt window (AC4.6) and returns. L-032 replaces the
-// marked line with the real state change.
-//
-// Contract for L-032. `key` is `MeetingDto::key` (an `OccurrenceKey`). `alarms_snooze` and
-// `alarms_dismiss` act on every meeting of the interrupt on screen (`InterruptState`), because the
-// window offers one Snooze and one Dismiss for the whole group (S3.6). `alarms_join` and
+// ---- Alarm actions (F3, F4, F5) ---------------------------------------------------------------
+// `key` is `MeetingDto::key` (an `OccurrenceKey`) and must belong to the interrupt on screen, else
+// `not_found`. `alarms_snooze` and `alarms_dismiss` act on every meeting of the interrupt, because
+// the window offers one Snooze and one Dismiss for the whole group (S3.6). `alarms_join` and
 // `alarms_already_there` act on that one meeting; `alarms_join` opens its link or event page
-// itself (the URL never reaches the webview).
+// itself (the URL never reaches the webview). The work is in `scheduler::Scheduler::act`.
 
-/// `action` is remembered for `alarms_last_action` before the windows close.
-fn act_on(app: &AppHandle, key: &str, action: String) -> Result<(), CommandError> {
-    interrupt::parse_key(key).map_err(|e| command_error(&e.into()))?;
-    if let Some(state) = app.try_state::<InterruptState>() {
-        state.record(action);
+async fn alarm_action(app: &AppHandle, key: &str, act: Act) -> Result<(), CommandError> {
+    let done = async {
+        let state = state(app)?;
+        let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
+        scheduler.act(&state.db, key, act).await
     }
-    interrupt::close_all(app);
-    Ok(())
+    .await;
+    done.map_err(|e| command_error(&e))
 }
 
+/// The minutes are clamped to 1..=60.
 #[tauri::command]
 pub async fn alarms_snooze(app: AppHandle, key: String, minutes: u32) -> Result<(), CommandError> {
-    // L-032: update alarm state (Snoozed until now + minutes)
-    act_on(&app, &key, format!("snooze:{minutes}"))
+    alarm_action(&app, &key, Act::Snooze(minutes)).await
 }
 
 #[tauri::command]
 pub async fn alarms_dismiss(app: AppHandle, key: String) -> Result<(), CommandError> {
-    // L-032: update alarm state (Dismissed)
-    act_on(&app, &key, "dismiss".to_owned())
+    alarm_action(&app, &key, Act::Dismiss).await
 }
 
 #[tauri::command]
 pub async fn alarms_join(app: AppHandle, key: String) -> Result<(), CommandError> {
-    // L-032: update alarm state (Joined) and open the join link or the event page
-    act_on(&app, &key, "join".to_owned())
+    alarm_action(&app, &key, Act::Join).await
 }
 
 #[tauri::command]
 pub async fn alarms_already_there(app: AppHandle, key: String) -> Result<(), CommandError> {
-    // L-032: update alarm state (Joined, no link opened)
-    act_on(&app, &key, "already_there".to_owned())
-}
-
-/// The last alarm action, so the WebDriver test can tell Esc from D and Space from Enter.
-/// L-032: drop it once the alarm state itself can be read.
-#[tauri::command]
-pub async fn alarms_last_action(app: AppHandle) -> Option<String> {
-    app.try_state::<InterruptState>()
-        .and_then(|s| s.last_action())
+    alarm_action(&app, &key, Act::AlreadyThere).await
 }
 
 /// The interrupt on screen, for a window that loaded after `alarm:show` was emitted.
@@ -159,11 +156,48 @@ pub async fn alarms_current(app: AppHandle) -> Option<AlarmShow> {
     app.try_state::<InterruptState>().and_then(|s| s.get())
 }
 
-/// Opens a sample interrupt on every screen (F10's test alarm, and the WebDriver test for the keys).
+/// F10's test alarm: a sample interrupt on every screen (also the WebDriver tests' way to open one).
+/// Only the settings window may ask: an interrupt window, or any page a future change loads, may not.
 #[tauri::command]
-pub async fn alarms_test(app: AppHandle) -> Result<(), CommandError> {
-    let platform = interrupt::native();
-    let screens = interrupt::screens(&app, platform).await;
-    interrupt::open_interrupts(&app, platform, &screens, &AlarmShow::sample(Utc::now()))
-        .map_err(|e| command_error(&e))
+pub async fn alarms_test(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), CommandError> {
+    if window.label() != MAIN_WINDOW {
+        return Err(command_error(&AppError::NOT_FOUND.into()));
+    }
+    let done = async {
+        let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
+        scheduler.show_test().await
+    }
+    .await;
+    done.map_err(|e| command_error(&e))
+}
+
+/// The alarm rows, for the WebDriver tests (`cargo run` and debug builds only: a release build does
+/// not contain this command). Keys and states, never titles.
+#[cfg(debug_assertions)]
+#[derive(serde::Serialize)]
+pub struct AlarmStateDto {
+    pub key: String,
+    pub kind: String,
+    pub state: String,
+    pub until: Option<String>,
+}
+
+#[cfg(debug_assertions)]
+#[tauri::command]
+pub async fn alarms_e2e_state(app: AppHandle) -> Result<Vec<AlarmStateDto>, CommandError> {
+    let rows = state(&app)
+        .and_then(|s| {
+            let store = crate::pipeline::lock(&s.db);
+            Ok(store.alarms().list()?)
+        })
+        .map_err(|e| command_error(&e))?;
+    Ok(rows
+        .into_iter()
+        .map(|r| AlarmStateDto {
+            key: r.occurrence_key,
+            kind: r.kind,
+            state: r.state,
+            until: r.until,
+        })
+        .collect())
 }

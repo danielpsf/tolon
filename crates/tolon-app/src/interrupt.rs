@@ -1,7 +1,7 @@
 //! The interrupt windows (F4): one borderless, full-screen, always-on-top window per screen, all
 //! loading `interrupt.html`, and the payload they show.
 //!
-//! The scheduler (L-032) calls [`open_interrupts`] when an alarm fires. The windows ask for the
+//! The scheduler (`scheduler.rs`) calls [`open_interrupts`] when an alarm fires. The windows ask for the
 //! payload with `alarms_current` when they load and also listen for `alarm:show` / `alarm:hide`,
 //! because an event emitted before a new window has registered its listener is lost.
 //!
@@ -10,6 +10,7 @@
 //! occurrence key it sends back with `alarms_join`; the app opens the URL itself.
 
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use anyhow::Context;
@@ -20,7 +21,7 @@ use tauri::{
     Position, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tolon_core::{EventId, InterruptGroup, JoinTarget, Occurrence, OccurrenceKey};
-use tolon_platform::{Placement, Platform, PlatformError, Screen, NATIVE};
+use tolon_platform::{Focus, Placement, Platform, PlatformError, Screen, Takeover, NATIVE};
 
 pub const SHOW_EVENT: &str = "alarm:show";
 pub const HIDE_EVENT: &str = "alarm:hide";
@@ -28,7 +29,6 @@ pub const HIDE_EVENT: &str = "alarm:hide";
 pub const LABEL_PREFIX: &str = "interrupt-";
 
 /// Where the join button leads, without the URL. The URL stays in Rust.
-#[allow(dead_code)] // L-032 builds every variant through `AlarmShow::from_group`; until then only tests do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum JoinDto {
@@ -64,7 +64,6 @@ pub struct AlarmShow {
 }
 
 impl MeetingDto {
-    #[allow(dead_code)] // L-032: see `AlarmShow::from_group`
     fn from_occurrence(o: &Occurrence) -> Self {
         Self {
             key: o.key.to_string(),
@@ -87,8 +86,7 @@ impl MeetingDto {
 }
 
 impl AlarmShow {
-    /// L-032 calls this with each `group_firing` result.
-    #[allow(dead_code)]
+    /// The scheduler calls this with each `group_firing` result.
     pub fn from_group(group: &InterruptGroup) -> Self {
         Self {
             test: false,
@@ -129,26 +127,29 @@ impl AlarmShow {
 #[derive(Default)]
 pub struct InterruptState {
     current: Mutex<Option<AlarmShow>>,
-    /// The last action a person took, until L-032 keeps the real alarm state: `snooze:5`,
-    /// `dismiss`, `join` or `already_there`. The WebDriver test reads it to tell the keys apart.
-    last_action: Mutex<Option<String>>,
+    /// The platform refused keyboard focus (`Focus::No`) when it raised a window of this interrupt.
+    /// Written on the main thread, read by the scheduler's 500 ms focus re-check; cleared on close.
+    focus_refused: AtomicBool,
 }
 
 impl InterruptState {
     fn set(&self, payload: Option<AlarmShow>) {
         // A poisoned lock only means another thread panicked; the value is still a plain Option.
+        if payload.is_none() {
+            self.focus_refused.store(false, Ordering::SeqCst);
+        }
         *self.current.lock().unwrap_or_else(|p| p.into_inner()) = payload;
     }
 
-    pub fn record(&self, action: String) {
-        *self.last_action.lock().unwrap_or_else(|p| p.into_inner()) = Some(action);
+    fn note_focus(&self, focus: Focus) {
+        if focus == Focus::No {
+            self.focus_refused.store(true, Ordering::SeqCst);
+        }
     }
 
-    pub fn last_action(&self) -> Option<String> {
-        self.last_action
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
+    /// True once a raise of this interrupt reported `Focus::No` (decision "Platform contract after L-012").
+    pub fn focus_refused(&self) -> bool {
+        self.focus_refused.load(Ordering::SeqCst)
     }
 
     pub fn get(&self) -> Option<AlarmShow> {
@@ -263,6 +264,19 @@ pub async fn screens(app: &AppHandle, platform: &'static dyn Platform) -> Vec<Sc
     screens_or(answer, || monitor_screens(app))
 }
 
+/// `Platform::takeover_support`, asked on the main thread like every platform call. A main thread
+/// that cannot be reached counts as degraded: the fallback is the safe side.
+pub async fn takeover(app: &AppHandle, platform: &'static dyn Platform) -> Takeover {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let sent = app.run_on_main_thread(move || {
+        let _ = tx.send(platform.takeover_support());
+    });
+    match (sent, rx.await) {
+        (Ok(()), Ok(support)) => support,
+        _ => Takeover::Degraded(tolon_platform::Reason::Unsupported),
+    }
+}
+
 fn place(window: &WebviewWindow, placement: Placement) -> tauri::Result<()> {
     match placement {
         Placement::Logical {
@@ -343,10 +357,16 @@ impl Windows for TauriWindows<'_> {
             .get_webview_window(label)
             .with_context(|| format!("interrupt window {label} is not open"))?;
         let platform = self.platform;
-        // Platform calls run on the main thread on every OS.
+        let app = self.app.clone();
+        // Platform calls run on the main thread on every OS; the focus answer comes back through `InterruptState`.
         self.app
             .run_on_main_thread(move || match platform.raise_above_everything(&window) {
-                Ok(raised) => tracing::debug!(focus = ?raised.focus, "interrupt window raised"),
+                Ok(raised) => {
+                    tracing::debug!(focus = ?raised.focus, "interrupt window raised");
+                    if let Some(state) = app.try_state::<InterruptState>() {
+                        state.note_focus(raised.focus);
+                    }
+                }
                 Err(e) => tracing::warn!(error = %e, "could not raise the interrupt window"),
             })?;
         Ok(())
@@ -389,7 +409,7 @@ pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result
 
 /// Shows `payload` on every screen. The payload is kept for windows that load after the event;
 /// when the windows cannot be opened it is dropped again and nothing stays on screen.
-/// L-032: after this returns, re-check focus about 500 ms later and run the F4.5 fallback
+/// The scheduler re-checks focus about 500 ms later and runs the F4.5 fallback
 /// (`docs/decisions.md`, "Platform contract after L-012").
 pub fn open_interrupts(
     app: &AppHandle,
@@ -590,13 +610,15 @@ mod tests {
     }
 
     #[test]
-    fn s4_3_the_state_remembers_the_last_action_after_the_windows_close() {
+    fn a_refused_focus_is_remembered_until_the_interrupt_closes() {
         let state = InterruptState::default();
-        assert_eq!(state.last_action(), None);
-        state.record("snooze:5".to_owned());
-        state.record("dismiss".to_owned());
+        state.note_focus(Focus::Unknown);
+        state.note_focus(Focus::Yes);
+        assert!(!state.focus_refused());
+        state.note_focus(Focus::No);
+        assert!(state.focus_refused());
         state.set(None);
-        assert_eq!(state.last_action().as_deref(), Some("dismiss"));
+        assert!(!state.focus_refused());
     }
 
     #[test]

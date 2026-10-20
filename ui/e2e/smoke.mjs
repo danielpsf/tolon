@@ -227,6 +227,9 @@ test("the app keeps its data in the temp dir", { skip: process.platform !== "lin
 const pad = (n) => String(n).padStart(2, "0");
 const now = new Date();
 const day = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+// The scheduler is live: an event close to the real time would open an interrupt in the middle of the
+// calendar tests. 03:00 or 15:00 today, whichever is farther from now (floating time, the machine's zone).
+const fixtureHour = Math.abs(now.getHours() - 3) > Math.abs(now.getHours() - 15) ? "03" : "15";
 /**
  * A feed named by X-WR-CALNAME with one event today (floating time reads in the machine's zone). The event is not
  * asserted yet: the tray panel scenario (S1.1, "today's events appear in the tray panel") will read it.
@@ -239,8 +242,8 @@ const FIXTURE_FEED = [
   "BEGIN:VEVENT",
   "UID:e2e-standup@example.com",
   `DTSTAMP:${day}T000000Z`,
-  `DTSTART:${day}T120000`,
-  `DTEND:${day}T123000`,
+  `DTSTART:${day}T${fixtureHour}0000`,
+  `DTEND:${day}T${fixtureHour}3000`,
   "SUMMARY:Team standup",
   "END:VEVENT",
   "END:VCALENDAR",
@@ -248,33 +251,35 @@ const FIXTURE_FEED = [
 ].join("\r\n");
 
 /** Serves the fixture feed on 127.0.0.1 and a random port; `requests` lists the paths asked for. */
-async function fixtureServer() {
+async function fixtureServer(feed = FIXTURE_FEED) {
   const requests = [];
   const server = http.createServer((req, res) => {
     requests.push(req.url);
     res.writeHead(200, { "Content-Type": "text/calendar; charset=utf-8" });
-    res.end(FIXTURE_FEED);
+    res.end(feed);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return { server, requests, port: server.address().port };
 }
 
-const fixtureRows = () =>
-  driver.findElements(By.xpath('//*[contains(@class, "tl-name") and starts-with(., "Team fixture")]/ancestor::*[contains(@class, "tl-row")][1]'));
+const calendarRows = (name) =>
+  driver.findElements(By.xpath(`//*[contains(@class, "tl-name") and starts-with(., "${name}")]/ancestor::*[contains(@class, "tl-row")][1]`));
+const fixtureRows = () => calendarRows("Team fixture");
 
 /** Leaves nothing behind (Windows keeps its data outside the temp dir), also when an assertion failed. */
-async function removeFixtureCalendar() {
+async function removeCalendar(name) {
   try {
-    const [row] = await fixtureRows();
+    const [row] = await calendarRows(name);
     if (!row) return;
     await row.findElement(By.css(".tl-remove button")).click();
     await (await find("dialog[open] .sm-btn.danger")).click();
-    await waitFor("the fixture calendar to leave the list", async () => (await fixtureRows()).length === 0);
+    await waitFor(`the ${name} calendar to leave the list`, async () => (await calendarRows(name)).length === 0);
   } catch (e) {
     // The test's own failure is the one to report, not a failed cleanup after it.
-    console.warn(`could not remove the fixture calendar: ${e.message}`);
+    console.warn(`could not remove the ${name} calendar: ${e.message}`);
   }
 }
+const removeFixtureCalendar = () => removeCalendar("Team fixture");
 
 test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () => {
   const { server, requests, port } = await fixtureServer();
@@ -322,25 +327,20 @@ async function openTestInterrupt(main) {
   return handles;
 }
 
-/** What the alarm stubs recorded last (the main window asks: the interrupt window is gone by then). */
-const lastAction = () =>
-  driver.executeAsyncScript((done) => {
-    window.__TAURI_INTERNALS__.invoke("alarms_last_action").then(done, () => done("error"));
-  });
-
-// [name, keys sent to the focused element one after the other, the action the stub must record]
+// [name, keys sent to the focused element one after the other]. Which action each one ran is proven by the
+// alarm state in the s3_1 tests below and by the Rust tests; the test alarm has no alarm behind it.
 const KEY_CASES = [
-  ["Esc", [Key.ESCAPE], "snooze:5"],
-  ["D", ["d"], "dismiss"],
-  ["Space", [Key.SPACE], "already_there"],
-  ["Enter", [Key.ENTER], "join"],
+  ["Esc", [Key.ESCAPE]],
+  ["D", ["d"]],
+  ["Space", [Key.SPACE]],
+  ["Enter", [Key.ENTER]],
   // Space on Snooze or Dismiss presses that button; it must not mark the meeting joined (AC4.4).
-  ["Tab, Space on Snooze", [Key.TAB, Key.SPACE], "snooze:5"],
-  ["Tab, Tab, Space on Dismiss", [Key.TAB, Key.TAB, Key.SPACE], "dismiss"],
+  ["Tab, Space on Snooze", [Key.TAB, Key.SPACE]],
+  ["Tab, Tab, Space on Dismiss", [Key.TAB, Key.TAB, Key.SPACE]],
 ];
 
-for (const [name, keys, action] of KEY_CASES) {
-  test(`s4_3 ${name} on the interrupt closes every interrupt window and records ${action} (AC4.4, AC4.6, S4.2)`, async () => {
+for (const [name, keys] of KEY_CASES) {
+  test(`s4_3 ${name} on the interrupt closes every interrupt window (AC4.4, AC4.6, S4.2)`, async () => {
     const main = await driver.getWindowHandle();
     try {
       const handles = await openTestInterrupt(main);
@@ -379,6 +379,93 @@ for (const [name, keys, action] of KEY_CASES) {
       await driver.switchTo().window(main);
     }
     assert.equal((await driver.getAllWindowHandles()).length, 1);
-    assert.equal(await lastAction(), action);
   });
 }
+
+// ---- The scheduler end to end (L-032) ---------------------------------------------------------
+// A feed with a meeting that starts in 90 s, inside the default 2-minute lead time: the sync wakes the
+// scheduler, which plans the alarm, fires it and opens the interrupt. The state is read from the store
+// through `alarms_e2e_state`, a command that only debug builds contain.
+
+const stamp = (date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+
+function alarmFeed(uid, title, start) {
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Tolon e2e//EN",
+    "X-WR-CALNAME:Alarm fixture",
+    "BEGIN:VEVENT",
+    `UID:${uid}@example.com`,
+    `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART:${stamp(start)}`,
+    `DTEND:${stamp(new Date(start.getTime() + 30 * 60_000))}`,
+    `SUMMARY:${title}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n");
+}
+
+/** The alarm rows, asked from the main window. */
+const alarmRows = () =>
+  driver.executeAsyncScript((done) => {
+    window.__TAURI_INTERNALS__.invoke("alarms_e2e_state").then(done, (e) => done(JSON.stringify(e)));
+  });
+
+/** Adds the feed, waits for its interrupt, runs `body` on it, then closes up. `body` gets the main handle. */
+async function withImminentMeeting(uid, title, body) {
+  const { server, port } = await fixtureServer(alarmFeed(uid, title, new Date(Date.now() + 90_000)));
+  const main = await driver.getWindowHandle();
+  try {
+    const input = await openAddForm();
+    await input.sendKeys(`http://127.0.0.1:${port}/calendar/alarm-${uid}/basic.ics`);
+    await (await find('#add-calendar button[type="submit"]')).click();
+    const handles = await waitFor("the interrupt of the meeting", async () => {
+      const found = await interruptHandles(main);
+      return found.length > 0 && found;
+    });
+    await driver.switchTo().window(handles[0]);
+    assert.equal(await (await find(".tl-int-title")).getText(), title);
+    await body(main);
+  } finally {
+    await driver.switchTo().window(main).catch(() => undefined);
+    await removeCalendar("Alarm fixture");
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+async function pressAndWaitForClose(main, key) {
+  try {
+    await (await driver.switchTo().activeElement()).sendKeys(key);
+  } catch (e) {
+    // The key can close the window before the driver has its answer; the wait below is the check.
+    if (!(e instanceof error.NoSuchWindowError)) throw e;
+  }
+  await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+  await driver.switchTo().window(main);
+}
+
+const leadOf = async (uid) => (await alarmRows()).find((r) => r.key.includes(`:${uid}@`) && r.kind === "lead");
+
+test("s3_1 a meeting inside its lead time opens the interrupt at once, and s3_2 Esc snoozes its alarm for 5 minutes", async () => {
+  await withImminentMeeting("e2e-snooze", "Snooze meeting", async (main) => {
+    // The window is up, but the store is the proof that the alarm itself is firing.
+    await driver.switchTo().window(main);
+    assert.equal((await leadOf("e2e-snooze")).state, "firing");
+    await driver.switchTo().window((await interruptHandles(main))[0]);
+    await pressAndWaitForClose(main, Key.ESCAPE);
+    const lead = await leadOf("e2e-snooze");
+    assert.equal(lead.state, "snoozed");
+    const ahead = Date.parse(lead.until) - Date.now();
+    assert.ok(ahead > 4 * 60_000 && ahead <= 5 * 60_000 + 5_000, `snoozed until ${lead.until}, ${ahead} ms ahead`);
+  });
+});
+
+test("s3_3 D dismisses the alarm for good", async () => {
+  await withImminentMeeting("e2e-dismiss", "Dismiss meeting", async (main) => {
+    await pressAndWaitForClose(main, "d");
+    assert.equal((await leadOf("e2e-dismiss")).state, "dismissed");
+  });
+});

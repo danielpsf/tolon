@@ -6,6 +6,7 @@ mod errors;
 mod interrupt;
 mod pipeline;
 mod refresh;
+mod scheduler;
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -46,7 +47,12 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
         db: Mutex::new(store),
         fetcher,
     });
+    scheduler::setup_fallback_actions(app)?;
+    app.manage(commands::AppScheduler::new(scheduler::TauriHost::new(
+        app.clone(),
+    )));
     tauri::async_runtime::spawn(refresh::run(app.clone()));
+    tauri::async_runtime::spawn(scheduler::run(app.clone()));
     Ok(())
 }
 
@@ -60,6 +66,8 @@ fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
         .manage(interrupt::InterruptState::default())
         .plugin(tauri_plugin_dialog::init())
+        // Shows the F4.5 fallback; no webview permission grants it (capabilities/*.json).
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::calendars_list,
             commands::calendars_add_ics,
@@ -72,8 +80,9 @@ fn main() -> anyhow::Result<()> {
             commands::alarms_join,
             commands::alarms_already_there,
             commands::alarms_current,
-            commands::alarms_last_action,
             commands::alarms_test,
+            #[cfg(debug_assertions)]
+            commands::alarms_e2e_state,
         ])
         .setup(|app| {
             // A store that cannot open or migrate stops the app; it never runs on a half-applied
