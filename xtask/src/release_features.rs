@@ -12,6 +12,9 @@
 //! - the Rust sources that gate on it or lint and test it (`EXEMPT`) and Markdown docs.
 //!
 //! `all-features` may appear nowhere, Markdown docs and this file apart.
+//!
+//! `release.yml` (tag builds, which `ci.yml` never runs on) must run this check itself in its
+//! preflight job, and may pass no `--features` and no `--debug` to the build.
 
 use anyhow::{bail, Context, Result};
 use std::path::Path;
@@ -20,6 +23,8 @@ use std::process::Command;
 const FEATURE: &str = "e2e-loopback";
 const ALL_FEATURES: &str = "all-features";
 const CI_WORKFLOW: &str = ".github/workflows/ci.yml";
+const RELEASE_WORKFLOW: &str = ".github/workflows/release.yml";
+const RELEASE_SELF_CHECK: &str = "run: cargo xtask check-release-features";
 
 /// The only lines in a manifest that may name the feature.
 const DEFINITIONS: &[(&str, &str)] = &[
@@ -95,6 +100,31 @@ fn violations(rel: &str, text: &str) -> Vec<String> {
     }
     if rel == CI_WORKFLOW {
         found.extend(artifact_violations(rel, text));
+    }
+    if rel == RELEASE_WORKFLOW {
+        found.extend(release_workflow_violations(rel, text));
+    }
+    found
+}
+
+/// A release build is a plain release-profile build, and the tag run re-checks this very rule.
+fn release_workflow_violations(rel: &str, text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let line = line.trim();
+        for flag in ["--features", "--debug"] {
+            if line.contains(flag) {
+                found.push(format!(
+                    "{rel}:{}: `{flag}` is not allowed in the release workflow",
+                    i + 1
+                ));
+            }
+        }
+    }
+    if !text.lines().any(|l| l.trim() == RELEASE_SELF_CHECK) {
+        found.push(format!(
+            "{rel}: must contain the step `{RELEASE_SELF_CHECK}`"
+        ));
     }
     found
 }
@@ -174,18 +204,31 @@ mod tests {
 
     const CI_E2E: &str = "jobs:\n  e2e:\n    steps:\n      - name: Build debug app\n        run: npm --prefix ui run tauri build -- --debug --no-bundle --features e2e-loopback\n";
 
+    const RELEASE_OK: &str = "      - name: Check\n        run: cargo xtask check-release-features\n      - run: npm run tauri build -- --ci\n";
+
     #[test]
     fn release_workflow_may_not_pass_the_feature() {
-        let yml = "      - run: npm run tauri build -- --features e2e-loopback\n";
-        assert_eq!(violations(".github/workflows/release.yml", yml).len(), 1);
+        let yml =
+            format!("{RELEASE_OK}      - run: npm run tauri build -- --features e2e-loopback\n");
+        // The feature name and the `--features` flag are one violation each.
+        assert_eq!(violations(RELEASE_WORKFLOW, &yml).len(), 2);
+    }
+
+    #[test]
+    fn release_workflow_must_self_check_and_build_in_release_mode() {
+        assert!(violations(RELEASE_WORKFLOW, RELEASE_OK).is_empty());
+        let no_check = "      - run: npm run tauri build -- --ci\n";
+        assert_eq!(violations(RELEASE_WORKFLOW, no_check).len(), 1);
+        let debug = format!("{RELEASE_OK}      - run: npm run tauri build -- --debug\n");
+        assert_eq!(violations(RELEASE_WORKFLOW, &debug).len(), 1);
+        let features = format!("{RELEASE_OK}      - run: cargo build --features foo\n");
+        assert_eq!(violations(RELEASE_WORKFLOW, &features).len(), 1);
     }
 
     #[test]
     fn a_comment_in_a_workflow_still_counts() {
-        assert_eq!(
-            violations(".github/workflows/release.yml", "      # e2e-loopback\n").len(),
-            1
-        );
+        let comment = format!("{RELEASE_OK}      # e2e-loopback\n");
+        assert_eq!(violations(RELEASE_WORKFLOW, &comment).len(), 1);
     }
 
     #[test]
@@ -208,7 +251,7 @@ mod tests {
         let json = "\"build\": \"cargo build --all-features\",\n";
         assert_eq!(violations("ui/package.json", json).len(), 1);
         assert_eq!(
-            violations(".github/workflows/release.yml", "args: --all-features\n").len(),
+            violations(".github/workflows/other.yml", "args: --all-features\n").len(),
             1
         );
         assert_eq!(

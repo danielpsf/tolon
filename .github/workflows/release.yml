@@ -1,13 +1,56 @@
 name: Release
+# A tag push builds all installers and opens a DRAFT release. Nothing is public until a person
+# presses "Publish release" in the GitHub UI. ci.yml does not run on tags, so preflight re-checks
+# what the release depends on.
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
 jobs:
+  preflight:
+    name: preflight
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the updater signing secrets
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$KEY" ] || missing="$missing TAURI_SIGNING_PRIVATE_KEY"
+          [ -n "$PASSWORD" ] || missing="$missing TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error title=Release secrets missing::Add these repository secrets, then push the tag again:$missing. Settings, Secrets and variables, Actions. Create the key once with: npm --prefix ui run tauri -- signer generate -w ~/.tauri/tolon.key"
+            exit 1
+          fi
+      - name: Release helper tests
+        run: python3 -m unittest discover -s .github/scripts
+      - name: Tag, versions and updater config agree
+        run: python3 .github/scripts/release_assets.py check-tag "$GITHUB_REF_NAME"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --profile minimal
+      - name: Release builds stay free of test seams
+        run: cargo xtask check-release-features
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm --prefix ui ci
+      - name: The signing key opens with its password and matches the public key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          echo probe > "$RUNNER_TEMP/probe"
+          npm --prefix ui run tauri -- signer sign "$RUNNER_TEMP/probe"
+          python3 .github/scripts/release_assets.py check-key "$RUNNER_TEMP/probe.sig"
   build:
     name: build (${{ matrix.name }})
+    needs: preflight
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,57 +59,87 @@ jobs:
           - name: macos-universal
             os: macos-latest
             args: --target universal-apple-darwin
-          - name: linux-x64
-            os: ubuntu-22.04
-            args: ""
+            bundles: app,dmg
+            expect: "*.dmg *.app.tar.gz"
           - name: windows-x64
             os: windows-latest
             args: ""
+            bundles: msi,nsis
+            expect: "*.msi *.exe"
+          - name: linux-x64
+            os: ubuntu-22.04
+            args: ""
+            bundles: appimage,deb
+            expect: "*.AppImage *.deb"
     steps:
       - uses: actions/checkout@v4
-      - name: Linux deps
+      - name: Linux build deps (Tauri 2)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+          sudo apt-get install -y build-essential curl wget file libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev patchelf xdg-utils
+      # No Rust or npm cache here on purpose: a cache written by another ref must not shape a release binary.
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.name == 'macos-universal' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - uses: Swatinem/rust-cache@v2
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --profile minimal
+      - name: Add both macOS targets (universal build)
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, cache-dependency-path: ui/package-lock.json }
+        with:
+          node-version: 22
       - run: npm --prefix ui ci
-      - name: Build and upload to the GitHub release
-        uses: tauri-apps/tauri-action@v0
+      - name: Build the installers
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Ad-hoc signature: no Apple Developer account. Required so the binary runs on Apple silicon at all.
+          # Ad-hoc signature: no Apple Developer account. Apple silicon refuses unsigned binaries.
           APPLE_SIGNING_IDENTITY: "-"
+        run: npm --prefix ui run tauri build -- --ci --bundles ${{ matrix.bundles }} ${{ matrix.args }}
+      - name: Collect the installers and updater signatures
+        shell: bash
+        run: |
+          mkdir out
+          find target -path '*/release/bundle/*' -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' -o -name '*.AppImage.tar.gz' -o -name '*.nsis.zip' -o -name '*.msi.zip' -o -name '*.sig' \) -exec cp {} out/ \;
+          ls -l out
+          for pattern in ${{ matrix.expect }}; do
+            ls out/$pattern > /dev/null || { echo "::error::no $pattern in the build output"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
         with:
-          projectPath: ui
-          tagName: ${{ github.ref_name }}
-          releaseName: Tolon ${{ github.ref_name }}
-          releaseBody: See the install steps below. This is a beta; the macOS build is self-signed.
-          releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
-          includeUpdaterJson: true
-          args: ${{ matrix.args }}
-  notes:
-    name: attach install notes and checksums
+          name: release-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    name: draft release
     needs: build
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download release assets, write SHA256SUMS, append install.md to the notes
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Write latest.json for the updater
+        run: python3 .github/scripts/release_assets.py latest-json dist "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY"
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          find . -maxdepth 1 -type f -printf '%f\n' | sort | xargs sha256sum > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+      - name: Create the draft release with docs/install.md as its notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
         run: |
-          mkdir -p dist && cd dist
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" || true
-          sha256sum * > SHA256SUMS
-          gh release upload "$TAG" SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
-          { echo "## Install"; echo; cat ../docs/install.md; } > notes.md
-          gh release edit "$TAG" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "::error::A release for $GITHUB_REF_NAME already exists. Delete it (and the draft assets) before pushing the tag again."
+            exit 1
+          fi
+          # Not marked pre-release: the updater endpoint is releases/latest/download/latest.json, and GitHub's "latest" skips pre-releases.
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --title "Tolon $GITHUB_REF_NAME" --notes-file docs/install.md
