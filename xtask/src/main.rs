@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <command>\n\n\
-commands:\n  ci                   fmt, clippy, tests, layers, scenario ids, ui lint and tests\n  \
+commands:\n  ci                   fmt, clippy, tests, layers, scenario ids, ui typecheck, lint and tests\n  \
 layers               check crate dependency direction and target_os confinement\n  \
 check-scenario-ids   check scenario and AC ids against docs/plan.md\n  \
 check-release-features  keep the e2e fetch seam out of release builds\n  \

@@ -59,14 +59,21 @@ pub fn run(root: &Path) -> Result<()> {
     run_internal("layers", || layers::run(root))?;
     run_internal("check-scenario-ids", || scenario_ids::run(root))?;
 
-    // ui/ lands with L-002; once package.json exists, lint and test are mandatory.
+    // ui/ lands with L-002; once package.json exists, typecheck, lint and test are mandatory.
+    // vitest strips types, so only tsc catches a catalogue that misses a key.
     if root.join("ui/package.json").is_file() {
         let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
+        run_step(
+            root,
+            "ui typecheck",
+            npm,
+            &["--prefix", "ui", "run", "typecheck"],
+        )?;
         run_step(root, "ui lint", npm, &["--prefix", "ui", "run", "lint"])?;
         run_step(root, "ui test", npm, &["--prefix", "ui", "run", "test"])?;
     } else {
-        println!("\n==> ui lint, ui test");
-        println!("!!!! skipped: ui/ not present (ui/package.json missing); ui lint and ui test did NOT run !!!!");
+        println!("\n==> ui typecheck, ui lint, ui test");
+        println!("!!!! skipped: ui/ not present (ui/package.json missing); ui typecheck, lint and test did NOT run !!!!");
     }
     println!("\nci: all steps passed");
     Ok(())
