@@ -244,11 +244,15 @@ pub struct Ticked {
     pub firing: Vec<Alarm>,
 }
 
-/// Prune, plan, tick, persist, in one store lock.
+/// Plan, prune, tick, persist, in one store lock.
 ///
-/// - Final alarms whose meeting ended (start + 10 min before `now`) are pruned first, so an alarm
-///   that expired in the last tick is still stored (and visible) until the next one.
 /// - `plan` drops non-final alarms of occurrences that are gone or ignored; they are deleted too.
+/// - The plan is written first, so every stored `start` follows the occurrence, and only then are
+///   final alarms whose meeting ended (new start + 10 min before `now`) pruned. Pruning on the old
+///   start would delete a Dismissed alarm of a meeting that moved later and was seen after the old
+///   window closed, and `plan` would then re-create it as Scheduled (S3.3, decision "Alarm behaviour").
+/// - The transitions are written after the prune, so an alarm that expired in this tick is still
+///   stored (and visible) until the next one.
 /// - Pause and quiet hours are `None`: no setting exists yet.
 pub fn plan_and_tick(
     db: &Db,
@@ -257,14 +261,25 @@ pub fn plan_and_tick(
     now: DateTime<Utc>,
 ) -> anyhow::Result<Ticked> {
     let store = pipeline::lock(db);
-    store.alarms().prune_before(&ts(now))?;
     let stored = stored_alarms(&store)?;
     let mut alarms = plan(occurrences, settings, &stored, now);
+    let planned: Vec<AlarmRow> = alarms.iter().map(|a| to_row(a, now)).collect();
+    store.alarms().upsert_all(&planned)?;
+    store.alarms().prune_before(&ts(now))?;
     let transitions = tick(&alarms, now, None, None);
     apply_transitions(&mut alarms, &transitions);
-    let rows: Vec<AlarmRow> = alarms.iter().map(|a| to_row(a, now)).collect();
-    store.alarms().upsert_all(&rows)?;
-    let keep: Vec<(String, String)> = rows
+    // Only the alarms that changed: a pruned row must not come back.
+    let changed: Vec<AlarmRow> = transitions
+        .iter()
+        .filter_map(|t| {
+            alarms
+                .iter()
+                .find(|a| a.occurrence == t.occurrence && a.kind == t.kind)
+        })
+        .map(|a| to_row(a, now))
+        .collect();
+    store.alarms().upsert_all(&changed)?;
+    let keep: Vec<(String, String)> = planned
         .iter()
         .map(|r| (r.occurrence_key.clone(), r.kind.clone()))
         .collect();

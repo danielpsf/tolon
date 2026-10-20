@@ -271,6 +271,44 @@ impl Rig {
     }
 }
 
+/// A daily series at 14:00 for two days, with its first instance moved to `moved_to` (`HHMMSS`).
+fn series(moved_to: Option<&str>) -> String {
+    let moved = moved_to
+        .map(|start| {
+            format!(
+                "BEGIN:VEVENT\r\nUID:series\r\nSUMMARY:Series\r\nRECURRENCE-ID:20261020T140000Z\r\nDTSTART:20261020T{start}Z\r\nDTEND:20261020T235900Z\r\nEND:VEVENT\r\n"
+            )
+        })
+        .unwrap_or_default();
+    format!(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:series\r\nSUMMARY:Series\r\nDTSTART:20261020T140000Z\r\nDTEND:20261020T145900Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n{moved}END:VCALENDAR\r\n"
+    )
+}
+
+impl Rig {
+    /// A rig over a raw feed instead of the `Seed` list.
+    fn from_feed(feed: &str, now: DateTime<Utc>) -> anyhow::Result<Self> {
+        let rig = Self::new(&[], now)?;
+        rig.replace_feed(feed)?;
+        Ok(rig)
+    }
+
+    /// What the calendar server sends next: the stored events follow the feed.
+    fn replace_feed(&self, feed: &str) -> TestResult {
+        let store = pipeline::lock(&self.db);
+        let cal = store
+            .calendars()
+            .list()?
+            .pop()
+            .ok_or_else(|| anyhow!("no calendar"))?;
+        let parsed = parse_ics(feed, &CalendarId(cal.id.clone()), &ParseOptions::default());
+        store
+            .events()
+            .replace_for_calendar(&cal.id, &feed_events(parsed.events)?, "t2")?;
+        Ok(())
+    }
+}
+
 const STANDUP: Seed<'static> = ("standup", "Standup", "140000", "");
 const MEET: &str = "https://meet.google.com/abc-defg-hij";
 const MEET_LOCATION: &str = "LOCATION:https://meet.google.com/abc-defg-hij\r\n";
@@ -350,6 +388,61 @@ async fn s3_3_dismiss_survives_a_restart() -> TestResult {
     );
     restarted.host.set_now(at(14, 0, 15));
     assert_eq!(restarted.step(&rig.db, true).await.fired, 0);
+    Ok(())
+}
+
+/// An instance at 14:00 is handled at 13:58, then moves to 14:30; Tolon sees the move at `seen`.
+/// The handled alarm must not come back (S3.3, decision "Alarm behaviour": only Expired re-arms).
+async fn moved_meeting_stays_quiet(act: Act, seen: DateTime<Utc>, state: &str) -> TestResult {
+    let rig = Rig::from_feed(&series(None), at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, act).await?;
+    assert_eq!(rig.state_of("series", "lead")?.as_deref(), Some(state));
+    assert_eq!(rig.host().count("open"), 1);
+
+    rig.replace_feed(&series(Some("143000")))?;
+    rig.tick_at(seen).await;
+    assert_eq!(
+        rig.state_of("series", "lead")?.as_deref(),
+        Some(state),
+        "the move must not re-arm it"
+    );
+    // The new alarm time, 14:28, comes and goes without an interrupt.
+    assert_eq!(rig.tick_at(at(14, 28, 5)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(14, 28, 20)).await.fired, 0);
+    assert_eq!(rig.host().count("open"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn s3_3_a_dismissed_alarm_stays_dismissed_when_a_move_is_seen_after_the_old_window(
+) -> TestResult {
+    // 14:11 is past the old start + 10 min: the pruning must not read the old start.
+    moved_meeting_stays_quiet(Act::Dismiss, at(14, 11, 0), "dismissed").await
+}
+
+#[tokio::test]
+async fn s3_3_a_joined_alarm_stays_joined_when_a_move_is_seen_after_the_old_window() -> TestResult {
+    moved_meeting_stays_quiet(Act::AlreadyThere, at(14, 11, 0), "joined").await
+}
+
+#[tokio::test]
+async fn s3_3_a_dismissed_alarm_stays_dismissed_when_a_move_is_seen_before_the_old_window_closes(
+) -> TestResult {
+    moved_meeting_stays_quiet(Act::Dismiss, at(14, 5, 0), "dismissed").await
+}
+
+#[tokio::test]
+async fn a_handled_alarm_of_a_finished_meeting_is_pruned() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Dismiss).await?;
+    rig.tick_at(at(14, 9, 59)).await;
+    assert_eq!(rig.states()?.len(), 1, "kept until start + 10 min");
+    rig.tick_at(at(14, 10, 1)).await;
+    assert!(rig.states()?.is_empty(), "{:?}", rig.states()?);
     Ok(())
 }
 
