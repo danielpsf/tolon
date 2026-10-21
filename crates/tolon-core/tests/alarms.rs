@@ -152,6 +152,28 @@ fn ac7_2_panel_snooze_comes_later_than_the_alarm_was_due() -> TestResult {
     Ok(())
 }
 
+/// AC7.2: snoozing ahead again and again runs into the meeting's window (start 14:00, closes
+/// 14:10). The snooze that would end at or after 14:10 expires the alarm instead.
+#[test]
+fn ac7_2_repeated_panel_snoozes_that_pass_the_window_expire_the_alarm() -> TestResult {
+    let mut a = alarm(AlarmState::Scheduled)?;
+    for until in [at(14, 3)?, at(14, 8)?] {
+        assert!(snooze_later(&mut a, 5, at(13, 50)?));
+        assert_eq!(a.state, AlarmState::Snoozed { until });
+    }
+    assert!(snooze_later(&mut a, 5, at(13, 50)?));
+    assert_eq!(a.state, AlarmState::Expired, "14:13 is past 14:10");
+    assert!(
+        !snooze_later(&mut a, 5, at(13, 50)?),
+        "and it stays expired"
+    );
+    // Landing exactly on 14:10 is past it too: the tick expires at 14:10.
+    let mut edge = alarm(AlarmState::Snoozed { until: at(14, 5)? })?;
+    assert!(snooze_later(&mut edge, 5, at(13, 50)?));
+    assert_eq!(edge.state, AlarmState::Expired);
+    Ok(())
+}
+
 fn verdicts(rules: &IgnoreRules, titles: &[(&str, u32)]) -> TestResult<Vec<Verdict>> {
     let start = at(14, 0)?;
     let input = titles.iter().map(|(t, p)| occ(t, start, *p)).collect();
