@@ -339,6 +339,37 @@ fn build(props: &[Property], calendar: &CalendarId) -> Option<Raw> {
     })
 }
 
+/// RFC 5545 recurrence lines outside a feed (Google's `recurrence` field: `RRULE:...`,
+/// `EXDATE;TZID=...:...`), read as `parse_ics` reads them in a VEVENT: EXDATE values parse alike
+/// and the RRULE is validated against `start`. `None` when the RRULE is invalid.
+// shortcut: RDATE is ignored, as in `parse_ics`; read it when a feed needs it.
+pub fn parse_recurrence(
+    lines: &[String],
+    start: &EventTime,
+) -> Option<(Option<String>, Vec<EventTime>)> {
+    let text = lines.join("\r\n");
+    let mut rrule = None;
+    let mut exdates = Vec::new();
+    for item in PropertyParser::from_reader(text.as_bytes()) {
+        let Ok(p) = item else { continue };
+        match p.name.to_ascii_uppercase().as_str() {
+            "RRULE" => rrule = p.value.clone(),
+            "EXDATE" => exdates.extend(
+                p.value
+                    .as_deref()
+                    .unwrap_or("")
+                    .split(',')
+                    .filter_map(|v| parse_value(v, &p)),
+            ),
+            _ => {}
+        }
+    }
+    if let Some(rule) = &rrule {
+        rrule_set(rule, start, &exdates, Tz::UTC, None)?;
+    }
+    Some((rrule, exdates))
+}
+
 fn compact(t: &EventTime) -> String {
     match t {
         EventTime::Date { date } => date.format("%Y%m%d").to_string(),
