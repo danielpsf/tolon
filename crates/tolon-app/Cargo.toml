@@ -44,6 +44,10 @@ semver = "1"
 # installing. No `zip` feature: zip 4 has open advisories (RUSTSEC-2026-0367 to -0369), and Tauri 2
 # signs the installers themselves (.app.tar.gz, -setup.exe, .msi, .AppImage, .deb), so no zip is read.
 tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
+# A second launch focuses the running Tolon and exits (decision 2026-10-22): the way back when the
+# tray icon is hidden. Tauri's own plugin; on Linux it pulls zbus (already in the tree), on Windows
+# windows-sys (already in the tree).
+tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

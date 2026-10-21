@@ -113,6 +113,13 @@ fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
         .manage(interrupt::InterruptState::default())
         .manage(updater::UpdaterState::default())
+        // First of the plugins, so a second launch hands over before any other setup runs. That
+        // launch exits, and the running Tolon shows its settings window: the way back when the
+        // tray icon is hidden (decision 2026-10-22). Windows and Linux; on macOS it also covers a
+        // second copy of the program, while opening the bundle again arrives as `RunEvent::Reopen`.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_settings(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         // Shows the F4.5 fallback; no webview permission grants it (capabilities/*.json).
         .plugin(tauri_plugin_notification::init())
@@ -199,6 +206,13 @@ fn main() -> anyhow::Result<()> {
         .on_window_event(on_window_event)
         .build(tauri::generate_context!())?
         .run(|app, event| {
+            // Opening Tolon again from Finder, Spotlight or `open` while it runs (decision
+            // 2026-10-22). macOS only: the event exists there alone.
+            tolon_platform::macos_only! {
+                if let RunEvent::Reopen { .. } = event {
+                    tray::show_settings(app);
+                }
+            }
             if keeps_running(&event) {
                 if let RunEvent::ExitRequested { api, .. } = event {
                     api.prevent_exit();
@@ -273,6 +287,51 @@ mod tests {
         let stop = quit.find("scheduler.shutdown(").unwrap_or(usize::MAX);
         let exit = quit.find("app.exit(0)").unwrap_or(0);
         assert!(stop < exit, "Quit stops the scheduler before it exits");
+    }
+
+    /// Decision 2026-10-22: opening Tolon again from Finder, Spotlight or `open` while it runs
+    /// (macOS `RunEvent::Reopen`) shows the settings window, before the exit handling.
+    #[test]
+    fn a_reopen_shows_the_settings_window() {
+        let source = include_str!("main.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let run = shipped
+            .split(".run(|app, event| {")
+            .nth(1)
+            .unwrap_or_default();
+        let macos = run
+            .find("tolon_platform::macos_only! {")
+            .unwrap_or(usize::MAX);
+        let reopen = run
+            .find("if let RunEvent::Reopen { .. } = event {")
+            .unwrap_or(usize::MAX);
+        let show = run.find("tray::show_settings(app);").unwrap_or(usize::MAX);
+        let exit = run.find("if keeps_running(&event)").unwrap_or(0);
+        assert!(
+            macos < reopen && reopen < show && show < exit,
+            "a reopen shows settings, ahead of the exit handling"
+        );
+    }
+
+    /// Decision 2026-10-22: a second launch hands over to the running Tolon, which shows its
+    /// settings window. The plugin is registered first, as its docs require, so the second launch
+    /// exits before any other plugin or the store starts.
+    #[test]
+    fn a_second_launch_shows_the_running_settings_window() {
+        let source = include_str!("main.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let first = shipped.find(".plugin(").unwrap_or(usize::MAX);
+        let single = shipped
+            .find(".plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {")
+            .unwrap_or(0);
+        assert_eq!(
+            first, single,
+            "the single-instance plugin is the first plugin"
+        );
+        let callback = shipped[single..].split("}))").next().unwrap_or_default();
+        assert!(callback.contains("tray::show_settings(app);"));
+        let manifest = include_str!("../Cargo.toml");
+        assert!(manifest.contains("\ntauri-plugin-single-instance = \"2\"\n"));
     }
 
     #[test]
