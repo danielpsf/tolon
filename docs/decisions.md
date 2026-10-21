@@ -243,3 +243,9 @@ The orchestrator's QA pass on a 1728x1117 MacBook found that a full menu bar can
 - (overnight, L-044 review) The settings page gets 760 points of height. On macOS the title bar sits inside the window's inner size, so the fitting adds the covered height (`Platform::title_bar_overlap`, 0 on Windows and Linux) to the size and the minimum, still capped by the work area; on a small screen the page gets less, never a window off screen.
 - (overnight, L-044 review) `macos_only!` may appear only in `crates/tolon-app/src/main.rs`; `cargo xtask layers` fails anywhere else.
 - (overnight, L-044 review) The e2e `startApp` retries a launch once, because a second copy started while the first is still closing hands over to it and exits. A retry is logged as a CI warning so a flaky launch stays visible.
+
+## 2026-10-22 Reminder controls keep a fixed size (QA on a MacBook)
+The reminder scales every size with the screen (`--tl-u`, 1/800 of the shorter edge), which matches the 1280x800 mockup there but gives 89-point buttons with 26-point labels on a 1728x1117 MacBook. Daniel judged them far too big. This deviates from the mockup's sizes on large screens, with his approval.
+- The title, the page padding and the gaps between blocks keep scaling with the screen.
+- The controls and small text do not: buttons about 52 points tall, labels 16 points (17 and semibold on the primary button), and the clock, countdown, details, key hint and consequence line at fixed Swiss Moss text sizes. On a screen smaller than 1280x800 they may shrink with the screen, never grow past these sizes.
+- The bell keeps its size relative to the countdown. Colours, the focus ring, the cut join host and contrast do not change.
