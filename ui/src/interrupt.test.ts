@@ -120,7 +120,7 @@ describe("primary button (AC5.2)", () => {
   });
 
   it("AC4.4 the hint names Space only while Space means 'I am already there'", () => {
-    expect(hintText(en, "join", true)).toBe("Esc snoozes. Enter joins. D dismisses. Space: I am already there.");
+    expect(hintText(en, "join", true)).toBe("Esc snoozes. Enter joins. D dismisses. Space marks you as already there.");
     expect(hintText(en, "join", false)).toBe("Esc snoozes. Enter joins. D dismisses.");
     for (const locale of LOCALES) {
       const c = createCopy(locale);
@@ -130,12 +130,12 @@ describe("primary button (AC5.2)", () => {
   });
 
   it("joins the hint sentences per locale: a space, but nothing after 。 in zh-CN and ja", () => {
-    expect(hintText(createCopy("zh-CN"), "join")).toBe("Esc：稍后提醒。Enter：加入。D：关闭。空格键：我已经在会上了。");
+    expect(hintText(createCopy("zh-CN"), "join")).toBe("Esc：稍后提醒。Enter：加入。D：关闭。按空格键标记你已在会上。");
     expect(hintText(createCopy("ja"), "open_event")).toBe(
-      "Esc：再通知。Enter：予定を開く。D：閉じる。スペースキー：すでに参加しています。",
+      "Esc：再通知。Enter：予定を開く。D：閉じる。スペースキーで参加済みにします。",
     );
     expect(hintText(createCopy("de"), "join")).toBe(
-      "Esc: schlummern. Enter: teilnehmen. D: verwerfen. Leertaste: Ich bin schon dabei.",
+      "Esc: schlummern. Enter: teilnehmen. D: verwerfen. Leertaste markiert dich als schon dabei.",
     );
     for (const locale of LOCALES) {
       for (const primary of ["join", "open_event", "already_there"] as const) {

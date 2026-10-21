@@ -146,7 +146,7 @@ export const he: Messages = {
     hintJoin: "Esc לדחייה, Enter להצטרפות, D לסגירה.",
     hintEvent: "Esc לדחייה, Enter לפתיחת האירוע, D לסגירה.",
     hintAlreadyThere: "Esc לדחייה, Enter לסימון שאני כבר בפגישה, D לסגירה.",
-    hintSpace: "רווח לסימון שאני כבר בפגישה.",
+    hintSpace: "רווח מסמן שכבר נמצאים בפגישה.",
     timeRange: (start, end) => `${start} עד ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` ב-${iso(provider)}` : ""}${

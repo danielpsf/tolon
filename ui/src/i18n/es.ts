@@ -126,7 +126,7 @@ export const es: Messages = {
     hintJoin: "Esc: posponer. Enter: unirse. D: descartar.",
     hintEvent: "Esc: posponer. Enter: abrir el evento. D: descartar.",
     hintAlreadyThere: "Esc: posponer. Enter: ya estoy ahí. D: descartar.",
-    hintSpace: "Espacio: ya estoy ahí.",
+    hintSpace: "Espacio indica que ya estás ahí.",
     timeRange: (start, end) => `${start} a ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` en ${provider}` : ""}${

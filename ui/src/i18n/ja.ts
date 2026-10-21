@@ -125,7 +125,7 @@ export const ja: Messages = {
     hintJoin: "Esc：再通知。Enter：参加。D：閉じる。",
     hintEvent: "Esc：再通知。Enter：予定を開く。D：閉じる。",
     hintAlreadyThere: "Esc：再通知。Enter：すでに参加しています。D：閉じる。",
-    hintSpace: "スペースキー：すでに参加しています。",
+    hintSpace: "スペースキーで参加済みにします。",
     timeRange: (start, end) => `${start}〜${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? `、${provider}` : ""}${people > 0 ? `、参加者 ${number.format(people)} 人` : ""}。`,

@@ -126,7 +126,7 @@ export const de: Messages = {
     hintJoin: "Esc: schlummern. Enter: teilnehmen. D: verwerfen.",
     hintEvent: "Esc: schlummern. Enter: Termin öffnen. D: verwerfen.",
     hintAlreadyThere: "Esc: schlummern. Enter: Ich bin schon dabei. D: verwerfen.",
-    hintSpace: "Leertaste: Ich bin schon dabei.",
+    hintSpace: "Leertaste markiert dich als schon dabei.",
     timeRange: (start, end) => `${start} bis ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` über ${provider}` : ""}${

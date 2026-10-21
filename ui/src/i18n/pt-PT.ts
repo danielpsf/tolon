@@ -126,7 +126,7 @@ export const ptPT: Messages = {
     hintJoin: "Esc adia. Enter entra na chamada. D dispensa.",
     hintEvent: "Esc adia. Enter abre o evento. D dispensa.",
     hintAlreadyThere: "Esc adia. Enter: já estou lá. D dispensa.",
-    hintSpace: "Espaço: já estou lá.",
+    hintSpace: "Espaço marca que já está lá.",
     timeRange: (start, end) => `${start} às ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` em ${provider}` : ""}${

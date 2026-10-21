@@ -125,7 +125,7 @@ export const zhCN: Messages = {
     hintJoin: "Esc：稍后提醒。Enter：加入。D：关闭。",
     hintEvent: "Esc：稍后提醒。Enter：打开活动。D：关闭。",
     hintAlreadyThere: "Esc：稍后提醒。Enter：我已经在会上了。D：关闭。",
-    hintSpace: "空格键：我已经在会上了。",
+    hintSpace: "按空格键标记你已在会上。",
     timeRange: (start, end) => `${start} 至 ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? `，${provider}` : ""}${people > 0 ? `，共 ${number.format(people)} 人` : ""}。`,

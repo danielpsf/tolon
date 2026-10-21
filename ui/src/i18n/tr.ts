@@ -125,7 +125,7 @@ export const tr: Messages = {
     hintJoin: "Esc: ertele. Enter: katıl. D: kapat.",
     hintEvent: "Esc: ertele. Enter: etkinliği aç. D: kapat.",
     hintAlreadyThere: "Esc: ertele. Enter: zaten oradayım. D: kapat.",
-    hintSpace: "Boşluk: zaten oradayım.",
+    hintSpace: "Boşluk, zaten orada olduğunu işaretler.",
     timeRange: (start, end) => `${start}–${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? `, ${provider} üzerinde` : ""}${people > 0 ? `, ${number.format(people)} kişiyle` : ""}.`,

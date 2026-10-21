@@ -153,7 +153,7 @@ export const ar: Messages = {
     hintJoin: "Esc للتأجيل، و Enter للانضمام، و D للإغلاق.",
     hintEvent: "Esc للتأجيل، و Enter لفتح الحدث، و D للإغلاق.",
     hintAlreadyThere: "Esc للتأجيل، و Enter لتأكيد أنك في الاجتماع، و D للإغلاق.",
-    hintSpace: "مفتاح المسافة لتأكيد أنك في الاجتماع.",
+    hintSpace: "مفتاح المسافة يسجّل أنك في الاجتماع بالفعل.",
     timeRange: (start, end) => `من ${start} إلى ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` عبر ${iso(provider)}` : ""}${

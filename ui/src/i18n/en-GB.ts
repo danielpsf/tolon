@@ -126,7 +126,7 @@ export const enGB: Messages = {
     hintJoin: "Esc snoozes. Enter joins. D dismisses.",
     hintEvent: "Esc snoozes. Enter opens the event. D dismisses.",
     hintAlreadyThere: "Esc snoozes. Enter: I am already there. D dismisses.",
-    hintSpace: "Space: I am already there.",
+    hintSpace: "Space marks you as already there.",
     timeRange: (start, end) => `${start} to ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? ` on ${provider}` : ""}${

@@ -126,7 +126,7 @@ export const hi: Messages = {
     hintJoin: "Esc: स्नूज़। Enter: शामिल हों। D: खारिज करें।",
     hintEvent: "Esc: स्नूज़। Enter: इवेंट खोलें। D: खारिज करें।",
     hintAlreadyThere: "Esc: स्नूज़। Enter: मैं पहले से वहां हूं। D: खारिज करें।",
-    hintSpace: "Space: मैं पहले से वहां हूं।",
+    hintSpace: "Space से दर्ज होता है कि आप पहले से वहां हैं।",
     timeRange: (start, end) => `${start} से ${end}`,
     details: (range, provider, people) =>
       `${range}${provider ? `, ${provider} पर` : ""}${

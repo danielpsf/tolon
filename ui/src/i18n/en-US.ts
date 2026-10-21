@@ -126,7 +126,7 @@ export const enUS = {
     hintJoin: "Esc snoozes. Enter joins. D dismisses.",
     hintEvent: "Esc snoozes. Enter opens the event. D dismisses.",
     hintAlreadyThere: "Esc snoozes. Enter: I am already there. D dismisses.",
-    hintSpace: "Space: I am already there.",
+    hintSpace: "Space marks you as already there.",
     timeRange: (start: string, end: string) => `${start} to ${end}`,
     details: (range: string, provider: string | null, people: number) =>
       `${range}${provider ? ` on ${provider}` : ""}${
