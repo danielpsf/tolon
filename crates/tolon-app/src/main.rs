@@ -10,6 +10,7 @@ mod refresh;
 mod scheduler;
 mod settings;
 mod tray;
+mod updater;
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -65,6 +66,8 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
     }
     tauri::async_runtime::spawn(refresh::run(app.clone()));
     tauri::async_runtime::spawn(scheduler::run(app.clone()));
+    // F11: on launch, then daily; a debug build returns at once (release builds only).
+    tauri::async_runtime::spawn(updater::run(app.clone()));
     Ok(())
 }
 
@@ -109,9 +112,12 @@ fn main() -> anyhow::Result<()> {
     // (Cmd+C, Cmd+V, Cmd+A) that the settings window's text fields need on macOS (L-042).
     tauri::Builder::default()
         .manage(interrupt::InterruptState::default())
+        .manage(updater::UpdaterState::default())
         .plugin(tauri_plugin_dialog::init())
         // Shows the F4.5 fallback; no webview permission grants it (capabilities/*.json).
         .plugin(tauri_plugin_notification::init())
+        // F11: used from Rust only (`updater.rs`); no capability grants the webview its commands.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::calendars_list,
             commands::calendars_add_ics,
@@ -141,8 +147,15 @@ fn main() -> anyhow::Result<()> {
             commands::app_tray_place,
             commands::tray_tooltip,
             commands::notify_copy_set,
+            commands::update_status,
+            commands::update_check_now,
+            commands::update_install,
+            commands::update_skip,
+            commands::update_later,
             #[cfg(feature = "e2e-loopback")]
             commands::alarms_e2e_state,
+            #[cfg(feature = "e2e-loopback")]
+            commands::update_e2e_endpoint,
         ])
         .setup(|app| {
             // Before any window opens: on macOS the Accessory activation policy lets the interrupt

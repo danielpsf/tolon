@@ -17,6 +17,7 @@ use crate::pipeline::{self, CalendarDto, Db, ListedDto};
 use crate::scheduler::{Act, Scheduler, TauriHost};
 use crate::settings::{self, SettingsDto, SoundChoice};
 use crate::tray::{self, PANEL};
+use crate::updater::{self, UpdateDto};
 
 /// The scheduler of the running app, managed next to `AppState`.
 pub type AppScheduler = Scheduler<TauriHost>;
@@ -584,6 +585,87 @@ pub async fn notify_copy_set(
     Ok(())
 }
 
+// ---- Updates (F11, AC11.1) ---------------------------------------------------------------------
+// Never a takeover: the About page holds the prompt, the panel shows one line. Only the settings
+// window may install, skip, put off or check; the panel only reads.
+
+/// The prompt: the version on offer (none when skipped or put off) and whether it is installing.
+#[tauri::command]
+pub async fn update_status(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<UpdateDto, CommandError> {
+    main_or_panel(window.label())?;
+    updater::current(&app).map_err(|e| command_error(&e))
+}
+
+/// The About page's "Check for updates". A failure is `update_check`; the answer is the prompt.
+#[tauri::command]
+pub async fn update_check_now(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<UpdateDto, CommandError> {
+    main_only(window.label())?;
+    updater::check(&app)
+        .await
+        .and_then(|_| updater::current(&app))
+        .map_err(|e| command_error(&e))
+}
+
+/// "Install and restart". The plugin verifies the signature first; on success Tolon restarts and
+/// this never answers. A failure is `update_install` and Tolon keeps running.
+#[tauri::command]
+pub async fn update_install(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    updater::install(&app).await.map_err(|e| command_error(&e))
+}
+
+/// "Skip this version": remembered across restarts; a newer version prompts again.
+#[tauri::command]
+pub async fn update_skip(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<UpdateDto, CommandError> {
+    main_only(window.label())?;
+    updater::skip(&app).map_err(|e| command_error(&e))
+}
+
+/// "Later": no prompt until the next check (the next launch, or a day later).
+#[tauri::command]
+pub async fn update_later(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<UpdateDto, CommandError> {
+    main_only(window.label())?;
+    updater::later(&app).map_err(|e| command_error(&e))
+}
+
+/// The updater's endpoint for the WebDriver tests: a `latest.json` on 127.0.0.1. Only in the
+/// end-to-end build, a debug build whose feature no release can have; without it a debug build
+/// never checks for updates.
+#[cfg(feature = "e2e-loopback")]
+#[tauri::command]
+pub async fn update_e2e_endpoint(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    url: String,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    let refused = || command_error(&AppError::INVALID_URL.into());
+    let url = tauri::Url::parse(&url).map_err(|_| refused())?;
+    if url.scheme() != "http" || url.host_str() != Some("127.0.0.1") {
+        return Err(refused());
+    }
+    let state = app
+        .try_state::<updater::UpdaterState>()
+        .ok_or_else(|| command_error(&AppError::NOT_READY.into()))?;
+    state.set_endpoint(url);
+    Ok(())
+}
+
 /// The alarm rows, for the WebDriver tests. It exists only in the end-to-end build, whose feature no
 /// release build can have (decision "End-to-end fetch seam"). Keys and states, never titles.
 #[cfg(feature = "e2e-loopback")]
@@ -697,6 +779,12 @@ mod tests {
         ("app_tray_place", "main_only"),
         ("tray_tooltip", "main_only"),
         ("notify_copy_set", "main_only"),
+        ("update_status", "main_or_panel"),
+        ("update_check_now", "main_only"),
+        ("update_install", "main_only"),
+        ("update_skip", "main_only"),
+        ("update_later", "main_only"),
+        ("update_e2e_endpoint", "main_only"),
     ];
 
     /// Registered commands with no window check, each with its reason.
@@ -761,11 +849,16 @@ mod tests {
         // The unchecked one is compiled only with a feature; `check-release-features` pins which
         // one and keeps it out of every release build.
         let lines: Vec<&str> = handler.lines().map(str::trim).collect();
-        let at = lines
-            .iter()
-            .position(|l| l.starts_with("commands::alarms_e2e_state"))
-            .unwrap_or(0);
-        assert!(at > 0 && lines[at - 1].starts_with("#[cfg(feature = "));
+        for gated in ["alarms_e2e_state", "update_e2e_endpoint"] {
+            let at = lines
+                .iter()
+                .position(|l| l.starts_with(&format!("commands::{gated}")))
+                .unwrap_or(0);
+            assert!(
+                at > 0 && lines[at - 1].starts_with("#[cfg(feature = "),
+                "{gated} is registered only with the feature"
+            );
+        }
     }
 
     /// The panel gets none of the interrupt's actions; interrupts none of the panel's.

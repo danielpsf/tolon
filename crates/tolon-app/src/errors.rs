@@ -22,6 +22,11 @@ impl AppError {
     /// The OS refused to add or remove the login item (AC9.4), such as macOS for a build that
     /// is not an installed app bundle.
     pub const LOGIN_ITEM: Self = Self("login_item");
+    /// A check for updates the person asked for failed (offline, GitHub unreachable). The
+    /// background check fails silently instead (AC11.1).
+    pub const UPDATE_CHECK: Self = Self("update_check");
+    /// The update did not download, verify or install; Tolon keeps running the old version.
+    pub const UPDATE_INSTALL: Self = Self("update_install");
 }
 
 impl fmt::Display for AppError {
