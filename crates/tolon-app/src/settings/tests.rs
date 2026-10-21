@@ -39,6 +39,7 @@ fn defaults() -> SettingsDto {
         },
         appearance: Appearance::Auto,
         interrupt_color: InterruptColor::Theme,
+        style: Style::SwissMoss,
         locale: None,
         start_at_login: false,
         start_at_login_status: None,
@@ -61,7 +62,8 @@ fn the_dto_serialises_with_the_contract_field_names() -> TestResult {
             "quiet": { "enabled": false, "start": "18:00", "end": "09:00", "weekends": true },
             "ignore": { "all_day": true, "declined": true, "cancelled": true, "no_attendees": false,
                         "keywords": ["Focus", "Lunch", "OOO"] },
-            "appearance": "auto", "interrupt_color": "theme", "locale": null,
+            "appearance": "auto", "interrupt_color": "theme", "style": "swiss-moss",
+            "locale": null,
             "start_at_login": false,
             "start_at_login_status": null
         })
@@ -75,7 +77,8 @@ fn everything() -> Value {
         "quiet": { "enabled": true, "start": "22:30", "end": "07:15", "weekends": false },
         "ignore": { "all_day": false, "declined": false, "cancelled": false, "no_attendees": true,
                     "keywords": [" Standup ", "", "1:1"] },
-        "appearance": "dark", "interrupt_color": "moss-deep", "locale": "pt-BR",
+        "appearance": "dark", "interrupt_color": "moss-deep", "style": "peek",
+        "locale": "pt-BR",
         "start_at_login": true
     })
 }
@@ -101,6 +104,7 @@ fn everything_dto() -> SettingsDto {
         },
         appearance: Appearance::Dark,
         interrupt_color: InterruptColor::MossDeep,
+        style: Style::Peek,
         locale: Some("pt-BR".into()),
         start_at_login: true,
         start_at_login_status: None,
@@ -527,5 +531,53 @@ fn interrupt_color_is_one_of_the_eight_pairs() -> TestResult {
     // A null plain field means "unchanged" (decision "Quiet hours and settings details").
     let s = apply(&db, &json!({ "interrupt_color": null }))?;
     assert_eq!(s.interrupt_color, InterruptColor::Danger);
+    Ok(())
+}
+
+/// L-050: the style is Swiss Moss or Peek, stored under `style` in kebab case; anything else is refused by
+/// name and saves nothing, and an unreadable stored value reads as Swiss Moss.
+#[test]
+fn style_is_swiss_moss_or_peek() -> TestResult {
+    let db = db()?;
+    assert_eq!(get(&db)?.style, Style::SwissMoss);
+    for (name, style) in [
+        ("peek", Style::Peek),
+        ("swiss-moss", Style::SwissMoss),
+        ("peek", Style::Peek),
+    ] {
+        let s = apply(&db, &json!({ "style": name }))?;
+        assert_eq!(s.style, style);
+        assert_eq!(
+            pipeline::lock(&db).settings().get(STYLE)?,
+            Some(json!(name))
+        );
+    }
+    for bad in [
+        json!("Peek"),
+        json!("swiss_moss"),
+        json!("swissMoss"),
+        json!(""),
+        json!(1),
+        json!({ "name": "peek" }),
+    ] {
+        let patch = json!({ "lead_minutes": 9, "style": bad });
+        assert_eq!(refused(&db, patch), Some("invalid:style"), "{bad}");
+    }
+    let s = get(&db)?;
+    assert_eq!(
+        (s.style, s.lead_minutes),
+        (Style::Peek, 2),
+        "a refused style saves nothing"
+    );
+    // A null plain field means "unchanged".
+    assert_eq!(apply(&db, &json!({ "style": null }))?.style, Style::Peek);
+    pipeline::lock(&db)
+        .settings()
+        .set(STYLE, &json!("comic-sans"))?;
+    assert_eq!(
+        get(&db)?.style,
+        Style::SwissMoss,
+        "an unknown stored style reads as the default"
+    );
     Ok(())
 }

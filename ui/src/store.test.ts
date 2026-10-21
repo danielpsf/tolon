@@ -3,14 +3,14 @@ import { api, onSettingsChanged } from "./api";
 import type { SettingsDto } from "./api-types";
 import { copy } from "./copy";
 import { resetSettings, startSettingsFeed, useSettings, withPatch } from "./store";
-import { applyAppearance } from "./theme";
+import { applyAppearance, applyStyle } from "./theme";
 
 vi.mock("./api", async (original) => ({
   ...(await original<typeof import("./api")>()),
   api: { settingsGet: vi.fn(), settingsSet: vi.fn(), soundPreview: vi.fn() },
   onSettingsChanged: vi.fn(async () => () => undefined),
 }));
-vi.mock("./theme", () => ({ applyAppearance: vi.fn() }));
+vi.mock("./theme", () => ({ applyAppearance: vi.fn(), applyStyle: vi.fn() }));
 
 const stored: SettingsDto = {
   lead_minutes: 2,
@@ -21,6 +21,7 @@ const stored: SettingsDto = {
   ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, keywords: ["Focus", "Lunch", "OOO"] },
   appearance: "auto",
   interrupt_color: "theme",
+  style: "swiss-moss",
   locale: null,
   start_at_login: false,
   start_at_login_status: null,
@@ -156,11 +157,14 @@ describe("the settings feed", () => {
     await startSettingsFeed(null);
     const handler = vi.mocked(onSettingsChanged).mock.calls[0][0];
     expect(applyAppearance).toHaveBeenLastCalledWith("auto");
+    expect(applyStyle).toHaveBeenLastCalledWith("swiss-moss");
 
-    vi.mocked(api.settingsGet).mockResolvedValueOnce({ ...stored, appearance: "dark", locale: "pt-PT" });
+    vi.mocked(api.settingsGet).mockResolvedValueOnce({ ...stored, appearance: "dark", style: "peek", locale: "pt-PT" });
     handler();
     await vi.waitFor(() => expect(shown()?.locale).toBe("pt-PT"));
     expect(applyAppearance).toHaveBeenLastCalledWith("dark");
+    // L-050: the style reaches this window as data-style, like the theme.
+    expect(applyStyle).toHaveBeenLastCalledWith("peek");
     expect(copy().locale).toBe("pt-PT");
 
     vi.mocked(api.settingsGet).mockResolvedValueOnce({ ...stored, appearance: "dark", locale: null });

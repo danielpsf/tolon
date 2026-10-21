@@ -108,6 +108,10 @@ export type Appearance = (typeof APPEARANCES)[number];
 export const INTERRUPT_COLORS = ["theme", "moss", "moss-deep", "ink", "paper", "info", "signal", "danger"] as const;
 export type InterruptColor = (typeof INTERRUPT_COLORS)[number];
 
+/** The look of every window (L-050, decision "The poll picks Peek"): `data-style` on <html>. */
+export const STYLES = ["swiss-moss", "peek"] as const;
+export type Style = (typeof STYLES)[number];
+
 export interface QuietHoursDto {
   enabled: boolean;
   /** "HH:MM", local time. */
@@ -136,6 +140,7 @@ export interface SettingsDto {
   ignore: IgnoreDto;
   appearance: Appearance;
   interrupt_color: InterruptColor;
+  style: Style;
   /** A shipped catalogue, or null to follow the system. */
   locale: string | null;
   /** On only when the OS will start Tolon (AC9.4); the settings window reads it from the OS. */
