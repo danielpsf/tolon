@@ -24,6 +24,7 @@ import {
 import { colorAttr, PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
 import { useSettings } from "../store";
 import { errorText } from "../view";
+import { PeekScene, peekColor } from "./PeekScene";
 
 /** The current time, ticking every second (AC4.7). */
 function useNow(): number {
@@ -72,29 +73,33 @@ export function InterruptPage() {
   const screen = new URLSearchParams(window.location.search).get("screen");
   // The reminder colour (L-043) from `settings_get`, and live from `settings:changed` while it is open.
   const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
+  // Peek (L-050) keeps the page in the window's appearance and pins only its hill and Join.
+  const peek = useSettings((s) => s.settings?.style) === "peek";
   const { interrupt: t } = copy().t;
   const first = alarm?.meetings[0];
   if (!alarm || !first)
     return (
-      <main className="tl-int" aria-label={t.region} data-screen={screen} data-color={color} data-tokens={tokensFor(color)}>
+      <main className="tl-int" aria-label={t.region} data-screen={screen} data-color={color} data-tokens={peek ? undefined : tokensFor(color)}>
         <style>{PREVIEW_TOKENS}</style>
       </main>
     );
   // Keyed by the alarm's number, not its meeting: the window is reused, and a snoozed meeting that fires again has the same key.
   // An update of the alarm on screen keeps the number, so the person's focus stays where it is.
-  return <InterruptView key={shown} alarm={alarm} first={first} screen={screen} color={color} />;
+  return <InterruptView key={shown} alarm={alarm} first={first} screen={screen} color={color} peek={peek} />;
 }
 
-function InterruptView({
+export function InterruptView({
   alarm,
   first,
   screen,
   color,
+  peek,
 }: {
   alarm: AlarmShowDto;
   first: MeetingDto;
   screen: string | null;
   color: InterruptColor;
+  peek: boolean;
 }) {
   const c = copy();
   const { interrupt: t } = c.t;
@@ -196,6 +201,8 @@ function InterruptView({
         type="button"
         className={`sm-btn tl-primary ${size}`}
         data-action={primaryAction(m.join)}
+        data-color={peek ? peekColor(color) : undefined}
+        data-tokens={peek ? "light" : undefined}
         onClick={() => void run(primaryAction(m.join), m)}
       >
         {/* One flex item: sm-btn's 8 px gap must not open between the words and the host. */}
@@ -209,6 +216,12 @@ function InterruptView({
           )}
           {after}
         </span>
+        {/* Peek's key chip: the key hint below says the same, so screen readers skip it. */}
+        {peek && size === "xl" && (
+          <kbd className="tl-peek-key" aria-hidden="true">
+            Enter
+          </kbd>
+        )}
       </button>
     );
   };
@@ -226,7 +239,7 @@ function InterruptView({
       data-screen={screen}
       data-color={color}
       // Every choice but Default is pinned to Swiss Moss's light values, in a dark window too (L-043).
-      data-tokens={tokensFor(color)}
+      data-tokens={peek ? undefined : tokensFor(color)}
       onFocus={(e) => setFocused(actionOf(e.target))}
       onBlur={keepFocus}
     >
@@ -276,6 +289,7 @@ function InterruptView({
         </button>
         <p className="tl-int-consequence">{t.dismissConsequence}</p>
       </footer>
+      {peek && <PeekScene color={color} say={t.peekSay} />}
       {error && (
         <p role="alert" className="tl-int-error">
           {error}

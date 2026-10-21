@@ -86,6 +86,11 @@ export const ptPT: Messages = {
       theme: "Tema",
       light: "Claro",
       dark: "Escuro",
+      style: "Estilo",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "Cor do alarme",
       colorHint: "A cor do alarme que ocupa o ecrã antes de uma reunião. Os textos e os botões mudam com ela e continuam fáceis de ler.",
       colors: {
@@ -138,6 +143,7 @@ export const ptPT: Messages = {
     snooze: (minutes) => `Adiar ${number.format(minutes)} min`,
     dismiss: "Dispensar",
     dismissConsequence: "Dispensar silencia este lembrete neste computador.",
+    peekSay: "Está na hora.",
     hintJoin: "Esc adia. Enter entra na chamada. D dispensa.",
     hintEvent: "Esc adia. Enter abre o evento. D dispensa.",
     hintAlreadyThere: "Esc adia. Enter: já estou lá. D dispensa.",

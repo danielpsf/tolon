@@ -4,6 +4,13 @@ import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
 import "@fontsource/inter-tight/latin-500.css";
 import "@fontsource/inter-tight/latin-600.css";
+// Peek's display face (L-050), Latin and Latin Extended: other scripts keep the :lang() stacks in local.css.
+import "@fontsource/fraunces/latin-400.css";
+import "@fontsource/fraunces/latin-600.css";
+import "@fontsource/fraunces/latin-700.css";
+import "@fontsource/fraunces/latin-ext-400.css";
+import "@fontsource/fraunces/latin-ext-600.css";
+import "@fontsource/fraunces/latin-ext-700.css";
 import "swiss-moss/css/swiss-moss.css";
 import "./styles/local.css";
 import { StrictMode } from "react";

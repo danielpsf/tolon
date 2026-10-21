@@ -86,6 +86,11 @@ export const es: Messages = {
       theme: "Tema",
       light: "Claro",
       dark: "Oscuro",
+      style: "Estilo",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "Color de la alarma",
       colorHint: "El color de la pantalla que aparece antes de una reunión. El texto y los botones se adaptan y siguen siendo fáciles de leer.",
       colors: {
@@ -138,6 +143,7 @@ export const es: Messages = {
     snooze: (minutes) => `Posponer ${number.format(minutes)} min`,
     dismiss: "Descartar",
     dismissConsequence: "Descartar silencia este recordatorio en este equipo.",
+    peekSay: "Es la hora.",
     hintJoin: "Esc: posponer. Enter: unirse. D: descartar.",
     hintEvent: "Esc: posponer. Enter: abrir el evento. D: descartar.",
     hintAlreadyThere: "Esc: posponer. Enter: ya estoy ahí. D: descartar.",

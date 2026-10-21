@@ -86,6 +86,11 @@ export const de: Messages = {
       theme: "Design",
       light: "Hell",
       dark: "Dunkel",
+      style: "Stil",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "Farbe des Alarms",
       colorHint: "Die Farbe des Bildschirms, der vor einem Termin erscheint. Text und Schaltflächen passen sich an und bleiben gut lesbar.",
       colors: {
@@ -138,6 +143,7 @@ export const de: Messages = {
     snooze: (minutes) => `${number.format(minutes)} Min. schlummern`,
     dismiss: "Verwerfen",
     dismissConsequence: "Verwerfen schaltet diese Erinnerung auf diesem Computer stumm.",
+    peekSay: "Es ist Zeit.",
     hintJoin: "Esc: schlummern. Enter: teilnehmen. D: verwerfen.",
     hintEvent: "Esc: schlummern. Enter: Termin öffnen. D: verwerfen.",
     hintAlreadyThere: "Esc: schlummern. Enter: Ich bin schon dabei. D: verwerfen.",

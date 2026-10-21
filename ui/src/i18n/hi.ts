@@ -86,6 +86,11 @@ export const hi: Messages = {
       theme: "थीम",
       light: "लाइट",
       dark: "डार्क",
+      style: "शैली",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "अलार्म का रंग",
       colorHint: "मीटिंग से पहले दिखने वाली स्क्रीन का रंग। टेक्स्ट और बटन इसके साथ बदलते हैं और आसानी से पढ़े जा सकते हैं।",
       colors: {
@@ -138,6 +143,7 @@ export const hi: Messages = {
     snooze: (minutes) => `${number.format(minutes)} मिनट के लिए स्नूज़ करें`,
     dismiss: "खारिज करें",
     dismissConsequence: "खारिज करने पर इस कंप्यूटर पर यह रिमाइंडर बंद हो जाता है।",
+    peekSay: "समय हो गया है।",
     hintJoin: "Esc: स्नूज़। Enter: शामिल हों। D: खारिज करें।",
     hintEvent: "Esc: स्नूज़। Enter: इवेंट खोलें। D: खारिज करें।",
     hintAlreadyThere: "Esc: स्नूज़। Enter: मैं पहले से वहां हूं। D: खारिज करें।",

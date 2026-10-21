@@ -86,6 +86,11 @@ export const enUS = {
       theme: "Theme",
       light: "Light",
       dark: "Dark",
+      style: "Style",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "Alarm color",
       colorHint: "The color of the screen that takes over before a meeting. Text and buttons change with it and stay easy to read.",
       colors: {
@@ -138,6 +143,7 @@ export const enUS = {
     snooze: (minutes: number) => `Snooze ${number.format(minutes)} min`,
     dismiss: "Dismiss",
     dismissConsequence: "Dismissing silences this reminder on this computer.",
+    peekSay: "It's time.",
     hintJoin: "Esc snoozes. Enter joins. D dismisses.",
     hintEvent: "Esc snoozes. Enter opens the event. D dismisses.",
     hintAlreadyThere: "Esc snoozes. Enter: I am already there. D dismisses.",

@@ -105,6 +105,11 @@ export const ar: Messages = {
       theme: "السمة",
       light: "فاتح",
       dark: "داكن",
+      style: "النمط",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "لون التنبيه",
       colorHint: "لون الشاشة التي تظهر قبل الاجتماع. يتغيّر النص والأزرار معه ويبقيان سهلي القراءة.",
       colors: {
@@ -165,6 +170,7 @@ export const ar: Messages = {
       })}`,
     dismiss: "إغلاق",
     dismissConsequence: "يؤدي الإغلاق إلى إسكات هذا التذكير على هذا الكمبيوتر.",
+    peekSay: "حان الوقت.",
     hintJoin: "Esc للتأجيل، و Enter للانضمام، و D للإغلاق.",
     hintEvent: "Esc للتأجيل، و Enter لفتح الحدث، و D للإغلاق.",
     hintAlreadyThere: "Esc للتأجيل، و Enter لتأكيد أنك في الاجتماع، و D للإغلاق.",

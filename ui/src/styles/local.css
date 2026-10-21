@@ -659,6 +659,250 @@
 }
 
 /*
+ * Peek (L-050, decision "The poll picks Peek"): the optional style, `data-style="peek"` on <html>.
+ * Every rule of it sits in this block. Swiss Moss tokens only. Its display face is Fraunces (SIL OFL,
+ * bundled from @fontsource, Latin and Latin Extended); ar, he, hi, ja and zh keep their :lang() stacks
+ * at the end of this file, which come later and win. Settings, the panel and first run keep their layout
+ * and take the serif for headings only (every Swiss Moss heading class reads --sm-font-display).
+ */
+:root[data-style="peek"] {
+  --sm-font-display: Fraunces, "Inter Tight", Inter, system-ui, serif;
+}
+
+/*
+ * The reminder after the poll's mockup: a page-coloured top half with the time pill, the centred title,
+ * the details, the key hint and pill buttons; below, the moss hill with Peek (PeekScene.tsx). The page
+ * follows the window's appearance. The hill and Join take the reminder colour pinned to Swiss Moss's
+ * light values (Default is Peek's deep moss), so they read the same on a light or a dark page; the
+ * --pk-* properties carry the page's own tokens into them. Sizes follow L-045: the title, padding and
+ * gaps scale with --tl-u, controls and small text use the capped --tl-c.
+ */
+[data-style="peek"] .tl-int {
+  --pk-page: var(--sm-paper);
+  --pk-ring: var(--sm-ink);
+  --pk-line: var(--sm-control-line);
+  grid-template-rows: auto minmax(0, auto) auto minmax(30vh, 1fr);
+  justify-items: center;
+  padding: calc(40 * var(--tl-u)) 0 0;
+  background: var(--sm-paper);
+  color: var(--sm-ink);
+  text-align: center;
+}
+/* The same ring, drawn in the page's ink: Join is pinned, so its own tokens would be the light ones. */
+[data-style="peek"] .tl-int :focus-visible {
+  outline-color: var(--pk-ring);
+}
+/* The time pill: the clock on a moss chip with a signal dot, then the countdown. */
+[data-style="peek"] .tl-int-top {
+  padding: calc(6 * var(--tl-c));
+  padding-inline-end: calc(28 * var(--tl-c));
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-paper-deep);
+  font-family: var(--sm-font-display);
+  font-size: calc(17 * var(--tl-c));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+[data-style="peek"] .tl-int-top > :first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(10 * var(--tl-c));
+  padding: calc(8 * var(--tl-c)) calc(18 * var(--tl-c));
+  padding-inline-start: calc(14 * var(--tl-c));
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-moss-deep);
+  color: var(--sm-on-moss);
+}
+[data-style="peek"] .tl-int-top > :first-child::before {
+  content: "";
+  width: calc(10 * var(--tl-c));
+  height: calc(10 * var(--tl-c));
+  border-radius: 50%;
+  background: var(--sm-signal);
+}
+[data-style="peek"] .tl-int-count svg {
+  display: none;
+}
+[data-style="peek"] .tl-int-body {
+  align-items: center;
+  justify-content: flex-start;
+  margin-inline: 0;
+  padding: calc(24 * var(--tl-u)) calc(96 * var(--tl-u)) calc(12 * var(--tl-u));
+}
+[data-style="peek"] .tl-int-head {
+  gap: calc(10 * var(--tl-u));
+}
+[data-style="peek"] .tl-int .tl-int-title {
+  font-size: calc(64 * var(--tl-u));
+  font-weight: 700;
+  line-height: 1.1;
+}
+[data-style="peek"] .tl-int .tl-int-title[data-len="long"] {
+  font-size: calc(48 * var(--tl-u));
+}
+[data-style="peek"] .tl-int .tl-int-title[data-len="longer"] {
+  font-size: calc(36 * var(--tl-u));
+}
+[data-style="peek"] .tl-int-details {
+  color: var(--sm-moss);
+  font-family: var(--sm-font-display);
+}
+[data-style="peek"] .tl-int-hint,
+[data-style="peek"] .tl-int-consequence {
+  color: var(--sm-muted);
+}
+[data-style="peek"] .tl-int-hint {
+  margin-top: calc(18 * var(--tl-u));
+}
+[data-style="peek"] .tl-int-item {
+  text-align: start;
+}
+[data-style="peek"] .tl-int-actions {
+  justify-content: center;
+  padding-inline: calc(96 * var(--tl-u));
+}
+/* Under the buttons, centred; still next to Dismiss. */
+[data-style="peek"] .tl-int-consequence {
+  flex-basis: 100%;
+  max-width: none;
+  margin-inline-start: 0;
+  text-align: center;
+}
+/* Pill buttons: Snooze and Dismiss on paper-deep, with the control line as their 3:1 edge on the page. */
+[data-style="peek"] .tl-int .sm-btn {
+  border-color: var(--pk-line);
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-paper-deep);
+  color: var(--sm-ink);
+  font-family: var(--sm-font-display);
+  font-weight: 600;
+}
+[data-style="peek"] .tl-int .sm-btn:hover {
+  border-color: var(--sm-ink);
+  background: var(--sm-line);
+  color: var(--sm-ink);
+}
+/* Join is pinned (data-tokens="light") with the hill's pair, and keeps the page's control line. */
+[data-style="peek"] .tl-int .sm-btn.tl-primary {
+  border-color: var(--pk-line);
+  background: var(--tl-bg);
+  color: var(--tl-fg);
+}
+[data-style="peek"] .tl-int .sm-btn.tl-primary:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+[data-style="peek"] .tl-peek-key {
+  padding: calc(4 * var(--tl-c)) calc(12 * var(--tl-c));
+  margin-inline-start: calc(10 * var(--tl-c));
+  border-radius: var(--sm-radius-pill);
+  background: var(--tl-fg);
+  color: var(--tl-primary-fg);
+  font-family: var(--sm-font-display);
+  font-size: calc(13 * var(--tl-c));
+  font-weight: 600;
+}
+/* The hill fills the rest of the window, edge to edge; the art scales with the window's width. */
+[data-style="peek"] .tl-peek {
+  position: relative;
+  grid-row: 4;
+  justify-self: stretch;
+  overflow: hidden;
+  background: var(--tl-bg);
+}
+[data-style="peek"] .tl-peek-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* Mirrored for right to left, with the speech bubble on the other side. */
+:root[dir="rtl"][data-style="peek"] .tl-peek-art {
+  transform: scaleX(-1);
+}
+/* Each colour-mix() has a plain token before it for webviews without color-mix (older WebKitGTK). */
+[data-style="peek"] .tl-peek-page {
+  fill: var(--pk-page);
+}
+[data-style="peek"] .tl-peek-mound {
+  fill: var(--tl-bg);
+  fill: color-mix(in srgb, var(--tl-bg) 92%, var(--tl-fg));
+}
+[data-style="peek"] .tl-peek-shade {
+  fill: var(--tl-bg);
+  fill: color-mix(in srgb, var(--tl-bg) 86%, var(--sm-ink));
+}
+[data-style="peek"] .tl-peek-dome {
+  fill: var(--tl-hover);
+  fill: color-mix(in oklab, var(--tl-bg) 86%, var(--tl-fg));
+  stroke: var(--tl-hover);
+  stroke: color-mix(in oklab, var(--tl-bg) 74%, var(--tl-fg));
+  stroke-width: 10;
+}
+[data-style="peek"] .tl-peek-belly {
+  fill: var(--tl-hover);
+  fill: color-mix(in oklab, var(--tl-bg) 76%, var(--tl-fg));
+}
+/* The eye's rim keeps it apart from a light dome (the Paper colour). */
+[data-style="peek"] .tl-peek-eye {
+  fill: var(--sm-paper);
+  stroke: var(--tl-bg);
+  stroke: color-mix(in oklab, var(--tl-bg) 70%, var(--sm-ink));
+  stroke-width: 4;
+}
+[data-style="peek"] .tl-peek-shine {
+  fill: var(--sm-paper);
+}
+[data-style="peek"] .tl-peek-pupil {
+  fill: var(--sm-ink);
+}
+[data-style="peek"] .tl-peek-cheek {
+  fill: var(--sm-signal);
+  fill: color-mix(in srgb, color-mix(in srgb, var(--sm-signal), var(--sm-danger)) 70%, var(--sm-danger-tint));
+}
+[data-style="peek"] .tl-peek-smile {
+  fill: none;
+  stroke: var(--sm-ink);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+[data-style="peek"] .tl-peek-fly {
+  fill: var(--tl-fg);
+  opacity: 0.55;
+}
+[data-style="peek"] .tl-peek-glow {
+  fill: var(--tl-fg);
+  opacity: 0.12;
+}
+/* "It's time." beside Peek (198 and 80 design pixels from the top centre, at 1280 wide). */
+[data-style="peek"] .tl-peek-say {
+  position: absolute;
+  top: 6.25vw;
+  inset-inline-start: calc(50% + 15.5vw);
+  margin: 0;
+  padding: calc(10 * var(--tl-c)) calc(24 * var(--tl-c));
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-paper-deep);
+  color: var(--sm-ink);
+  font-family: var(--sm-font-display);
+  font-size: calc(18 * var(--tl-c));
+  font-weight: 600;
+  white-space: nowrap;
+}
+[data-style="peek"] .tl-peek-say::before {
+  content: "";
+  position: absolute;
+  inset-block-end: calc(-12 * var(--tl-c));
+  inset-inline-start: calc(-6 * var(--tl-c));
+  width: calc(28 * var(--tl-c));
+  height: calc(20 * var(--tl-c));
+  background: inherit;
+  clip-path: polygon(0 100%, 45% 0, 100% 30%);
+}
+:root[dir="rtl"][data-style="peek"] .tl-peek-say::before {
+  clip-path: polygon(100% 100%, 55% 0, 0 30%);
+}
+
+/*
  * Right to left (Arabic and Hebrew, docs/decisions.md): grid, flex and the logical properties above
  * mirror on their own, and so do Swiss Moss controls (the switch knob uses inset-inline-start).
  */

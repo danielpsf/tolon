@@ -1,4 +1,4 @@
-import type { Appearance } from "./api-types";
+import type { Appearance, Style } from "./api-types";
 
 let stopFollowing: (() => void) | undefined;
 
@@ -18,4 +18,9 @@ export function applyAppearance(appearance: Appearance): void {
   apply();
   query.addEventListener("change", apply);
   stopFollowing = () => query.removeEventListener("change", apply);
+}
+
+/** `data-style` on <html> from the style setting (L-050): local.css restyles every window under `[data-style="peek"]`. */
+export function applyStyle(style: Style): void {
+  document.documentElement.dataset.style = style;
 }

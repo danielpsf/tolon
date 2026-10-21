@@ -2,7 +2,7 @@
 // Every control saves on change through the settings store (AC9.1); there is no Save button.
 import { useId, useState, type ReactNode } from "react";
 import { api, asCommandError } from "../api";
-import { APPEARANCES, INTERRUPT_COLORS, SOUNDS, type SettingsDto, type SettingsPatch } from "../api-types";
+import { APPEARANCES, INTERRUPT_COLORS, SOUNDS, STYLES, type SettingsDto, type SettingsPatch } from "../api-types";
 import { copy, LOCALES, NATIVE_NAMES, RTL_LOCALES } from "../copy";
 import { SNOOZE_MINUTES } from "../interrupt";
 import { colorAttr, PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
@@ -419,6 +419,25 @@ export function AppearancePage() {
                       onChange={() => save({ appearance })}
                     />
                     <span>{labels[appearance]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="sm-field">
+              <span className="sm-label" id="style-heading">
+                {p.style}
+              </span>
+              <div className="sm-segmented tl-segmented" role="radiogroup" aria-labelledby="style-heading">
+                {STYLES.map((style) => (
+                  <label key={style}>
+                    <input
+                      type="radio"
+                      name="style"
+                      value={style}
+                      checked={s.style === style}
+                      onChange={() => save({ style })}
+                    />
+                    <span>{p.styles[style]}</span>
                   </label>
                 ))}
               </div>

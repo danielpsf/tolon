@@ -520,6 +520,15 @@ Changed strings of L-046, drafted by the implementing agent (Claude Opus 5.5) in
 - One locale per call (the 11 locales other than en-US). Each prompt held the three changed keys as en-US source and translation with where each one shows, the locale's neighbours for consistent terms (`appearance.theme`, `appearance.colors.theme`, `calendars.addBody`, `firstRun.pasteIcal`), and the copy rules (no URL: the word is "link").
 - Strict JSON answer `{"issues":[{"key","problem","suggestion"}],"verdict":"ok|fix"}`.
 
+## L-050
+
+New strings of L-050 (the optional Peek style), drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues: the Appearance label `settings.appearance.style`, the two choice names `settings.appearance.styles` ("Swiss Moss" and "Peek", proper names kept as they are in every locale, like "Tolon") and the speech bubble on the Peek reminder, `interrupt.peekSay` ("It's time."). en-US is the source.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, at most 2 rounds.
+- One locale per call. Each prompt holds only the new strings as key, where each one shows, en-US source and translation, the locale's neighbouring strings for consistent terms (`theme`, `light`, `dark`, `color`, `joinCall`, `dismiss`, `snooze`, `dismissConsequence`, `hintJoin`), the copy rules (including "Swiss Moss and Peek are proper names") and the language rules of the L-039 method.
+
 ### Calls and tokens
 
 | Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
@@ -540,3 +549,20 @@ Changed strings of L-046, drafted by the implementing agent (Claude Opus 5.5) in
 ### Issues and decisions
 
 Round 1 raised no issue in any locale, so no catalogue changed and round 2 was not needed. Native review is still required before release.
+
+| en-GB | 1 | 558 | 248 (225) | 806 | 2.4 | 0 | ok |
+| pt-BR | 1 | 570 | 243 (220) | 813 | 3.8 | 0 | ok |
+| pt-PT | 1 | 568 | 231 (208) | 799 | 16.8 | 0 | ok |
+| de | 1 | 571 | 330 (318) | 901 | 3.3 | 0 | ok |
+| es | 1 | 568 | 239 (216) | 807 | 3.6 | 0 | ok |
+| ar | 1 | 581 | 370 (347) | 951 | 2.9 | 0 | ok |
+| tr | 1 | 567 | 371 (348) | 938 | 4.0 | 0 | ok |
+| hi | 1 | 575 | 354 (333) | 929 | 4.5 | 0 | ok |
+| zh-CN | 1 | 567 | 338 (315) | 905 | 3.3 | 0 | ok |
+| ja | 1 | 565 | 355 (332) | 920 | 3.8 | 0 | ok |
+| he | 1 | 585 | 342 (319) | 927 | 3.9 | 0 | ok |
+| All (11 calls) | | 6275 | 3421 | 9696 | | 0 | |
+
+### Issues and decisions
+
+Round 1 raised no issue in any locale, so no round 2 was needed. Native review is still required before release.

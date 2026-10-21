@@ -16,6 +16,7 @@ const settings: SettingsDto = {
   ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, keywords: ["Focus", "Lunch", "OOO"] },
   appearance: "auto",
   interrupt_color: "theme",
+  style: "swiss-moss",
   locale: null,
   start_at_login: false,
   start_at_login_status: null,
