@@ -413,3 +413,44 @@ Two new strings for the "Skip for now" button of decision "First run (L-018)", `
 | ja | 1 | 633 | 369 (351) | 1002 | 3.8 | 0 | ok |
 | he | 1 | 759 | 694 (676) | 1453 | 5.7 | 0 | ok |
 | All (11 calls) | | 7150 | 5238 | 12388 | | 0 | |
+
+## L-019
+
+The update copy of L-019 (12 strings in a new `settings.about` section: subtitle, version, the Updates heading, the prompt "Tolon <version> is available.", the buttons "Install and restart", "Later", "Skip this version" and "Check for updates", the restart consequence, the installing and no-new-version statuses and the privacy caption; the tray panel line `panel.update`; the command errors `update_check` and `update_install`) was drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues and checked by the same judge. en-US is the source and was not judged; en-GB is the same text. `nav.comingSoon` was removed with the last page that used it.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, JSON response format.
+- One locale per call. Each prompt held the en-US and the locale's new strings, where each one shows (About page, buttons, the panel line with `{settings}` and `{about}` filled from `nav.label` and `nav.about`), the locale's `nav.label`, `nav.about`, `startup.atLogin`, `not_ready` and `login_item` for consistent terms, the copy rules and the language rules of the L-039 method (pt-PT formal "Tente novamente", es "equipo", tr "sen").
+- Round 2 ran only on the locales with an accepted round 1 fix (tr, he). Two rounds at most.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 982 | 900 (891) | 1882 | 5.9 | 0 | ok |
+| pt-BR | 1 | 1019 | 823 (814) | 1842 | 6.3 | 0 | ok |
+| pt-PT | 1 | 1033 | 1177 (1168) | 2210 | 8.3 | 0 | ok |
+| de | 1 | 1006 | 1157 (1148) | 2163 | 16.7 | 0 | ok |
+| es | 1 | 1015 | 1043 (1034) | 2058 | 9.1 | 0 | ok |
+| tr | 1 | 1057 | 2847 (2741) | 3904 | 17.8 | 1 | fix |
+| ar | 1 | 1063 | 1529 (1513) | 2592 | 8.9 | 0 | ok |
+| he | 1 | 1120 | 4357 (4171) | 5477 | 23.2 | 2 | fix |
+| hi | 1 | 1050 | 1211 (1202) | 2261 | 45.4 | 0 | ok |
+| zh-CN | 1 | 984 | 1851 (1835) | 2835 | 14.4 | 0 | ok |
+| ja | 1 | 1015 | 1096 (1087) | 2111 | 6.3 | 0 | ok |
+| tr | 2 | 1059 | 1564 (1546) | 2623 | 7.6 | 0 | ok |
+| he | 2 | 1121 | 3730 (3721) | 4851 | 20.0 | 0 | ok |
+| All (13 calls) | | 13524 | 23285 | 36809 | | 3 | |
+
+### Issues and decisions
+
+3 issues, all accepted. Round 2 raised none.
+
+| Locale | Round | Key | Judge's point | Decision |
+|---|---|---|---|---|
+| tr | 1 | `settings.about.installing` | "Tolon bitince" reads as if Tolon itself finishes, not the install. | Accepted: "Güncelleme yükleniyor. Tamamlandığında Tolon yeniden başlar." Round 2 ok. |
+| he | 1 | `errors.command.update_check` | "לא הייתה גישה" reads as a permissions problem, not "could not reach". | Accepted: "Tolon לא הצליח להתחבר ל-GitHub כדי לבדוק עדכונים. אפשר לנסות שוב מאוחר יותר." Round 2 ok. |
+| he | 1 | `settings.about.subtitle` | "העדכונים שלה" points the updates at the version (feminine); the source means Tolon's updates. | Accepted: "שלו". Round 2 ok. |
+
+Native review is still required before release.

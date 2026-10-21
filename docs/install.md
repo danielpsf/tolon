@@ -72,7 +72,19 @@ On Windows, run `Get-FileHash <file>` in PowerShell and compare the result with 
 
 ## Updates
 
-Tolon checks GitHub for a new version and asks before it installs one, once the built-in updater is part of your version. Every update is checked against the project's signing key first. If your version does not have the updater yet, download the new file from the Releases page and install it over the old one.
+Tolon checks GitHub for a new version when it starts and then once a day. When it finds one, the tray panel shows a line about it, and Settings, About shows "Tolon <version> is available." with three buttons:
+
+- Install and restart: Tolon downloads the update, checks it against the project's signing key, installs it and starts again. An update that does not match the key is never installed.
+- Later: the message goes away until the next check.
+- Skip this version: Tolon does not offer this version again. A newer version is offered as usual.
+
+Nothing is installed until you click Install and restart. To check at once, click Check for updates in Settings, About.
+
+- Windows: the installer shows a small progress window, then Tolon starts again.
+- Linux: an update of the `.deb` asks for your password. The AppImage replaces itself.
+- macOS: if macOS warns again that it could not verify Tolon after an update, approve it once more with steps 2 to 4 above.
+
+If an update fails, Tolon keeps running the version you have. You can always download the new file from the Releases page and install it over the old one.
 
 ## Known limits
 
