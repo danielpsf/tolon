@@ -574,11 +574,11 @@ test("l048 two alarms in a row leave one window per screen, hidden between them,
     await driver.switchTo().window((await interruptHandles(main))[0]);
     // The same page, not a new one: the marker of the first alarm is still there.
     assert.equal(await driver.executeScript(() => window.__tolonReuseMarker), "first alarm");
-    const primary = await waitFor("focus on the primary button of the second alarm", async () => {
+    // The feed has no join link, so the primary button is "I am already there"; the first alarm left the focus on Snooze.
+    await waitFor("focus on the primary button of the second alarm", async () => {
       const active = await driver.switchTo().activeElement();
-      return (await active.getAttribute("data-action")) === "join" && active;
+      return (await active.getAttribute("data-action")) === "already_there";
     });
-    assert.ok(primary);
     assert.equal(await (await find(".tl-int-title")).getText(), "Second reuse meeting");
     // The keys work again on the reused page.
     await pressAndWaitForClose(main, "d");
