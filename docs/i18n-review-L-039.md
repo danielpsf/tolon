@@ -454,3 +454,18 @@ The update copy of L-019 (12 strings in a new `settings.about` section: subtitle
 | he | 1 | `settings.about.subtitle` | "העדכונים שלה" points the updates at the version (feminine); the source means Tolon's updates. | Accepted: "שלו". Round 2 ok. |
 
 Native review is still required before release.
+
+## L-043
+
+New and changed strings of L-043 and of the QA fixes that ship with it, drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues: the reminder colour on the Appearance page (`settings.appearance.color`, `colorHint`, the eight `colors.*` names, `previewDark`, `previewLight`, `testAlarm`), the short preview label `firstRun.previewJoin`, the step 3 sentences `firstRun.trayHiddenMenuBar` (macOS: Finder or Spotlight) and `firstRun.trayHiddenSystemTray` (Windows and Linux: the list of apps), and `interrupt.hintSpace` reworded as "Space marks you as already there." (D4). en-US is the source.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, at most 2 rounds.
+- One locale per call. Each prompt holds only the new strings as key, en-US source and translation, where each one shows, the locale's neighbouring strings for consistent terms (`theme`, `light`, `dark`, the Appearance subtitle, `previewLabel`, `tryAlarm`, `hintJoin`, `alreadyThere`, `trayBody`, `trayMenuBar`, `traySystemTray`, `joinCall`, `dismiss`, `testTitle`), the copy rules and the language rules of the L-039 method.
+
+### Calls and tokens
+
+Not run. On 2026-10-21 the proxy host did not resolve from the implementing machine (`getaddrinfo ENOTFOUND`, no VPN), so no judge call was made. The drafts are in the catalogues unjudged; the judge must run before L-043 is done.
+
+Native review is still required before release.
