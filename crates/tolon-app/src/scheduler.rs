@@ -884,11 +884,12 @@ impl<H: Host> Scheduler<H> {
         true
     }
 
-    /// Shows F10's test alarm. A real interrupt that is up is left alone.
+    /// Shows F10's test alarm. Any interrupt that is up, real or another test alarm (a second click
+    /// on "Try a test alarm"), is left alone.
     pub async fn show_test(&self) -> anyhow::Result<()> {
         let now = self.host.now();
         let mut inner = self.inner.lock().await;
-        if inner.open.as_ref().is_some_and(|o| !o.test) {
+        if inner.open.is_some() {
             return Ok(());
         }
         let show = AlarmShow::sample(now);

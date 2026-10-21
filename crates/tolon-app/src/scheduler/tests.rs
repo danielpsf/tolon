@@ -1207,6 +1207,21 @@ async fn the_test_alarm_opens_a_sample_that_every_action_can_close() -> TestResu
 }
 
 #[tokio::test]
+async fn ac10_1_a_second_test_alarm_while_one_is_up_opens_nothing() -> TestResult {
+    let rig = Rig::new(&[], at(13, 50, 0))?;
+    rig.sched.show_test().await?;
+    rig.sched.show_test().await?;
+    assert_eq!(rig.host().count("open"), 1);
+    assert_eq!(rig.host().count("play"), 1);
+    // Once it is closed, the next one opens.
+    let key = rig.key(0)?;
+    rig.act(at(13, 50, 5), &key, Act::Dismiss).await?;
+    rig.sched.show_test().await?;
+    assert_eq!(rig.host().count("open"), 2);
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_real_interrupt_is_not_replaced_by_the_test_alarm_but_replaces_it() -> TestResult {
     let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
     rig.tick_at(at(13, 58, 5)).await;
