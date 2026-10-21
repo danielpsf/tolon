@@ -12,7 +12,7 @@ macOS, Windows and Linux. Read only, local only, open source.
 
 [Install](docs/install.md) · [How it works](#how-it-works) · [Contribute](CONTRIBUTING.md) · [Roadmap](#roadmap)
 
-<img src="docs/images/01-interrupt-light.png" width="820" alt="Tolon's full-screen reminder: the meeting title in large type, the time and the people, with Join the call, Snooze 5 min and Dismiss buttons.">
+<img src="docs/images/app-interrupt-light.png" width="820" alt="Tolon's full-screen reminder in the light theme: a green screen with the meeting title, Platform weekly sync, in large white type, the time, Google Meet and eight people underneath, Starts in 2 min at the top, and the buttons Join the call, Snooze 5 min and Dismiss.">
 
 </div>
 
@@ -24,7 +24,7 @@ Tolon does not slide in. Two minutes before a meeting it fills every screen with
 
 ## What it does
 
-- **Full-screen reminders.** On every screen, or only one, and above full-screen apps on macOS too.
+- **Full-screen reminders.** On every screen, and above full-screen apps on macOS too.
 - **One key to join.** Tolon finds the link for Google Meet, Zoom, Microsoft Teams, Webex and Jitsi, and falls back to any https link in the location.
 - **Your calendars, as they are.** Subscribe to any iCal address: Google's secret address, a published Outlook calendar, or any `.ics` link. Google Calendar sign-in follows in beta 2.
 - **Recurring events done right.** Repeat rules, exceptions, moved occurrences and time zones, including the night the clocks change.
@@ -34,18 +34,27 @@ Tolon does not slide in. Two minutes before a meeting it fills every screen with
 
 <table>
   <tr>
-    <td width="34%"><img src="docs/images/02-tray-panel-light.png" alt="The tray panel: the next meeting with Join and Snooze buttons, then the rest of today's meetings."></td>
-    <td><img src="docs/images/03-settings-calendars-light.png" alt="The Calendars settings page: three calendars with their sync status, an Add calendar button and the ignore rules."></td>
+    <td width="34%"><img src="docs/images/app-tray-panel.png" alt="The tray panel: Platform weekly sync is next, in 2 min, with Join the call, Snooze 5 min and Dismiss buttons. Below it are the rest of today's meetings with their times and where they meet, one marked ignored, then Pause for 1 hour, Settings and Quit."></td>
+    <td><img src="docs/images/app-settings-calendars.png" alt="The Calendars settings page: Work, Personal and Team, each with its address, the time it last synced, a Remove button and an on switch, then the Add calendar and Paste an iCal link buttons."></td>
   </tr>
   <tr>
     <td align="center">The tray panel</td>
-    <td align="center">Calendars and ignore rules</td>
+    <td align="center">Calendars and their sync status</td>
   </tr>
 </table>
 
-<img src="docs/images/01-interrupt-dark.png" width="100%" alt="The full-screen reminder in the dark theme.">
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/app-interrupt-dark.png" alt="The full-screen reminder in the dark theme: a light green screen with the same meeting in dark type and the same three buttons."></td>
+    <td width="50%"><img src="docs/images/app-interrupt-peek-light.png" alt="The reminder in the Peek style: the meeting title and buttons on a cream card, over a green scene with Peek's two large eyes looking up and a speech bubble that says It's time."></td>
+  </tr>
+  <tr>
+    <td align="center">The dark theme</td>
+    <td align="center">The Peek style</td>
+  </tr>
+</table>
 
-<sub>These are the design mockups. Tolon's screens are being built to match them.</sub>
+Peek is an optional style for the reminder. Turn it on under Settings, Appearance, Style.
 
 ## Design
 
@@ -100,10 +109,10 @@ The full design is in [docs/architecture.md](docs/architecture.md).
 | Milestone | What you get | Status |
 | --- | --- | --- |
 | M0 Skeleton | The app boots on all three systems, CI green | Done |
-| M1 Calendars | Add an iCal calendar, sync it, see today's meetings | In progress |
-| M2 Alarms | The full-screen reminder, snooze, dismiss, join, keyboard | Next |
-| M3 Daily use | Tray panel, pause, quiet hours, ignore rules, sound, start at login | Planned |
-| M4 Release | Signed updates, installers, `v0.1.0-beta.1` | Planned |
+| M1 Calendars | Add an iCal calendar, sync it, see today's meetings | Done |
+| M2 Alarms | The full-screen reminder, snooze, dismiss, join, keyboard | In progress |
+| M3 Daily use | Tray panel, pause, quiet hours, ignore rules, sound, start at login | In progress |
+| M4 Release | Signed updates, installers, `v0.1.0-beta.1` | In progress |
 | M5 Google | Google Calendar sign-in, `v0.1.0-beta.2` | Planned |
 
 Every feature has written scenarios and acceptance criteria in [docs/plan.md](docs/plan.md), and the live task list is [docs/ledger.md](docs/ledger.md).
