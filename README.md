@@ -71,6 +71,8 @@ Beta 1 is on its way. When it is out, download the file for your system from the
 
 Beta builds are not signed by Apple or by a Windows certificate authority yet, so your system asks you to confirm once. The install guide walks you through it.
 
+Tolon needs an iCal link to your calendar. [This guide](docs/help/ical-links.md) shows where to find it in Outlook.com, Google Calendar and Yahoo Calendar.
+
 ## How it works
 
 ```mermaid

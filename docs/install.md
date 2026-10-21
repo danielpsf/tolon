@@ -2,6 +2,8 @@
 
 Tolon is a beta. Download the file for your system from the Assets list of the release, then follow the steps for your system below. It takes about two minutes, including your first calendar. Tolon only reads your calendars. It has no analytics and sends no data about you. It contacts your calendar links and GitHub, to check for updates.
 
+The first-run window asks for an iCal link. [Get an iCal link for your calendar](help/ical-links.md) shows where to find it in Outlook.com, Google Calendar and Yahoo Calendar.
+
 | System | File to download |
 | --- | --- |
 | macOS 13 Ventura or newer, Apple silicon and Intel | `Tolon_<version>_universal.dmg` |
