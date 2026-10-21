@@ -8,6 +8,7 @@ pub mod login;
 mod macos;
 pub mod macos_level;
 pub mod monitors;
+pub mod secrets;
 pub mod session;
 pub mod sound;
 #[cfg(target_os = "windows")]

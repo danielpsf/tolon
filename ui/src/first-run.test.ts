@@ -37,6 +37,7 @@ const calendar: CalendarDto = {
   display_url: "https://example.com",
   last_sync_at: null,
   last_error: null,
+  account: null,
 };
 
 /** The window as it opens: the list not in yet, first run undecided. */

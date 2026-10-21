@@ -585,45 +585,15 @@ mod tests {
         assert_eq!(err, FetchError::Timeout);
     }
 
-    #[derive(Clone, Default)]
-    struct Buf(Arc<Mutex<Vec<u8>>>);
-    impl std::io::Write for Buf {
-        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(b);
-            Ok(b.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Buf {
-        type Writer = Buf;
-        fn make_writer(&'a self) -> Buf {
-            self.clone()
-        }
-    }
-
     #[tokio::test]
     async fn s1_4_secret_absent_from_log() {
-        // Global subscriber: a per-thread one races with callsite interest caching in parallel tests.
-        static LOG: std::sync::OnceLock<Buf> = std::sync::OnceLock::new();
-        let buf = LOG
-            .get_or_init(|| {
-                let buf = Buf::default();
-                let sub = tracing_subscriber::fmt()
-                    .with_writer(buf.clone())
-                    .with_ansi(false)
-                    .finish();
-                let _ = tracing::subscriber::set_global_default(sub);
-                buf
-            })
-            .clone();
+        crate::test_log::captured();
         let (base, _) = serve(vec![http("404 Not Found", "", "")]).await;
         let err = quick()
             .fetch(&format!("{base}/ical/private-123/basic.ics"), None)
             .await
             .unwrap_err();
-        let log = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+        let log = crate::test_log::captured();
         assert!(log.contains("127.0.0.1"), "{log}");
         assert!(log.contains("404"), "{log}");
         assert!(!log.contains("private-123"), "{log}");

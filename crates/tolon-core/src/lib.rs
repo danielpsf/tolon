@@ -20,7 +20,7 @@ pub use model::{
     wall_clock, CalendarId, Event, EventId, EventStatus, EventTime, JoinTarget, Occurrence,
     OccurrenceKey, Override, ParseKeyError, Response,
 };
-pub use parse::{parse_ics, ParseOptions, ParsedCalendar};
+pub use parse::{parse_ics, parse_recurrence, ParseOptions, ParsedCalendar};
 pub use rules::{apply_rules, judge_window, IgnoreReason, IgnoreRules, Verdict};
 pub use schedule::{
     apply_transitions, countdown, group_firing, plan, tick, AlarmSettings, Countdown,

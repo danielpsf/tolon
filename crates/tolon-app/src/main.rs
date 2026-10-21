@@ -3,6 +3,7 @@
 
 mod commands;
 mod errors;
+mod google;
 mod interrupt;
 mod notify_copy;
 mod pipeline;
@@ -50,9 +51,19 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
     // The notification speaks the language it last got from the settings window; English until then.
     app.manage(notify_copy::NotifyCopyState::new(notify_copy::load(&store)));
     let fetcher = IcsFetcher::new().context("Tolon could not start its network client.")?;
+    // No client ID in this build or the environment: no Google sign-in, and the UI hides it.
+    let google = google::config().and_then(|cfg| {
+        tolon_sync::google::GoogleClient::new(cfg)
+            .inspect_err(|e| tracing::warn!(error = %e, "google client could not start"))
+            .ok()
+    });
     app.manage(AppState {
         db: Mutex::new(store),
         fetcher,
+        google,
+        secrets: Box::new(tolon_platform::secrets::Keychain),
+        google_pending: Mutex::new(None),
+        google_cancel: Mutex::new(None),
     });
     scheduler::setup_fallback_actions(app)?;
     app.manage(commands::AppScheduler::new(scheduler::TauriHost::new(
@@ -131,6 +142,10 @@ fn main() -> anyhow::Result<()> {
             commands::calendars_remove,
             commands::calendars_set_enabled,
             commands::calendars_sync_now,
+            commands::calendars_google_available,
+            commands::calendars_google_sign_in,
+            commands::calendars_add_google,
+            commands::calendars_google_cancel,
             commands::occurrences_today,
             commands::occurrences_join,
             commands::occurrences_snooze,

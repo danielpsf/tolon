@@ -5,6 +5,7 @@ import type {
   AlarmShowDto,
   CalendarDto,
   CommandError,
+  GoogleAccountDto,
   ListedDto,
   NotifyCopyDto,
   PauseDto,
@@ -21,6 +22,15 @@ export const api = {
   calendarsAddIcs: (url: string) => invoke<CalendarDto>("calendars_add_ics", { url }),
   calendarsRemove: (id: string) => invoke<void>("calendars_remove", { id }),
   calendarsSetEnabled: (id: string, enabled: boolean) => invoke<void>("calendars_set_enabled", { id, enabled }),
+  // Google calendars (F13), settings window only.
+  /** True when this build has a Google client ID; "Sign in with Google" shows only then. */
+  calendarsGoogleAvailable: () => invoke<boolean>("calendars_google_available"),
+  /** Opens Google in the browser and waits; `title` and `body` are the page the browser shows afterwards. */
+  calendarsGoogleSignIn: (title: string, body: string) =>
+    invoke<GoogleAccountDto>("calendars_google_sign_in", { title, body }),
+  calendarsAddGoogle: (ids: string[]) => invoke<CalendarDto[]>("calendars_add_google", { ids }),
+  /** Ends a sign-in still waiting for the browser, or drops one nobody picked calendars from. */
+  calendarsGoogleCancel: () => invoke<void>("calendars_google_cancel"),
   /** The interrupt on screen, or null: a window that loads after `alarm:show` still gets it. */
   alarmsCurrent: () => invoke<AlarmShowDto | null>("alarms_current"),
   alarmsSnooze: (key: string, minutes: number) => invoke<void>("alarms_snooze", { key, minutes }),

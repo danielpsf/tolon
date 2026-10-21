@@ -139,7 +139,7 @@ Events from core to UI: `alarm:show`, `alarm:hide`, `calendars:changed`, `occurr
 
 ## Security and privacy
 
-- No network calls except to the calendar URLs the person added, Google APIs when signed in, and `github.com` for updates.
+- No network calls except to the calendar URLs the person added, `github.com` for updates, and, for a Google sign-in, `accounts.google.com` (the consent page, opened in the system browser), `oauth2.googleapis.com` (token exchange, refresh, revocation) and `www.googleapis.com` (Calendar API). The OAuth redirect lands on a listener Tolon opens on `127.0.0.1` with a random port only while a sign-in waits.
 - CSP in `tauri.conf.json`: `default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:` (the `img-src` part from M1, see `docs/decisions.md`); fonts are bundled, not loaded from Google Fonts.
 - No telemetry, no crash reporting in beta. A local `tolon.log` with rotation, redacted.
 - Updater: minisign public key in `tauri.conf.json`; the private key only in the `TAURI_SIGNING_PRIVATE_KEY` repository secret.

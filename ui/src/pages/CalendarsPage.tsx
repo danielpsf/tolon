@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { api } from "../api";
-import type { CalendarDto } from "../api-types";
+import { api, asCommandError } from "../api";
+import type { CalendarDto, GoogleAccountDto } from "../api-types";
 import { copy } from "../copy";
 import { useCalendars } from "../store";
 import { errorText, statusOf, titleOf } from "../view";
@@ -38,6 +38,11 @@ function Row({
       <span className="tl-text">
         <span className="tl-name">{titleOf(calendar, c)}</span>
         {calendar.display_url && <span className="sm-caption">{calendar.display_url}</span>}
+        {calendar.account && (
+          <span className="sm-caption">
+            <bdi>{calendar.account}</bdi>
+          </span>
+        )}
       </span>
       <span className={`tl-status${status.failed ? " failed" : ""}`}>{status.text}</span>
       <span className="tl-remove">
@@ -192,11 +197,164 @@ export function AddCalendarForm({
   );
 }
 
+/** True once Rust says this build can sign in with Google (a client ID is configured). */
+export function useGoogleAvailable(): boolean {
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api.calendarsGoogleAvailable().then(
+      (ok) => live && setAvailable(ok),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return available;
+}
+
+/**
+ * "Sign in with Google" (F13), shared by the Calendars page and first run: Google's page opens in the
+ * browser, then the account's calendars are listed to pick from. The primary calendar starts ticked.
+ */
+export function GoogleSignIn({ onAdded }: { onAdded: (first: CalendarDto) => void }) {
+  const c = copy();
+  const { calendars: t } = c.t;
+  const [step, setStep] = useState<"idle" | "waiting" | "adding">("idle");
+  const [account, setAccount] = useState<GoogleAccountDto | null>(null);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+
+  async function signIn() {
+    if (step !== "idle") return;
+    setError(null);
+    setStep("waiting");
+    try {
+      const found = await api.calendarsGoogleSignIn(t.googleDoneTitle, t.googleDoneBody);
+      setAccount(found);
+      setPicked(new Set(found.calendars.filter((cal) => cal.primary && !cal.added).map((cal) => cal.id)));
+    } catch (e) {
+      const err = asCommandError(e);
+      // Cancel was the person's own choice: nothing to say.
+      if (err.code !== "google_cancelled") setError(c.commandError(err));
+    }
+    setStep("idle");
+  }
+
+  async function cancel() {
+    setAccount(null);
+    setError(null);
+    await api.calendarsGoogleCancel().catch(() => undefined);
+  }
+
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    if (!account || picked.size === 0 || step !== "idle") return;
+    setStep("adding");
+    setError(null);
+    try {
+      const added = await api.calendarsAddGoogle([...picked]);
+      setAccount(null);
+      setStep("idle");
+      if (added[0]) onAdded(added[0]);
+    } catch (err) {
+      setError(errorText(err, c));
+      setStep("idle");
+    }
+  }
+
+  function toggle(id: string, on: boolean) {
+    const next = new Set(picked);
+    if (on) next.add(id);
+    else next.delete(id);
+    setPicked(next);
+  }
+
+  const waiting = step === "waiting";
+  const adding = step === "adding";
+  const nothingNew = account !== null && account.calendars.every((cal) => cal.added);
+  return (
+    <>
+      {!account && (
+        <div className="sm-cluster">
+          <button
+            type="button"
+            className={`sm-btn${waiting ? " loading" : ""}`}
+            aria-disabled={waiting}
+            aria-describedby={waiting ? "google-waiting" : undefined}
+            onClick={() => void signIn()}
+          >
+            {t.signInGoogle}
+          </button>
+          {waiting && (
+            <button type="button" className="sm-btn quiet" onClick={() => void cancel()}>
+              {t.cancel}
+            </button>
+          )}
+        </div>
+      )}
+      {waiting && (
+        <p className="sm-body sm-muted" id="google-waiting" role="status">
+          {t.googleWaiting}
+        </p>
+      )}
+      {error && (
+        <p className="sm-alert signal" role="alert">
+          {error}
+        </p>
+      )}
+      {account && (
+        <form
+          id="google-calendars"
+          className="sm-card tl-add sm-stack tight"
+          aria-labelledby="google-calendars-title"
+          aria-busy={adding}
+          onSubmit={(e) => void add(e)}
+        >
+          <h2 className="sm-heading" id="google-calendars-title">
+            {t.googlePickTitle(account.account)}
+          </h2>
+          <p className="sm-hint">{nothingNew ? t.googleNothingNew : t.googlePickHint}</p>
+          {account.calendars.map((cal) => (
+            <label className="sm-check" key={cal.id}>
+              <input
+                type="checkbox"
+                checked={cal.added || picked.has(cal.id)}
+                disabled={cal.added || adding}
+                onChange={(e) => toggle(cal.id, e.target.checked)}
+              />
+              <span>
+                <bdi>{cal.name}</bdi>
+                {cal.added && <span className="sm-hint">{t.googleAlreadyAdded}</span>}
+              </span>
+            </label>
+          ))}
+          <div className="sm-cluster">
+            {!nothingNew && (
+              <button
+                type="submit"
+                className={`sm-btn primary${adding ? " loading" : ""}`}
+                aria-disabled={adding || picked.size === 0}
+              >
+                {adding ? t.googleAdding : t.googleAdd}
+              </button>
+            )}
+            <button type="button" className="sm-btn" disabled={adding} onClick={() => void cancel()}>
+              {t.cancel}
+            </button>
+          </div>
+        </form>
+      )}
+    </>
+  );
+}
+
 export function CalendarsPage() {
   const c = copy();
   const { calendars: t } = c.t;
   const { calendars, loaded, loadError } = useCalendars();
   const now = useNow();
+  const google = useGoogleAvailable();
 
   const [adding, setAdding] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -285,6 +443,8 @@ export function CalendarsPage() {
           onCancel={() => setAdding(false)}
         />
       )}
+
+      {google && <GoogleSignIn onAdded={() => addButton.current?.focus()} />}
 
       <ConfirmRemove
         target={removing}

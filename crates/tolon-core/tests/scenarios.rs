@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use common::{cal, fixture_text, now, parse_fixture, utc, TestResult, LOCAL};
 use tolon_core::{
-    expand, expand_window, parse_ics, wall_clock, Event, EventStatus, ExpandOptions, Occurrence,
-    ParseOptions,
+    expand, expand_window, parse_ics, parse_recurrence, wall_clock, Event, EventStatus, EventTime,
+    ExpandOptions, Occurrence, ParseOptions,
 };
 
 fn wrap(body: &str) -> String {
@@ -618,5 +618,29 @@ fn event_serialises_to_stable_json_and_back() -> TestResult {
             assert_eq!(serde_json::to_string(&back)?, json, "{name}");
         }
     }
+    Ok(())
+}
+
+#[test]
+fn recurrence_lines_parse_as_in_a_feed() -> TestResult {
+    let start = EventTime::Zoned {
+        tz: chrono_tz::Europe::Berlin,
+        local: chrono::NaiveDate::from_ymd_opt(2026, 10, 19)
+            .and_then(|d| d.and_hms_opt(10, 0, 0))
+            .ok_or("date")?,
+    };
+    let lines = [
+        "RRULE:FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "EXDATE;TZID=Europe/Berlin:20261026T100000,20261102T100000".to_string(),
+    ];
+    let (rrule, exdates) = parse_recurrence(&lines, &start).ok_or("parse")?;
+    assert_eq!(rrule.as_deref(), Some("FREQ=WEEKLY;BYDAY=MO"));
+    assert_eq!(exdates.len(), 2);
+    assert!(matches!(&exdates[0], EventTime::Zoned { tz, .. } if *tz == chrono_tz::Europe::Berlin));
+    assert_eq!(parse_recurrence(&[], &start), Some((None, vec![])));
+    assert_eq!(
+        parse_recurrence(&["RRULE:FREQ=SOMETIMES".to_string()], &start),
+        None
+    );
     Ok(())
 }
