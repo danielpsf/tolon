@@ -632,21 +632,19 @@ async function updateServer(state) {
 const byText = (text) => driver.findElements(By.xpath(`//*[normalize-space()=${JSON.stringify(text)}]`));
 /**
  * Clicks the button once it is there and enabled (the page disables them while a command runs). The page
- * re-renders on `update:changed` too, so a button found a moment ago can be gone: look it up again.
+ * re-renders on `update:changed`, which made WebDriver element references go stale between the lookup
+ * and the click (and a click that had landed still report stale). So the lookup, the check and the click
+ * run as one script in the page: it clicks exactly once, or not at all and is tried again.
  */
 async function clickButton(text) {
-  const xpath = By.xpath(`//button[normalize-space()=${JSON.stringify(text)}]`);
-  await waitFor(`the ${text} button`, async () => {
-    try {
-      const [found] = await driver.findElements(xpath);
-      if (!found || !(await found.isEnabled())) return false;
-      await found.click();
+  await waitFor(`the ${text} button`, () =>
+    driver.executeScript((label) => {
+      const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === label);
+      if (!button || button.disabled) return false;
+      button.click();
       return true;
-    } catch (e) {
-      if (e instanceof error.StaleElementReferenceError) return false;
-      throw e;
-    }
-  });
+    }, text),
+  );
 }
 const shows = (step, text) => waitFor(step, async () => (await byText(text)).length > 0);
 
