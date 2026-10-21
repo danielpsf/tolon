@@ -165,6 +165,8 @@ fn main() -> anyhow::Result<()> {
             commands::update_e2e_endpoint,
             #[cfg(feature = "e2e-loopback")]
             commands::app_e2e_settings_visible,
+            #[cfg(feature = "e2e-loopback")]
+            commands::app_e2e_interrupt_windows,
         ])
         .setup(|app| {
             // Before any window opens: on macOS the Accessory activation policy lets the interrupt

@@ -709,6 +709,18 @@ pub async fn app_e2e_settings_visible(window: tauri::WebviewWindow) -> Result<bo
         .map_err(|_| command_error(&AppError::NOT_READY.into()))
 }
 
+/// The interrupt windows that exist and whether each is shown, for the WebDriver tests: windows
+/// are kept after an alarm (decision 2026-10-22), so "how many windows" no longer says whether an
+/// interrupt is up. Only in the end-to-end build. Labels and flags, nothing else.
+#[cfg(feature = "e2e-loopback")]
+#[tauri::command]
+pub async fn app_e2e_interrupt_windows(
+    window: tauri::WebviewWindow,
+) -> Result<Vec<crate::interrupt::WindowState>, CommandError> {
+    main_only(window.label())?;
+    Ok(crate::interrupt::window_states(window.app_handle()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -798,6 +810,7 @@ mod tests {
         ("update_later", "main_only"),
         ("update_e2e_endpoint", "main_only"),
         ("app_e2e_settings_visible", "main_only"),
+        ("app_e2e_interrupt_windows", "main_only"),
     ];
 
     /// Registered commands with no window check, each with its reason.
@@ -866,6 +879,7 @@ mod tests {
             "alarms_e2e_state",
             "update_e2e_endpoint",
             "app_e2e_settings_visible",
+            "app_e2e_interrupt_windows",
         ] {
             let at = lines
                 .iter()

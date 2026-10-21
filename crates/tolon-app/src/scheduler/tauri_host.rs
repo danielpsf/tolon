@@ -24,7 +24,7 @@ use tolon_platform::{Playback, Sound, SoundPlayer, Takeover};
 
 use super::{Act, Host, Opened, SNOOZE_MINUTES};
 use crate::commands::{self, AppScheduler};
-use crate::interrupt::{self, AlarmShow, InterruptState, LABEL_PREFIX};
+use crate::interrupt::{self, AlarmShow, InterruptState};
 use crate::notify_copy::{NotifyCopy, NotifyCopyState};
 use crate::pipeline;
 
@@ -140,10 +140,8 @@ impl Host for TauriHost {
             {
                 return false;
             }
-            app.webview_windows()
-                .iter()
-                .filter(|(label, _)| label.starts_with(LABEL_PREFIX))
-                .any(|(_, window)| window.is_focused().unwrap_or(false))
+            // A hidden window (kept for the next alarm) is not an interrupt on screen.
+            interrupt::focused(&app)
         }
     }
 
