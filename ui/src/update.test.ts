@@ -49,6 +49,8 @@ describe("update prompt (F11)", () => {
     expect(html).toContain('aria-describedby="update-restart"');
     expect(html).toContain("Tolon closes for a moment to update.");
     expect(html).not.toContain("Check for updates");
+    // The heading takes focus after Later, Skip or Install (AboutPage), so it must be focusable.
+    expect(html).toContain('id="updates-heading" tabindex="-1"');
   });
 
   it("AC11.1 shows no buttons while installing, and Check for updates otherwise", () => {

@@ -1,6 +1,6 @@
 // About (F9 nav, F11 updates): the version, and the update prompt with its three buttons. This page
 // and one line in the tray panel are the only places an update is offered; never a takeover.
-import { useState } from "react";
+import { useRef, useState, type Ref } from "react";
 import { api } from "../api";
 import type { UpdateDto } from "../api-types";
 import { copy } from "../copy";
@@ -18,6 +18,7 @@ export function UpdateSection({
   onInstall,
   onLater,
   onSkip,
+  headingRef,
 }: {
   update: UpdateDto | null;
   checked: boolean;
@@ -27,12 +28,14 @@ export function UpdateSection({
   onInstall: () => void;
   onLater: () => void;
   onSkip: () => void;
+  /** Focus lands here after Later, Skip or a failed install, whose buttons are gone or disabled. */
+  headingRef?: Ref<HTMLHeadingElement>;
 }) {
   const a = copy().t.settings.about;
   const view = updateView(update, checked);
   return (
     <section className="sm-stack tight" aria-labelledby="updates-heading">
-      <h2 className="sm-label" id="updates-heading">
+      <h2 className="sm-label" id="updates-heading" tabIndex={-1} ref={headingRef}>
         {a.updates}
       </h2>
       {view === "offer" && update?.available && (
@@ -96,8 +99,10 @@ export function AboutPage() {
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
 
-  const run = async (action: () => Promise<UpdateDto | void>) => {
+  /** Runs a button's command; `refocus` puts focus on the Updates heading afterwards. */
+  const run = async (action: () => Promise<UpdateDto | void>, refocus = false) => {
     setBusy(true);
     setError(null);
     try {
@@ -107,6 +112,7 @@ export function AboutPage() {
       setError(errorText(e, c));
     } finally {
       setBusy(false);
+      if (refocus) heading.current?.focus();
     }
   };
 
@@ -130,9 +136,10 @@ export function AboutPage() {
               return answer;
             })
           }
-          onInstall={() => void run(() => api.updateInstall())}
-          onLater={() => void run(() => api.updateLater())}
-          onSkip={() => void run(() => api.updateSkip())}
+          onInstall={() => void run(() => api.updateInstall(), true)}
+          onLater={() => void run(() => api.updateLater(), true)}
+          onSkip={() => void run(() => api.updateSkip(), true)}
+          headingRef={heading}
         />
       </div>
     </>
