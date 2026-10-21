@@ -161,7 +161,7 @@ async function waitFor(step, condition) {
   try {
     return await driver.wait(condition, WAIT);
   } catch (e) {
-    throw new Error(`timed out waiting for: ${step}; page: ${JSON.stringify(await snapshot())}`, { cause: e });
+    throw new Error(`timed out waiting for: ${step} (${e.message}); page: ${JSON.stringify(await snapshot())}`, { cause: e });
   }
 }
 
@@ -661,7 +661,8 @@ test("ac11_1 a debug build does not check; a found update asks first, Later and 
 
     // Later hides the prompt until the next check, and focus moves to the Updates heading.
     await clickButton("Later");
-    await waitFor("Later to hide the offer", async () => (await byText(`Tolon ${state.version} is available.`)).length === 0);
+    const offer = `Tolon ${state.version} is available.`;
+    await waitFor("Later to hide the offer", async () => !(await driver.executeScript(() => document.body.innerText)).includes(offer));
     assert.deepEqual(await invoke("update_status"), { answer: { available: null, installing: false } });
     await waitFor("focus on the Updates heading", async () => (await driver.executeScript(() => document.activeElement?.id)) === "updates-heading");
     await clickButton("Check for updates");
