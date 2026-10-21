@@ -145,6 +145,7 @@ export const hi: Messages = {
     body: (time) => `${time} पर शुरू होगी। Tolon स्क्रीन को कवर नहीं कर सका।`,
     many: (count) => `${number.format(count)} मीटिंग जल्द शुरू होने वाली हैं`,
     manyOver: "कई मीटिंग जल्द शुरू होने वाली हैं",
+    untitled: "बिना शीर्षक की मीटिंग",
   },
   relative: {
     neverSynced: "अभी तक सिंक नहीं हुआ",

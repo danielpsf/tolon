@@ -195,6 +195,7 @@ export const ar: Messages = {
       other: (n) => `${n} اجتماع على وشك البدء`,
     }),
     manyOver: "عدة اجتماعات على وشك البدء",
+    untitled: "اجتماع بلا عنوان",
   },
   relative: {
     neverSynced: "لم تتم المزامنة بعد",

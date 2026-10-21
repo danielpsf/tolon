@@ -179,6 +179,7 @@ export const he: Messages = {
       other: (n) => `${n} פגישות עומדות להתחיל`,
     }),
     manyOver: "כמה פגישות עומדות להתחיל",
+    untitled: "פגישה ללא כותרת",
   },
   relative: {
     neverSynced: "עדיין לא סונכרן",

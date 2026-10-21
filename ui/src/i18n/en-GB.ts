@@ -145,6 +145,7 @@ export const enGB: Messages = {
     body: (time) => `Starts at ${time}. Tolon could not cover the screen.`,
     many: (count) => `${number.format(count)} meetings are about to start`,
     manyOver: "Several meetings are about to start",
+    untitled: "Untitled meeting",
   },
   relative: {
     neverSynced: "Not synced yet",

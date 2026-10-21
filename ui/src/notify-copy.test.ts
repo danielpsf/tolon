@@ -33,6 +33,7 @@ describe("the notification bundle (L-038)", () => {
         expect(bundle.join).toBe(c.t.interrupt.joinCall);
         expect(bundle.snooze).toBe(c.t.interrupt.snooze(SNOOZE_MINUTES));
         expect(bundle.many_over).toBe(c.t.notification.manyOver);
+        expect(bundle.untitled).toBe(c.t.notification.untitled);
       });
 
       it("has the two placeholders exactly where Rust expects them", () => {
@@ -40,7 +41,7 @@ describe("the notification bundle (L-038)", () => {
         expect(bundle.body.replaceAll("{time}", "")).not.toMatch(/[{}]/);
         expect(bundle.one_title.match(/\{title\}/g)).toHaveLength(1);
         expect(bundle.one_title.replaceAll("{title}", "")).not.toMatch(/[{}]/);
-        for (const text of [bundle.test_title, bundle.many_over, bundle.snooze, bundle.join, ...bundle.many_titles]) {
+        for (const text of [bundle.test_title, bundle.many_over, bundle.snooze, bundle.join, bundle.untitled, ...bundle.many_titles]) {
           expect(text).not.toMatch(/[{}]/);
         }
       });
@@ -89,6 +90,7 @@ describe("the notification bundle (L-038)", () => {
           bundle.body,
           bundle.snooze,
           bundle.join,
+          bundle.untitled,
           ...bundle.many_titles,
         ];
         for (const text of sentences) {
@@ -122,6 +124,7 @@ describe("the notification bundle (L-038)", () => {
     expect(b.body).toBe("Starts at {time}. Tolon could not cover the screen.");
     expect(b.snooze).toBe("Snooze 5 min");
     expect(b.join).toBe("Join the call");
+    expect(b.untitled).toBe("Untitled meeting");
     expect(b.times[14 * 60 + 5].replace(/\s/g, " ")).toBe("2:05 PM");
   });
 

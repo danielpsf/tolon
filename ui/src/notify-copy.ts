@@ -34,6 +34,7 @@ export function buildNotifyCopy(c: Copy): NotifyCopyDto {
     body: t.notification.body(TIME),
     snooze: t.interrupt.snooze(SNOOZE_MINUTES),
     join: t.interrupt.joinCall,
+    untitled: t.notification.untitled,
     times: dayOfTimes(c),
   };
 }

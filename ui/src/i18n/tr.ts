@@ -142,6 +142,7 @@ export const tr: Messages = {
     body: (time) => `Başlangıç: ${time}. Tolon ekranı kaplayamadı.`,
     many: (count) => `${number.format(count)} toplantı birazdan başlıyor`,
     manyOver: "Birkaç toplantı birazdan başlıyor",
+    untitled: "Başlıksız toplantı",
   },
   relative: {
     neverSynced: "Henüz eşitlenmedi",

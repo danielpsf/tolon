@@ -61,6 +61,8 @@ pub struct NotifyCopy {
     /// The Snooze button, already for [`SNOOZE_MINUTES`] minutes.
     pub snooze: String,
     pub join: String,
+    /// The title of a meeting that has none.
+    pub untitled: String,
     /// The local time `HH:MM` as the person's locale writes it, minute 0 of the day first. Empty
     /// only in the built-in English, which shows the 24-hour clock as it is.
     pub times: Vec<String>,
@@ -80,13 +82,24 @@ impl NotifyCopy {
             body: format!("Starts at {TIME}. Tolon could not cover the screen."),
             snooze: format!("Snooze {SNOOZE_MINUTES} min"),
             join: "Join the call".to_owned(),
+            untitled: "Untitled meeting".to_owned(),
             times: Vec::new(),
         }
     }
 
     /// A bundle from the page, validated and cleaned, or `invalid:notify_copy`.
     pub fn from_page(value: &Value) -> Result<Self, AppError> {
-        let raw: Self = serde_json::from_value(value.clone()).map_err(|_| INVALID)?;
+        // The two lists have exact lengths: a longer one is refused before any of it is parsed.
+        let sized = |key: &str, len: usize| {
+            value
+                .get(key)
+                .and_then(Value::as_array)
+                .is_some_and(|list| list.len() == len)
+        };
+        if !(sized("times", MINUTES_PER_DAY) && sized("many_titles", MANY_MAX - 1)) {
+            return Err(INVALID);
+        }
+        let raw = Self::deserialize(value).map_err(|_| INVALID)?;
         raw.checked().ok_or(INVALID)
     }
 
@@ -106,10 +119,7 @@ impl NotifyCopy {
             .iter()
             .map(|t| clean(t, MAX_TIME_CHARS, false))
             .collect::<Option<Vec<_>>>()?;
-        let valid = LOCALES.contains(&self.locale.as_str())
-            && many_titles.len() == MANY_MAX - 1
-            && times.len() == MINUTES_PER_DAY;
-        valid.then_some(())?;
+        LOCALES.contains(&self.locale.as_str()).then_some(())?;
         Some(Self {
             locale: self.locale,
             test_title: template(&self.test_title, &[], false)?,
@@ -119,6 +129,7 @@ impl NotifyCopy {
             body: template(&self.body, &[TIME], false)?,
             snooze: template(&self.snooze, &[], false)?,
             join: template(&self.join, &[], false)?,
+            untitled: template(&self.untitled, &[], false)?,
             times,
         })
     }
@@ -129,7 +140,17 @@ impl NotifyCopy {
         let title = match (show.test, show.meetings.len()) {
             (true, _) => self.test_title.clone(),
             (false, 0 | 1) => {
-                let meeting = first.map(|m| clean_title(&m.title)).unwrap_or_default();
+                // A meeting without a title (or only invisible characters) gets the placeholder.
+                let meeting = first
+                    .map(|m| clean_title(&m.title))
+                    .map(|t| {
+                        if t.is_empty() {
+                            self.untitled.clone()
+                        } else {
+                            t
+                        }
+                    })
+                    .unwrap_or_default();
                 self.one_title.replace(TITLE, &meeting)
             }
             (false, n) => n
@@ -152,12 +173,21 @@ impl NotifyCopy {
     }
 }
 
-/// A meeting title as the notification may show it: no control and no format characters.
+/// Characters no text may carry: control characters, Unicode format characters (Cf) and the line
+/// and paragraph separators U+2028 and U+2029, which are neither.
+fn dropped(c: char) -> bool {
+    c.is_control() || is_format_char(c) || matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// A meeting title as the notification may show it: no control, format or separator characters,
+/// trimmed. Empty when nothing is left.
 pub fn clean_title(title: &str) -> String {
     title
         .chars()
-        .filter(|c| !c.is_control() && !is_format_char(*c))
-        .collect()
+        .filter(|c| !dropped(*c))
+        .collect::<String>()
+        .trim()
+        .to_owned()
 }
 
 /// `text` without control characters and without format characters (the isolates stay when
@@ -169,9 +199,7 @@ fn clean(text: &str, max: usize, keep_isolates: bool) -> Option<String> {
     }
     let cleaned: String = text
         .chars()
-        .filter(|c| {
-            !c.is_control() && (!is_format_char(*c) || (keep_isolates && ISOLATES.contains(c)))
-        })
+        .filter(|c| !dropped(*c) || (keep_isolates && ISOLATES.contains(c)))
         .collect();
     let cleaned = cleaned.trim();
     (!cleaned.is_empty() && cleaned.chars().count() <= max).then(|| cleaned.to_owned())
@@ -302,6 +330,7 @@ mod tests {
             body: "Beginnt um {time} Uhr. Tolon konnte den Bildschirm nicht abdecken.".to_owned(),
             snooze: "5 Min. später erinnern".to_owned(),
             join: "An der Besprechung teilnehmen".to_owned(),
+            untitled: "Unbenannter Termin".to_owned(),
             times: day(|h, m| format!("{h:02}:{m:02}")),
         }
     }
@@ -326,6 +355,7 @@ mod tests {
             body: "يبدأ في الساعة {time}.".to_owned(),
             snooze: "تأجيل ٥ دقائق".to_owned(),
             join: "الانضمام إلى المكالمة".to_owned(),
+            untitled: "اجتماع بلا عنوان".to_owned(),
             times: day(|h, m| {
                 let (h12, mark) = (
                     if h % 12 == 0 { 12 } else { h % 12 },
@@ -386,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn the_time_is_the_locale_s_own_text_for_the_local_minute() -> TestResult {
+    fn ac4_5_the_time_is_the_locale_s_own_text_for_the_local_minute() -> TestResult {
         // 14:05 in Berlin, however the start is written.
         for start in ["2026-10-21T14:05:00+02:00", "2026-10-21T12:05:00Z"] {
             let one = AlarmShow {
@@ -486,14 +516,48 @@ mod tests {
 
     #[test]
     fn a_feed_title_cannot_reorder_or_break_out_of_the_isolates() {
-        let hostile = "a\u{202E}b\u{2069}c\u{200B}d\u{2068}e\nf\u{0}g";
+        let hostile = "a\u{202E}b\u{2069}c\u{200B}d\u{2068}e\nf\u{0}g\u{2028}h\u{2029}i";
         let (title, _) = arabic().text(&show(&[hostile]), BERLIN);
-        assert_eq!(title, "\u{2068}abcdefg\u{2069}");
+        assert_eq!(title, "\u{2068}abcdefghi\u{2069}");
         // The braces of a title are not placeholders: it is substituted once, not scanned.
         assert_eq!(
             german().text(&show(&["{time} {title}"]), BERLIN).0,
             "{time} {title}"
         );
+    }
+
+    #[test]
+    fn a_meeting_without_a_title_gets_the_placeholder_not_empty_isolates() {
+        for title in ["", "   ", "\u{200B}\u{2028}\n"] {
+            assert_eq!(
+                german().text(&show(&[title]), BERLIN).0,
+                "Unbenannter Termin"
+            );
+            assert_eq!(
+                arabic().text(&show(&[title]), BERLIN).0,
+                "\u{2068}اجتماع بلا عنوان\u{2069}"
+            );
+        }
+        assert_eq!(
+            NotifyCopy::english().text(&show(&[""]), BERLIN).0,
+            "Untitled meeting"
+        );
+    }
+
+    #[test]
+    fn a_list_of_the_wrong_size_is_refused_before_it_is_parsed() -> TestResult {
+        let mut value = serde_json::to_value(german())?;
+        // Far too many entries that are not even strings: refused on the length alone.
+        value["times"] = json!(vec![0; 1_000_000]);
+        assert_eq!(NotifyCopy::from_page(&value), Err(INVALID));
+        value["times"] = json!(vec!["00:00"; MINUTES_PER_DAY + 1]);
+        assert_eq!(NotifyCopy::from_page(&value), Err(INVALID));
+        value["times"] = json!(vec!["00:00"; MINUTES_PER_DAY]);
+        value["many_titles"] = json!(vec!["x"; MANY_MAX]);
+        assert_eq!(NotifyCopy::from_page(&value), Err(INVALID));
+        value["many_titles"] = json!("not a list");
+        assert_eq!(NotifyCopy::from_page(&value), Err(INVALID));
+        Ok(())
     }
 
     #[test]

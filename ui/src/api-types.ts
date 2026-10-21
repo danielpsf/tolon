@@ -49,6 +49,8 @@ export interface NotifyCopyDto {
   body: string;
   snooze: string;
   join: string;
+  /** The title of a meeting that has none. */
+  untitled: string;
   /** The 1440 minutes of a day as the locale writes them, 00:00 first. */
   times: string[];
 }

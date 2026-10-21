@@ -142,6 +142,7 @@ export const zhCN: Messages = {
     body: (time) => `开始时间：${time}。Tolon 无法覆盖屏幕。`,
     many: (count) => `${number.format(count)} 个会议即将开始`,
     manyOver: "多个会议即将开始",
+    untitled: "无标题会议",
   },
   relative: {
     neverSynced: "尚未同步",

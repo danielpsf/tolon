@@ -142,6 +142,7 @@ export const ja: Messages = {
     body: (time) => `開始時刻は${time}です。Tolon は画面を覆えませんでした。`,
     many: (count) => `${number.format(count)}件の会議がまもなく始まります`,
     manyOver: "複数の会議がまもなく始まります",
+    untitled: "タイトルなしの会議",
   },
   relative: {
     neverSynced: "未同期",

@@ -145,6 +145,7 @@ export const de: Messages = {
     body: (time) => `Beginnt um ${time} Uhr. Tolon konnte den Bildschirm nicht abdecken.`,
     many: (count) => `${number.format(count)} Termine beginnen gleich`,
     manyOver: "Mehrere Termine beginnen gleich",
+    untitled: "Unbenannter Termin",
   },
   relative: {
     neverSynced: "Noch nicht synchronisiert",

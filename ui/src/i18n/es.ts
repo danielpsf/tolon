@@ -145,6 +145,7 @@ export const es: Messages = {
     body: (time) => `Hora de inicio: ${time}. Tolon no pudo cubrir la pantalla.`,
     many: (count) => `${number.format(count)} reuniones están a punto de empezar`,
     manyOver: "Varias reuniones están a punto de empezar",
+    untitled: "Reunión sin título",
   },
   relative: {
     neverSynced: "Aún sin sincronizar",

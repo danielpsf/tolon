@@ -552,13 +552,16 @@ pub async fn notify_copy_set(
     let current = app
         .try_state::<NotifyCopyState>()
         .ok_or_else(|| command_error(&AppError::NOT_READY.into()))?;
+    let state = state(&app).map_err(|e| command_error(&e))?;
+    // One store lock across the compare, the save and the swap: two calls cannot interleave, so the
+    // stored bundle and the one in use are always the same, the last that was sent.
+    let store = pipeline::lock(&state.db);
     if *current.current() != copy {
         // Stored first: a bundle that could not be saved must not look kept after a restart.
-        state(&app)
-            .and_then(|s| notify_copy::save(&pipeline::lock(&s.db), &copy))
-            .map_err(|e| command_error(&e))?;
+        notify_copy::save(&store, &copy).map_err(|e| command_error(&e))?;
         current.replace(copy);
     }
+    drop(store);
     Ok(())
 }
 
@@ -765,6 +768,28 @@ mod tests {
 
     /// `settings_set` saves, announces and wakes through `settings::change` (tested on the rig),
     /// and hands it `notify`, which wakes the scheduler.
+    #[test]
+    fn notify_copy_set_holds_the_store_lock_across_the_save_and_the_swap() {
+        let source = include_str!("commands.rs");
+        let start = source
+            .find("pub async fn notify_copy_set(")
+            .unwrap_or(usize::MAX);
+        let body = source.get(start..).unwrap_or_default();
+        let body = body.split("#[tauri::command]").next().unwrap_or_default();
+        let at = |needle: &str| body.find(needle).unwrap_or(usize::MAX);
+        let (lock, compare, save, swap, release) = (
+            at("pipeline::lock(&state.db)"),
+            at("current.current() != copy"),
+            at("notify_copy::save("),
+            at("current.replace(copy)"),
+            at("drop(store)"),
+        );
+        assert!(
+            lock < compare && compare < save && save < swap && swap < release,
+            "lock, compare, save, swap, release in this order"
+        );
+    }
+
     #[test]
     fn settings_set_goes_through_change_and_notify() {
         let source = include_str!("commands.rs");

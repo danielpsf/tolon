@@ -145,6 +145,7 @@ export const ptBR: Messages = {
     body: (time) => `Horário de início: ${time}. O Tolon não conseguiu cobrir a tela.`,
     many: (count) => `${number.format(count)} reuniões estão prestes a começar`,
     manyOver: "Várias reuniões estão prestes a começar",
+    untitled: "Reunião sem título",
   },
   relative: {
     neverSynced: "Ainda não sincronizado",
