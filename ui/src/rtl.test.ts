@@ -33,6 +33,13 @@ describe("right to left", () => {
     expect(reset?.body).toMatch(/letter-spacing:\s*normal/);
   });
 
+  it("D1 opens the interrupt title to -0.02em, and the reset above still wins for those scripts", () => {
+    const title = rules.findIndex((r) => r.selector === ".tl-int .tl-int-title");
+    expect(rules[title]?.body).toMatch(/letter-spacing:\s*-0\.02em/);
+    // Same specificity as `:root:lang(ar) *`, so the reset must come later in the file.
+    expect(rules.findIndex((r) => r.selector.includes(":root:lang(ar) *"))).toBeGreaterThan(title);
+  });
+
   it.each([
     ["ar", ['"Noto Sans Arabic"', '"Segoe UI"', '"Geeza Pro"']],
     ["hi", ['"Kohinoor Devanagari"', '"Nirmala UI"', '"Noto Sans Devanagari"']],

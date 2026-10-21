@@ -218,8 +218,10 @@
   flex-direction: column;
   gap: calc(18 * var(--tl-u));
 }
+/* Swiss Moss sets display-xl at -0.045em, which makes letters touch at this size (D1); the interrupt title alone opens it up. */
 .tl-int .tl-int-title {
   font-size: calc(112 * var(--tl-u));
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 .tl-int .tl-int-title[data-len="long"] {
