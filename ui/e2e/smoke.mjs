@@ -67,8 +67,14 @@ async function startApp(route = "#/calendars") {
     .usingServer(driverUrl)
     .withCapabilities({ browserName: "wry", "tauri:options": { application } })
     .build();
+  // WebView2 can answer with about:blank before the app's page loads; a URL built from that loads no app,
+  // and its commands fail with "Origin header is not a valid URL".
+  const current = await driver.wait(async () => {
+    const href = await driver.getCurrentUrl();
+    return !href.startsWith("about:") && href;
+  }, WAIT);
   // The language follows the system by default; the `lang` query parameter pins it so the copy below is English.
-  const url = new URL(await driver.getCurrentUrl());
+  const url = new URL(current);
   url.search = "?lang=en-US";
   url.hash = route;
   await driver.get(url.href);
