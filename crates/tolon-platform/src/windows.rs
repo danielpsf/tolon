@@ -222,6 +222,11 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    /// Tauri's inner size is already below the title bar here.
+    fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
+        Ok(0.0)
+    }
+
     /// Needs the process to be per-monitor DPI aware (Tauri's manifest is) for real scales; an
     /// unaware process sees virtualised coordinates at 96 DPI, which stay consistent.
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {

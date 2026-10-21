@@ -291,6 +291,13 @@ pub trait Platform: Send + Sync {
     /// window forward there.
     fn activate_app(&self) -> Result<(), PlatformError>;
 
+    /// How much of the inner size Tauri reports for `window` the title bar covers, in logical
+    /// points. macOS lays the content view under the title bar, so Tauri's inner size there is
+    /// the whole frame: a 760-point inner size shows 728 points of page below a 32-point title
+    /// bar. Add this to a wanted visible height. Windows, Linux and the stub: 0, the inner size
+    /// is already below the title bar.
+    fn title_bar_overlap(&self, window: &dyn HasWindowHandle) -> Result<f64, PlatformError>;
+
     /// Connected screens, primary first; on success exactly one has `is_main`. Linux returns
     /// [`PlatformError::Unsupported`]: the app then asks Tauri (`available_monitors`).
     fn screens(&self) -> Result<Vec<Screen>, PlatformError>;
@@ -359,6 +366,10 @@ impl Platform for StubPlatform {
     fn activate_app(&self) -> Result<(), PlatformError> {
         STUB_ACTIVATIONS.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
+        Ok(0.0)
     }
 
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
@@ -701,6 +712,12 @@ mod tests {
         let before = StubPlatform.activations();
         assert_eq!(StubPlatform.activate_app(), Ok(()));
         assert_eq!(StubPlatform.activations(), before + 1);
+    }
+
+    #[test]
+    fn stub_title_bar_covers_nothing() {
+        let w = fake::Fake(RawWindowHandle::Xlib(XlibWindowHandle::new(1)));
+        assert_eq!(StubPlatform.title_bar_overlap(&w), Ok(0.0));
     }
 
     #[test]

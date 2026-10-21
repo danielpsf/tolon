@@ -62,6 +62,11 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Tauri's inner size is already below the title bar here.
+    fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
+        Ok(0.0)
+    }
+
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         Err(PlatformError::Unsupported)
     }
