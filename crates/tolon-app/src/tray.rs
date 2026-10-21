@@ -352,20 +352,46 @@ fn place(app: &AppHandle, window: &WebviewWindow, rect: Option<Rect>) {
     }
 }
 
-/// Settings from the panel (AC7.2): the settings window shows and takes focus. With no Dock icon
-/// on macOS the tray is the only way back to it (L-042).
+/// The settings window shows and takes focus: first run at start, the panel's Settings (AC7.2),
+/// and opening Tolon again while it runs (a reopen on macOS, a second launch elsewhere), the way
+/// back when the tray icon is hidden (decision 2026-10-22). Any thread: the steps run on the main
+/// thread, where `Platform` calls belong.
 pub fn show_settings(app: &AppHandle) {
     hide_panel(app);
-    if let Some(window) = app.get_webview_window(MAIN) {
-        for step in [window.unminimize(), window.show(), window.set_focus()] {
-            if let Err(e) = step {
-                tracing::warn!(error = %e, "could not show the settings window");
-            }
-        }
+    let Some(window) = app.get_webview_window(MAIN) else {
+        return;
+    };
+    let shown = app.run_on_main_thread(move || {
+        bring_forward(
+            || window.unminimize().and_then(|()| window.show()),
+            &NATIVE,
+            || window.set_focus(),
+        );
+    });
+    if let Err(e) = shown {
+        tracing::warn!(error = %e, "could not reach the main thread to show the settings window");
     }
 }
 
-/// What closing a window does (S7.2): the settings window only hides, so Tolon keeps running in
+/// Show, then activate Tolon, then focus: an Accessory app's window does not come forward on
+/// `show()` alone (macOS), and focus goes to a window that is already shown. Failures are logged;
+/// the next step still runs.
+fn bring_forward(
+    show: impl FnOnce() -> tauri::Result<()>,
+    platform: &dyn Platform,
+    focus: impl FnOnce() -> tauri::Result<()>,
+) {
+    if let Err(e) = show() {
+        tracing::warn!(error = %e, "could not show the settings window");
+    }
+    if let Err(e) = platform.activate_app() {
+        tracing::warn!(error = %e, "could not bring Tolon to the front");
+    }
+    if let Err(e) = focus() {
+        tracing::warn!(error = %e, "could not focus the settings window");
+    }
+}
+
 /// the tray; every other window closes.
 pub fn hides_on_close(label: &str) -> bool {
     label == MAIN
@@ -646,9 +672,79 @@ mod tests {
         let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
         let start = shipped.find("start(app.handle())").unwrap_or(usize::MAX);
         let decide = shipped.find("tray::shows_at_start(").unwrap_or(usize::MAX);
-        let show = shipped.find("tray::show_settings(").unwrap_or(0);
+        let show = shipped
+            .find("tray::show_settings(app.handle())")
+            .unwrap_or(0);
         assert!(start < decide && decide < show, "start, decide, then show");
         Ok(())
+    }
+
+    /// Decision 2026-10-22: show, then activate Tolon, then focus. The stub counts activations.
+    /// The only test in this crate that activates, so the count is not raced.
+    #[test]
+    fn showing_settings_shows_then_activates_then_focuses() {
+        use std::cell::RefCell;
+        use tolon_platform::StubPlatform;
+        let before = StubPlatform.activations();
+        let steps = RefCell::new(Vec::new());
+        bring_forward(
+            || {
+                steps
+                    .borrow_mut()
+                    .push(("show", StubPlatform.activations() - before));
+                Ok(())
+            },
+            &StubPlatform,
+            || {
+                steps
+                    .borrow_mut()
+                    .push(("focus", StubPlatform.activations() - before));
+                Ok(())
+            },
+        );
+        assert_eq!(steps.into_inner(), [("show", 0), ("focus", 1)]);
+        // A failed show still activates and focuses.
+        let focused = RefCell::new(false);
+        bring_forward(
+            || Err(tauri::Error::WindowNotFound),
+            &StubPlatform,
+            || {
+                *focused.borrow_mut() = true;
+                Ok(())
+            },
+        );
+        assert!(focused.into_inner());
+        assert_eq!(StubPlatform.activations() - before, 2);
+    }
+
+    /// AC10.2: only `bring_forward` activates, and only `show_settings` calls it, so a start with
+    /// the window hidden takes no focus.
+    #[test]
+    fn ac10_2_only_showing_the_settings_window_activates_tolon() {
+        for source in [
+            include_str!("main.rs"),
+            include_str!("commands.rs"),
+            include_str!("interrupt.rs"),
+            include_str!("scheduler.rs"),
+        ] {
+            assert!(!source.contains("activate_app"));
+        }
+        let shipped = include_str!("tray.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default();
+        assert_eq!(shipped.matches(".activate_app()").count(), 1);
+        assert_eq!(
+            shipped.matches("bring_forward(").count(),
+            2,
+            "defined and called once"
+        );
+        let show = shipped
+            .split("pub fn show_settings(")
+            .nth(1)
+            .unwrap_or_default();
+        let show = show.split("\nfn bring_forward(").next().unwrap_or_default();
+        assert!(show.contains("bring_forward("));
     }
 
     #[test]
