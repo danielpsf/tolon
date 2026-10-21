@@ -85,6 +85,11 @@ export const tr: Messages = {
       theme: "Tema",
       light: "Açık",
       dark: "Koyu",
+      style: "Stil",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "Alarm rengi",
       colorHint: "Toplantıdan önce ekranı kaplayan alarmın rengi. Metin ve düğmeler de buna göre değişir ve kolayca okunur.",
       colors: {
@@ -137,6 +142,7 @@ export const tr: Messages = {
     snooze: (minutes) => `${number.format(minutes)} dk ertele`,
     dismiss: "Kapat",
     dismissConsequence: "Kapatmak bu hatırlatıcıyı bu bilgisayarda susturur.",
+    peekSay: "Vakit geldi.",
     hintJoin: "Esc: ertele. Enter: katıl. D: kapat.",
     hintEvent: "Esc: ertele. Enter: etkinliği aç. D: kapat.",
     hintAlreadyThere: "Esc: ertele. Enter: zaten oradayım. D: kapat.",

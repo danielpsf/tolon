@@ -85,6 +85,11 @@ export const ja: Messages = {
       theme: "テーマ",
       light: "ライト",
       dark: "ダーク",
+      style: "スタイル",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "アラームの色",
       colorHint: "会議の前に画面いっぱいに表示されるアラームの色です。文字とボタンも合わせて変わり、読みやすさは保たれます。",
       colors: {
@@ -137,6 +142,7 @@ export const ja: Messages = {
     snooze: (minutes) => `${number.format(minutes)}分後に再通知`,
     dismiss: "閉じる",
     dismissConsequence: "閉じると、このコンピュータではこのリマインダーが鳴らなくなります。",
+    peekSay: "時間です。",
     hintJoin: "Esc：再通知。Enter：参加。D：閉じる。",
     hintEvent: "Esc：再通知。Enter：予定を開く。D：閉じる。",
     hintAlreadyThere: "Esc：再通知。Enter：すでに参加しています。D：閉じる。",

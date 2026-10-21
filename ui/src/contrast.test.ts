@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INTERRUPT_COLORS, type InterruptColor } from "./api-types";
+import { peekColor } from "./pages/PeekScene";
 import { LINE_MIX, PREVIEW_TOKENS, REMINDER_PAIRS, tokensFor } from "./reminder-colors";
 import local from "./styles/local.css?raw";
 import tokens from "swiss-moss/tokens/tokens.css?raw";
@@ -222,5 +223,91 @@ describe("preview tokens (AC4.3, L-043)", () => {
       const block = new RegExp(`\\[data-tokens=${theme}\\]\\{([^}]*)\\}`).exec(PREVIEW_TOKENS)?.[1] ?? "";
       expect(palette(block), theme).toEqual(values);
     }
+  });
+});
+
+// ---- Peek (L-050) ----------------------------------------------------------------------------------------
+// The page follows the window's appearance; the hill, Join and the speech bubble are pinned to Swiss Moss's
+// light block with the reminder colour (Default draws Peek's deep moss). The --pk-* properties carry the
+// page's own tokens into the pinned Join (its edge and focus ring).
+
+const PEEK = '[data-style="peek"]';
+const HINT = `.tl-int-hint,\n${PEEK} .tl-int-consequence`;
+
+/** A Peek value as hex: `--sm-*` in `theme`, `--tl-*` from the pinned pair of `color`, `--pk-*` from the page. */
+function peekResolve(theme: Theme, color: InterruptColor, value: string): string {
+  const name = /^var\((--(?:sm|tl|pk)-[\w-]+)\)$/.exec(value)?.[1];
+  if (!name) throw new Error(`${value} is not a token`);
+  if (name.startsWith("--pk-")) return peekResolve(theme, color, declaration(`${PEEK} .tl-int`, name));
+  const field = TL[name as keyof typeof TL];
+  return field ? hexOf("light", REMINDER_PAIRS[peekColor(color)][field]) : hexOf(theme, name);
+}
+
+type At = [selector: string, property: string];
+const peekHex = (theme: Theme, color: InterruptColor, [selector, property]: At) =>
+  peekResolve(theme, color, declaration(`${PEEK} ${selector}`, property));
+const PAGE: At = [".tl-int", "background"];
+
+// [what it is, background, text]; Join, the chip and the bubble are pinned, the rest follow the page.
+const PEEK_PAIRS: [string, At, At][] = [
+  ["title and page text", PAGE, [".tl-int", "color"]],
+  ["details", PAGE, [".tl-int-details", "color"]],
+  ["key hint and consequence", PAGE, [HINT, "color"]],
+  ["countdown in the time pill", [".tl-int-top", "background"], [".tl-int", "color"]],
+  ["clock on the moss chip", [".tl-int-top > :first-child", "background"], [".tl-int-top > :first-child", "color"]],
+  ["Snooze and Dismiss", [".tl-int .sm-btn", "background"], [".tl-int .sm-btn", "color"]],
+  ["Snooze and Dismiss hovered", [".tl-int .sm-btn:hover", "background"], [".tl-int .sm-btn:hover", "color"]],
+  ["Join", [".tl-int .sm-btn.tl-primary", "background"], [".tl-int .sm-btn.tl-primary", "color"]],
+  ["Join hovered", [".tl-int .sm-btn.tl-primary:hover", "background"], [".tl-int .sm-btn.tl-primary:hover", "color"]],
+  ["the Enter chip", [".tl-peek-key", "background"], [".tl-peek-key", "color"]],
+  ["the speech bubble", [".tl-peek-say", "background"], [".tl-peek-say", "color"]],
+];
+
+// Every button's edge and the focus ring sit on the page, so they are measured against it (3:1).
+const PEEK_EDGES: [string, At][] = [
+  ["Snooze and Dismiss edge", [".tl-int .sm-btn", "border-color"]],
+  ["Join edge", [".tl-int .sm-btn.tl-primary", "border-color"]],
+  ["focus ring", [".tl-int :focus-visible", "outline-color"]],
+];
+
+const PEEK_EVERY = INTERRUPT_COLORS.flatMap((color) => APPEARANCES.map((theme) => [color, theme] as const));
+
+describe("Peek contrast in light and dark (AC4.3, L-050)", () => {
+  it("Default draws Peek's deep moss; every other colour is its own", () => {
+    for (const color of INTERRUPT_COLORS) expect(peekColor(color)).toBe(color === "theme" ? "moss-deep" : color);
+  });
+
+  it.each(PEEK_EVERY)("%s in %s: every text pair reaches 4.5:1", (color, theme) => {
+    for (const [name, bg, fg] of PEEK_PAIRS) {
+      expect(contrast(peekHex(theme, color, bg), peekHex(theme, color, fg)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each(PEEK_EVERY)("%s in %s: button edges and the focus ring reach 3:1 on the page", (color, theme) => {
+    for (const [name, edge] of PEEK_EDGES) {
+      expect(contrast(peekHex(theme, color, edge), peekHex(theme, color, PAGE)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("uses Swiss Moss tokens only, no hex, in the Peek block", () => {
+    const block = local.slice(local.indexOf(" * Peek (L-050"), local.indexOf(" * Right to left"));
+    expect(block.length).toBeGreaterThan(1000);
+    expect(block).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/);
+    expect(block).not.toMatch(/rgba?\(|hsla?\(/);
+    for (const [, name] of block.matchAll(/var\((--[\w-]+)\)/g)) expect(name, name).toMatch(/^--(sm|tl|pk)-/);
+  });
+
+  // The table for the L-050 report (Default): a token change shows up here as a diff.
+  it("has these ratios for Default in light and dark", () => {
+    const rows = APPEARANCES.map((theme) => {
+      const r = (bg: At, fg: At) => contrast(peekHex(theme, "theme", bg), peekHex(theme, "theme", fg)).toFixed(2);
+      const text = PEEK_PAIRS.map(([name, bg, fg]) => `${name} ${r(bg, fg)}`);
+      const edges = PEEK_EDGES.map(([name, edge]) => `${name} ${r(PAGE, edge)}`);
+      return `${theme}: ${[...text, ...edges].join(", ")}`;
+    });
+    expect(rows).toEqual([
+      "light: title and page text 16.64, details 4.71, key hint and consequence 4.98, countdown in the time pill 15.08, clock on the moss chip 7.74, Snooze and Dismiss 15.08, Snooze and Dismiss hovered 13.40, Join 7.74, Join hovered 5.00, the Enter chip 7.74, the speech bubble 15.08, Snooze and Dismiss edge 3.33, Join edge 3.33, focus ring 16.64",
+      "dark: title and page text 14.26, details 8.61, key hint and consequence 7.15, countdown in the time pill 13.03, clock on the moss chip 11.11, Snooze and Dismiss 13.03, Snooze and Dismiss hovered 9.67, Join 7.74, Join hovered 5.00, the Enter chip 7.74, the speech bubble 13.03, Snooze and Dismiss edge 3.46, Join edge 3.46, focus ring 14.26",
+    ]);
   });
 });

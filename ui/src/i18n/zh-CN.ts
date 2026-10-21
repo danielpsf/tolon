@@ -85,6 +85,11 @@ export const zhCN: Messages = {
       theme: "主题",
       light: "浅色",
       dark: "深色",
+      style: "风格",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "提醒颜色",
       colorHint: "会议开始前占满屏幕的提醒界面的颜色。文字和按钮会随之调整，始终清晰易读。",
       colors: {
@@ -137,6 +142,7 @@ export const zhCN: Messages = {
     snooze: (minutes) => `${number.format(minutes)}分钟后再提醒`,
     dismiss: "关闭",
     dismissConsequence: "关闭后，此提醒将在这台电脑上静音。",
+    peekSay: "时间到了。",
     hintJoin: "Esc：稍后提醒。Enter：加入。D：关闭。",
     hintEvent: "Esc：稍后提醒。Enter：打开活动。D：关闭。",
     hintAlreadyThere: "Esc：稍后提醒。Enter：我已经在会上了。D：关闭。",

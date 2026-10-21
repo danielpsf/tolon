@@ -101,6 +101,11 @@ export const he: Messages = {
       theme: "ערכת נושא",
       light: "בהיר",
       dark: "כהה",
+      style: "סגנון",
+      styles: {
+        "swiss-moss": "Swiss Moss",
+        peek: "Peek",
+      },
       color: "צבע ההתראה",
       colorHint: "הצבע של המסך שמופיע לפני פגישה. הטקסט והכפתורים משתנים איתו ונשארים קריאים.",
       colors: {
@@ -158,6 +163,7 @@ export const he: Messages = {
       })}`,
     dismiss: "סגירה",
     dismissConsequence: "סגירה משתיקה את התזכורת הזו במחשב הזה.",
+    peekSay: "הגיע הזמן.",
     hintJoin: "Esc לדחייה, Enter להצטרפות, D לסגירה.",
     hintEvent: "Esc לדחייה, Enter לפתיחת האירוע, D לסגירה.",
     hintAlreadyThere: "Esc לדחייה, Enter לסימון שאני כבר בפגישה, D לסגירה.",

@@ -701,6 +701,50 @@ test("a pinned colour in a dark window keeps the light moss and the Arabic font 
   }
 });
 
+// ---- Peek style (L-050) --------------------------------------------------------------------------------
+// `style` reaches every window as data-style on <html>, and the Peek reminder draws the character.
+
+test("switching the style to Peek sets data-style and shows Peek on the test alarm (L-050)", async () => {
+  const main = await driver.getWindowHandle();
+  const saved = await invoke("settings_set", { patch: { style: "peek" } });
+  assert.equal(saved.answer?.style, "peek", JSON.stringify(saved));
+  try {
+    // The settings window applies it from settings:changed.
+    await waitFor("data-style on the settings window", () => driver.executeScript(() => document.documentElement.dataset.style === "peek"));
+    await openTestInterrupt(main);
+    const seen = await waitFor("Peek on the interrupt", () =>
+      driver.executeScript(() => {
+        const scene = document.querySelector("main.tl-int .tl-peek");
+        if (document.documentElement.dataset.style !== "peek" || !scene) return null;
+        const art = scene.querySelector("svg.tl-peek-art");
+        return {
+          hidden: scene.getAttribute("aria-hidden"),
+          eyes: art?.querySelectorAll(".tl-peek-eye").length ?? 0,
+          shown: (art?.getBoundingClientRect().height ?? 0) > 0,
+          say: scene.querySelector(".tl-peek-say")?.textContent ?? "",
+          titleFont: getComputedStyle(document.querySelector(".tl-int-title") ?? document.body).fontFamily,
+          lang: document.documentElement.lang,
+        };
+      }),
+    );
+    assert.equal(seen.hidden, "true");
+    assert.equal(seen.eyes, 2);
+    assert.ok(seen.shown, "the character is drawn");
+    assert.ok(seen.say.trim(), "the speech bubble has its line");
+    // Latin locales draw the title in Peek's serif; other scripts keep their :lang() stack.
+    if (!/^(ar|he|hi|ja|zh)/.test(seen.lang)) assert.match(seen.titleFont, /^Fraunces/);
+    try {
+      await (await driver.switchTo().activeElement()).sendKeys(Key.ESCAPE);
+    } catch (e) {
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
+    await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+  } finally {
+    await driver.switchTo().window(main);
+    await invoke("settings_set", { patch: { style: "swiss-moss" } });
+  }
+});
+
 test("Preview in dark or light recolours the Appearance preview under the app's CSP (L-043)", async () => {
   await openPage("appearance");
   /** The preview's fill and token block, and the fill Swiss Moss's moss has in that block. */
