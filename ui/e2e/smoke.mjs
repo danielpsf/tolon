@@ -58,11 +58,29 @@ before(async () => {
   await startApp();
 });
 
+/** A launch that has not answered for this long after it started may be a single-instance handover. */
+const HANDOVER_MS = 2_000;
+
 /**
  * Starts the app in a new WebDriver session; the data dir is tauri-driver's, so it survives a restart.
  * `route` opens a settings page; with none, a launch without calendars opens on first run (F10), as Tolon does.
+ * Tolon is a single instance (L-044): a launch right after `driver.quit()`, while the old process is still
+ * closing, can hand over to it and exit 0 at once. The driver starts the process, so the suite sees that only
+ * as a session that fails or stops answering; such a launch is retried once.
  */
 async function startApp(route = "#/calendars") {
+  try {
+    await launch(route);
+  } catch (err) {
+    console.log(`launch failed, retrying once: ${err.message}`);
+    await driver?.quit().catch(() => {});
+    await sleep(HANDOVER_MS);
+    await launch(route);
+  }
+}
+
+async function launch(route) {
+  const started = Date.now();
   driver = await new Builder()
     .usingServer(driverUrl)
     .withCapabilities({ browserName: "wry", "tauri:options": { application } })
@@ -78,6 +96,9 @@ async function startApp(route = "#/calendars") {
   url.search = "?lang=en-US";
   url.hash = route;
   await driver.get(url.href);
+  // A process that handed over has exited by now; this call then fails and the launch is retried.
+  await sleep(Math.max(0, HANDOVER_MS - (Date.now() - started)));
+  await driver.getTitle();
 }
 
 after(async () => {
