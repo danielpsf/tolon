@@ -17,7 +17,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 use std::num::NonZeroIsize;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 #[cfg(target_os = "linux")]
 pub use linux::LinuxPlatform;
@@ -45,6 +45,18 @@ pub const NATIVE: NativePlatform = MacPlatform;
 pub const NATIVE: NativePlatform = WindowsPlatform;
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub const NATIVE: NativePlatform = StubPlatform;
+
+/// Keeps its statements only in macOS builds, so other crates can use the Tauri items that exist
+/// only there (`RunEvent::Reopen`) while `target_os` stays in this crate (AGENTS.md rule 9).
+#[macro_export]
+macro_rules! macos_only {
+    ($($statements:tt)*) => {
+        #[cfg(target_os = "macos")]
+        {
+            $($statements)*
+        }
+    };
+}
 
 /// One connected display.
 ///
@@ -272,6 +284,13 @@ pub trait Platform: Send + Sync {
     /// other OSes.
     fn prepare_app(&self) -> Result<(), PlatformError>;
 
+    /// Bring Tolon to the front so the window shown next takes focus. Call it after `show()` and
+    /// before `set_focus()` when the settings window comes up (decision 2026-10-22). macOS: the
+    /// call the interrupt uses, `activateIgnoringOtherApps`; an Accessory app's window does not
+    /// come forward on `show()` alone. Windows and Linux: nothing, Tauri's `set_focus` brings the
+    /// window forward there.
+    fn activate_app(&self) -> Result<(), PlatformError>;
+
     /// Connected screens, primary first; on success exactly one has `is_main`. Linux returns
     /// [`PlatformError::Unsupported`]: the app then asks Tauri (`available_monitors`).
     fn screens(&self) -> Result<Vec<Screen>, PlatformError>;
@@ -318,6 +337,15 @@ pub trait Platform: Send + Sync {
 pub struct StubPlatform;
 
 static STUB_START_AT_LOGIN: AtomicBool = AtomicBool::new(false);
+static STUB_ACTIVATIONS: AtomicUsize = AtomicUsize::new(0);
+
+impl StubPlatform {
+    /// How many times [`Platform::activate_app`] was called in this process, so tests can check
+    /// it ran, and in which order against other steps. Shared by the process like the login flag.
+    pub fn activations(&self) -> usize {
+        STUB_ACTIVATIONS.load(Ordering::SeqCst)
+    }
+}
 
 impl Platform for StubPlatform {
     fn name(&self) -> &'static str {
@@ -325,6 +353,11 @@ impl Platform for StubPlatform {
     }
 
     fn prepare_app(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
+    fn activate_app(&self) -> Result<(), PlatformError> {
+        STUB_ACTIVATIONS.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
@@ -661,6 +694,13 @@ mod tests {
                 plain.contains_physical(2000.0, 10.0)
             }
         );
+    }
+
+    #[test]
+    fn stub_activate_app_records_each_call() {
+        let before = StubPlatform.activations();
+        assert_eq!(StubPlatform.activate_app(), Ok(()));
+        assert_eq!(StubPlatform.activations(), before + 1);
     }
 
     #[test]

@@ -57,6 +57,11 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing: Tauri's `set_focus` brings the window forward here.
+    fn activate_app(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         Err(PlatformError::Unsupported)
     }

@@ -62,6 +62,14 @@ impl Platform for MacPlatform {
         }
     }
 
+    fn activate_app(&self) -> Result<(), PlatformError> {
+        let mtm = main_thread()?;
+        // As in `raise_above_everything`: the call checked on screen (L-042, L-044).
+        #[allow(deprecated)]
+        NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+        Ok(())
+    }
+
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         let mtm = main_thread()?;
         // screens[0] is the screen with the menu bar; NSScreen.main is the focused one instead.
@@ -243,5 +251,9 @@ mod tests {
         // libtest runs this on a worker thread, so the activation policy is never changed here.
         assert_eq!(MacPlatform.screens(), Err(PlatformError::NotMainThread));
         assert_eq!(MacPlatform.prepare_app(), Err(PlatformError::NotMainThread));
+        assert_eq!(
+            MacPlatform.activate_app(),
+            Err(PlatformError::NotMainThread)
+        );
     }
 }
