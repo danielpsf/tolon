@@ -402,7 +402,10 @@ impl Windows for TauriWindows<'_> {
         }
         if reused {
             // A window built just now asks for focus itself; one that was hidden has to be asked.
-            window.set_focus()?;
+            // A refusal costs focus, not the takeover: the raise and the F4.5 re-check follow.
+            if let Err(e) = window.set_focus() {
+                tracing::warn!(error = %e, "could not focus a reused interrupt window");
+            }
         }
         Ok(())
     }
@@ -515,9 +518,10 @@ pub fn focused(app: &AppHandle) -> bool {
 
 /// Shows `payload` on every screen. The payload is kept for windows that load after the event;
 /// when the windows cannot be shown it is dropped again and nothing stays on screen.
-/// The alarm goes out before the windows are shown: a hidden window that is being reused has
-/// rendered the new alarm by the time it is on screen, and a window built now has no listener yet
-/// and asks for the payload when it loads.
+/// The alarm is emitted before the windows are shown, so a hidden window that is being reused is
+/// told what to render ahead of its show. The emit is asynchronous and gives no guarantee that the
+/// page has rendered it by the time the window is on screen; the page keeps the last alarm it was
+/// told, and a window built now has no listener yet and asks for the payload when it loads.
 /// The scheduler re-checks focus about 500 ms later and runs the F4.5 fallback
 /// (`docs/decisions.md`, "Platform contract after L-012").
 pub fn open_interrupts(
@@ -984,6 +988,22 @@ mod tests {
         assert!(!close.contains("destroy"), "{close}");
         assert_eq!(shipped.matches("windows.destroy(").count(), 1);
         assert!(shipped.contains("window.hide()"));
+    }
+
+    /// A source check too: the alarm is emitted before the windows are shown, so a reused window
+    /// is told what to render ahead of its show.
+    #[test]
+    fn s4_2_open_interrupts_emits_the_alarm_before_it_shows_the_windows() {
+        let source = include_str!("interrupt.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let body = shipped
+            .split("pub fn open_interrupts(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_default();
+        let emit = body.find(".emit(SHOW_EVENT").unwrap_or(usize::MAX);
+        let open = body.find("open_windows(").unwrap_or(0);
+        assert!(emit < open, "emit SHOW_EVENT, then open_windows: {body}");
     }
 
     #[test]
