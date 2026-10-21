@@ -32,10 +32,40 @@
   font-weight: 600;
   line-height: 24px;
 }
-.tl-brand svg {
+.tl-brand .tl-mark {
   width: 28px;
-  height: 24px;
-  color: var(--sm-moss);
+  height: 28px;
+}
+/*
+ * Tolon's mark (PeekMark.tsx, L-052). The body, hill, eyes and cheeks are drawn inside a data-tokens="light"
+ * group, so they keep their colours in a dark window; the edge is outside it and uses the window's tokens,
+ * --tl-mark-edge, which must reach 3:1 against what the mark sits on (contrast.test.ts).
+ */
+.tl-mark {
+  flex: none;
+  overflow: visible;
+}
+.tl-mark-body {
+  fill: var(--sm-moss-deep);
+}
+.tl-mark-hill {
+  fill: var(--sm-moss);
+}
+.tl-mark-eye {
+  fill: var(--sm-paper);
+}
+.tl-mark-pupil {
+  fill: var(--sm-ink);
+}
+.tl-mark-cheek {
+  fill: var(--sm-signal);
+  fill: color-mix(in srgb, color-mix(in srgb, var(--sm-signal), var(--sm-danger)) 70%, var(--sm-danger-tint));
+}
+.tl-mark-edge {
+  fill: none;
+  stroke: var(--tl-mark-edge, var(--sm-muted));
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
 }
 .tl-version {
   margin-top: auto;
@@ -247,13 +277,14 @@
   gap: calc(24 * var(--tl-c));
 }
 .tl-int-count {
+  --tl-mark-edge: var(--tl-fg);
   display: flex;
   align-items: center;
   gap: calc(20 * var(--tl-c));
 }
-/* The bell keeps the 44:15 ratio to the countdown's 15 pt text. */
-.tl-int-count svg {
-  width: calc(44 * var(--tl-c));
+/* The mark stands where the bell did, at its size (38 pt against the countdown's 15 pt) and with the text colour as its edge. */
+.tl-int-count .tl-mark {
+  width: calc(38 * var(--tl-c));
   height: calc(38 * var(--tl-c));
 }
 .tl-int-body {
@@ -513,10 +544,9 @@
   min-block-size: 40px;
   min-inline-size: 40px;
 }
-.tl-first-bell svg {
+.tl-first-mark .tl-mark {
   width: 40px;
-  height: 34px;
-  color: var(--sm-moss);
+  height: 40px;
 }
 .tl-first .sm-steps {
   flex-direction: column;
@@ -720,8 +750,13 @@
   border-radius: 50%;
   background: var(--sm-signal);
 }
-[data-style="peek"] .tl-int-count svg {
-  display: none;
+/* In Peek the page is paper and the big character is below, so the mark is small, at the end of the pill. */
+[data-style="peek"] .tl-int-count {
+  --tl-mark-edge: var(--sm-muted);
+}
+[data-style="peek"] .tl-int-count .tl-mark {
+  width: calc(22 * var(--tl-c));
+  height: calc(22 * var(--tl-c));
 }
 [data-style="peek"] .tl-int-body {
   align-items: center;

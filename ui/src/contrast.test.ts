@@ -358,3 +358,47 @@ describe("Peek contrast in light and dark (AC4.3, L-050)", () => {
     ]);
   });
 });
+
+// ---- Tolon's mark (L-052, WCAG 1.4.11) ---------------------------------------------------------------------
+// The mark's body is moss-deep, which is not 3:1 against every page it sits on (Default's moss, a dark page),
+// so its 1.5px outline (`--tl-mark-edge`, resolved in the window's own tokens) is the boundary measured here.
+// Swiss Moss reminder: the text colour against the reminder colour. Peek: --sm-muted against the time pill and
+// the page. Settings sidebar, tray panel and first run: the stylesheet's default edge against their backgrounds.
+
+describe("the mark's outline reaches 3:1 against what it sits on (L-052)", () => {
+  it.each(EVERY)("Swiss Moss reminder, %s in %s: the outline is the text colour on the fill", (color, theme) => {
+    expect(declaration(".tl-int-count", "--tl-mark-edge")).toBe("var(--tl-fg)");
+    const edge = resolve(theme, color, declaration(".tl-int-count", "--tl-mark-edge"));
+    const bg = resolve(theme, color, declaration(".tl-int", "background"));
+    expect(contrast(edge, bg), `${color} ${theme}`).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(PEEK_EVERY)("Peek reminder, %s in %s: the outline reaches 3:1 on the time pill and on the page", (color, theme) => {
+    const edge = peekHex(theme, color, [".tl-int-count", "--tl-mark-edge"]);
+    expect(contrast(edge, peekHex(theme, color, [".tl-int-top", "background"])), `${color} ${theme}: pill`).toBeGreaterThanOrEqual(3);
+    expect(contrast(edge, peekHex(theme, color, PAGE)), `${color} ${theme}: page`).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(APPEARANCES)("settings sidebar, tray panel and first run in %s: the default outline reaches 3:1", (theme) => {
+    const edge = hexOf(theme, "--sm-muted");
+    expect(declaration(".tl-mark-edge", "stroke")).toBe("var(--tl-mark-edge, var(--sm-muted))");
+    // The sidebar is paper-deep (.tl-side); the panel and first run sit on the paper.
+    expect(declaration(".tl-side", "background")).toBe("var(--sm-paper-deep)");
+    for (const page of ["--sm-paper-deep", "--sm-paper"]) {
+      expect(contrast(edge, hexOf(theme, page)), `${theme}: ${page}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("the numbers: Default light and dark, Peek pill, sidebar", () => {
+    const rows = APPEARANCES.map((theme) => {
+      const swiss = contrast(hexOf(theme, REMINDER_PAIRS.theme.fg), hexOf(theme, REMINDER_PAIRS.theme.bg));
+      const pill = contrast(peekHex(theme, "theme", [".tl-int-count", "--tl-mark-edge"]), peekHex(theme, "theme", [".tl-int-top", "background"]));
+      const side = contrast(hexOf(theme, "--sm-muted"), hexOf(theme, "--sm-paper-deep"));
+      return `${theme}: reminder ${swiss.toFixed(2)}, Peek pill ${pill.toFixed(2)}, sidebar ${side.toFixed(2)}`;
+    });
+    expect(rows).toEqual([
+      "light: reminder 5.00, Peek pill 4.51, sidebar 4.51",
+      "dark: reminder 8.61, Peek pill 6.53, sidebar 6.53",
+    ]);
+  });
+});

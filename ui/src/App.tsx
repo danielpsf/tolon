@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell } from "./Bell";
+import { PeekMark } from "./PeekMark";
 import { copy } from "./copy";
 import { startFirstRunWatch, useFirstRun } from "./first-run";
 import { AboutPage } from "./pages/AboutPage";
@@ -69,7 +69,7 @@ export function App() {
     <div className="tl-shell">
       <aside className="tl-side">
         <div className="tl-brand">
-          <Bell />
+          <PeekMark />
           <span>{t.app.windowTitle}</span>
         </div>
         <nav className="sm-nav" aria-label={t.nav.label}>

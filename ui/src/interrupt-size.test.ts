@@ -34,7 +34,7 @@ const CAPPED: Record<string, string[]> = {
   ".tl-int .sm-btn.tl-primary": ["padding-inline", "font-size"],
   ".tl-int-top": ["gap"],
   ".tl-int-count": ["gap"],
-  ".tl-int-count svg": ["width", "height"],
+  ".tl-int-count .tl-mark": ["width", "height"],
   ".tl-int-details": ["font-size"],
   ".tl-int-hint": ["font-size"],
   ".tl-int-consequence": ["flex", "max-width", "font-size"],
@@ -101,10 +101,10 @@ describe("L-045 the reminder's controls keep a fixed size", () => {
     expect(value(".tl-int .sm-btn.tl-primary", "font-weight")).toBe("600");
   });
 
-  it("the bell keeps the ratio to the countdown it had at 1280x800 (44 and 38 against 15)", () => {
+  it("the mark keeps the size the bell had next to the countdown (38 against 15), square (L-052)", () => {
     expect(value(".tl-int", "font-size")).toContain("15 *");
-    expect(value(".tl-int-count svg", "width")).toBe("calc(44 * var(--tl-c))");
-    expect(value(".tl-int-count svg", "height")).toBe("calc(38 * var(--tl-c))");
+    expect(value(".tl-int-count .tl-mark", "width")).toBe("calc(38 * var(--tl-c))");
+    expect(value(".tl-int-count .tl-mark", "height")).toBe("calc(38 * var(--tl-c))");
   });
 
   it("D3 an unknown host is cut to about the width of Snooze (a little under 200 pt, in the capped unit)", () => {
