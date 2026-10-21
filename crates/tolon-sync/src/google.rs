@@ -471,24 +471,35 @@ impl GoogleClient {
     }
 }
 
-/// Accepts connections until one is Google's redirect carrying `state`, answers it with `page`,
-/// and returns its code. Anything else (a favicon, a request with another state) gets a 404.
+/// Accepts connections until one is Google's redirect carrying `state` and returns its code.
+/// Connections are read side by side, so one that sends nothing (a browser preconnect) cannot
+/// hold up the redirect. Anything else (a favicon, a request with another state) gets a 404.
 async fn wait_for_code(
     listener: &TcpListener,
     state: &str,
     page: &DonePage<'_>,
 ) -> Result<String, GoogleError> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<(TcpStream, String)>(8);
     loop {
-        let (mut sock, _) = listener.accept().await.map_err(|_| GoogleError::Connect)?;
-        let Ok(Some(head)) = tokio::time::timeout(READ_WAIT, read_head(&mut sock)).await else {
-            continue;
-        };
-        match redirect_result(&head, state) {
-            Some(result) => {
-                respond(&mut sock, "200 OK", &done_html(page)).await;
-                return result;
+        tokio::select! {
+            accepted = listener.accept() => {
+                let (mut sock, _) = accepted.map_err(|_| GoogleError::Connect)?;
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    if let Ok(Some(head)) = tokio::time::timeout(READ_WAIT, read_head(&mut sock)).await {
+                        let _ = tx.send((sock, head)).await;
+                    }
+                });
             }
-            None => respond(&mut sock, "404 Not Found", "").await,
+            Some((mut sock, head)) = rx.recv() => match redirect_result(&head, state) {
+                Some(result) => {
+                    // A refusal gets a page with no text: Tolon's window says what happened.
+                    let html = done_html(result.is_ok().then_some(page));
+                    respond(&mut sock, "200 OK", &html).await;
+                    return result;
+                }
+                None => respond(&mut sock, "404 Not Found", "").await,
+            },
         }
     }
 }
@@ -541,12 +552,13 @@ async fn respond(sock: &mut TcpStream, status: &str, body: &str) {
     let _ = sock.shutdown().await;
 }
 
-fn done_html(page: &DonePage<'_>) -> String {
+fn done_html(page: Option<&DonePage<'_>>) -> String {
+    let body = page.map_or_else(String::new, |p| {
+        format!("<h1>{}</h1><p>{}</p>", escape(p.title), escape(p.body))
+    });
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>Tolon</title></head>\
-         <body><h1>{}</h1><p>{}</p></body></html>",
-        escape(page.title),
-        escape(page.body)
+         <body>{body}</body></html>"
     )
 }
 

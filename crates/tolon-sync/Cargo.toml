@@ -24,7 +24,7 @@ oauth2 = { version = "5", default-features = false, features = ["reqwest"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The loopback listener for the OAuth redirect and its timeouts; already in the tree (Tauri's runtime).
-tokio = { version = "1", features = ["net", "io-util", "time"] }
+tokio = { version = "1", features = ["net", "io-util", "time", "rt", "macros", "sync"] }
 # Google event times to core times; same versions as tolon-core.
 chrono = "0.4.45"
 chrono-tz = "0.10.4"

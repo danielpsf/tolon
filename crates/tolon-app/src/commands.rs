@@ -255,7 +255,9 @@ pub async fn calendars_google_sign_in(
         };
         let signed = result?;
         let (dto, pending, healed) = google::signed_in(&s.db, &*s.secrets, signed)?;
-        if let Some(old) = take(&s.google_pending) {
+        // Revoking a token ends the account's whole grant, so an earlier unpicked sign-in of the
+        // same account is only forgotten: revoking it would end the one that just finished.
+        if let Some(old) = take(&s.google_pending).filter(|old| old.account != pending.account) {
             google::drop_pending(&s.db, s.google.as_ref(), old).await?;
         }
         put(&s.google_pending, pending);

@@ -159,8 +159,13 @@ fn browser(params: &'static [(&'static str, &'static str)]) -> (impl FnOnce(&str
         let url = Url::parse(url).unwrap();
         let q: HashMap<String, String> = url.query_pairs().into_owned().collect();
         *keep.lock().unwrap() = q.clone();
+        let keep_page = keep.clone();
         tokio::spawn(async move {
             let redirect = q["redirect_uri"].clone();
+            // A preconnect that never sends a request: it must not hold up the redirect.
+            let _idle = tokio::net::TcpStream::connect(redirect.trim_start_matches("http://"))
+                .await
+                .unwrap();
             let http = reqwest::Client::new();
             let _ = http.get(format!("{redirect}/favicon.ico")).send().await;
             let _ = http
@@ -173,11 +178,24 @@ fn browser(params: &'static [(&'static str, &'static str)]) -> (impl FnOnce(&str
                 back.query_pairs_mut().append_pair(k, v);
             }
             let page = http.get(back).send().await.unwrap().text().await.unwrap();
-            assert!(page.contains("Signed in &amp; done"), "{page}");
+            keep_page.lock().unwrap().insert(PAGE_KEY.into(), page);
         });
         true
     };
     (open, auth)
+}
+
+const PAGE_KEY: &str = "<page>";
+
+/// The page the browser was shown, once it arrived.
+async fn shown_page(auth: &Shared) -> String {
+    for _ in 0..100 {
+        if let Some(page) = auth.lock().unwrap().get(PAGE_KEY) {
+            return page.clone();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("the browser never got a page");
 }
 
 const PAGE: DonePage<'static> = DonePage {
@@ -219,7 +237,13 @@ async fn ac13_1_pkce_s256_loopback_redirect_and_code_exchange() {
         *challenge_in.lock().unwrap() = q["code_challenge"].clone();
         open(url)
     };
+    let started = std::time::Instant::now();
     let signed = m.client().sign_in(open, &PAGE).await.unwrap();
+    // The idle preconnect did not make the redirect wait for READ_WAIT.
+    assert!(started.elapsed() < READ_WAIT / 2, "{:?}", started.elapsed());
+    assert!(shown_page(&auth)
+        .await
+        .contains("<h1>Signed in &amp; done</h1>"));
 
     let q = auth.lock().unwrap().clone();
     assert_eq!(q["code_challenge_method"], "S256");
@@ -266,11 +290,13 @@ async fn ac13_2_auth_url_asks_for_calendar_readonly_only() {
 #[tokio::test]
 async fn ac13_1_refused_consent_is_denied_and_exchanges_nothing() {
     let m = mock(Box::new(|_| token_ok())).await;
-    let (open, _) = browser(&[("error", "access_denied")]);
+    let (open, auth) = browser(&[("error", "access_denied")]);
     assert_eq!(
         m.client().sign_in(open, &PAGE).await.unwrap_err(),
         GoogleError::Denied
     );
+    // No "signed in" page for a refusal.
+    assert!(!shown_page(&auth).await.contains("Signed in"));
     assert!(m.seen("/token").is_empty());
 }
 
