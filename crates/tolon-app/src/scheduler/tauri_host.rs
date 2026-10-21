@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::{Action, ActionType, NotificationExt};
 use tolon_platform::{Playback, Sound, SoundPlayer, Takeover};
 
@@ -206,6 +206,14 @@ impl Host for TauriHost {
             .show();
         if let Err(e) = shown {
             tracing::warn!(error = %e, "could not show the fallback notification");
+        }
+    }
+
+    /// The tray icon and every page that shows the pause (`app:paused`, a `PauseDto`).
+    fn paused(&self, until: Option<DateTime<Utc>>) {
+        crate::tray::set_paused(&self.app, until.is_some());
+        if let Err(e) = self.app.emit("app:paused", commands::PauseDto::of(until)) {
+            tracing::warn!(error = %e, "could not emit app:paused");
         }
     }
 }

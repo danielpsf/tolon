@@ -117,6 +117,25 @@ export const tr: Messages = {
     details: (range, provider, people) =>
       `${range}${provider ? `, ${provider} üzerinde` : ""}${people > 0 ? `, ${number.format(people)} kişiyle` : ""}.`,
   },
+  panel: {
+    label: "Bugün Tolon'da",
+    nextIn: (duration) => `Sıradaki, ${duration} içinde`,
+    noMore: "Bugün başka toplantı yok.",
+    later: "Bugün daha sonra",
+    pausedUntil: (time) => `${time} saatine kadar duraklatıldı`,
+    pause: "1 saat duraklat",
+    resume: "Alarmları sürdür",
+    settings: "Ayarlar",
+    quit: "Çık",
+    ignored: "yok sayıldı",
+    allDay: "Tüm gün",
+    noLink: "Bağlantı yok",
+    eventPage: "Etkinlik sayfası",
+    summary: (minutes, quiet) =>
+      `Alarmlar ${number.format(minutes)} dk önce. ${quiet ? `Sessiz saatler: ${quiet}.` : "Sessiz saatler kapalı."}`,
+    tooltip: (title, duration) => `${title}, ${duration} içinde`,
+    tooltipNow: (title) => `Şimdi: ${title}`,
+  },
   relative: {
     neverSynced: "Henüz eşitlenmedi",
     syncedJustNow: "Az önce eşitlendi",

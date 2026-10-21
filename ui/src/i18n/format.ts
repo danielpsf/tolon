@@ -48,6 +48,12 @@ export function startedAgo(locale: Locale, m: Messages, start: Instant, now: Ins
   return minutes < 1 ? m.relative.startedJustNow : m.relative.startedAgo(formatSpan(locale, minutes));
 }
 
+/** The span until `start` ("12 min"), rounded up as `startsIn` does; null under a minute. */
+export function until(locale: Locale, start: Instant, now: Instant = Date.now()): string | null {
+  const minutes = Math.ceil((ms(start) - ms(now)) / MINUTE);
+  return minutes < 1 ? null : formatSpan(locale, minutes);
+}
+
 /** "Starts in 2 min". Rounds up, so the copy never says "0 min" before the start. */
 export function startsIn(locale: Locale, m: Messages, start: Instant, now: Instant = Date.now()): string {
   const minutes = Math.ceil((ms(start) - ms(now)) / MINUTE);

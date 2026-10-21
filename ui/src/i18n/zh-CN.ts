@@ -117,6 +117,25 @@ export const zhCN: Messages = {
     details: (range, provider, people) =>
       `${range}${provider ? `，${provider}` : ""}${people > 0 ? `，共 ${number.format(people)} 人` : ""}。`,
   },
+  panel: {
+    label: "Tolon 今日日程",
+    nextIn: (duration) => `下一个会议：${duration}后`,
+    noMore: "今天没有其他会议了。",
+    later: "今天稍后",
+    pausedUntil: (time) => `已暂停至 ${time}`,
+    pause: "暂停 1 小时",
+    resume: "恢复提醒",
+    settings: "设置",
+    quit: "退出",
+    ignored: "已忽略",
+    allDay: "全天",
+    noLink: "无链接",
+    eventPage: "活动页面",
+    summary: (minutes, quiet) =>
+      `提前 ${number.format(minutes)} 分钟提醒。${quiet ? `勿扰时段：${quiet}。` : "勿扰时段已关闭。"}`,
+    tooltip: (title, duration) => `${title}，${duration}后开始`,
+    tooltipNow: (title) => `进行中：${title}`,
+  },
   relative: {
     neverSynced: "尚未同步",
     syncedJustNow: "刚刚同步",

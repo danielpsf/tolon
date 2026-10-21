@@ -29,6 +29,8 @@ struct Fake {
     shows: StdMutex<Vec<AlarmShow>>,
     urls: StdMutex<Vec<String>>,
     notices: StdMutex<Vec<i32>>,
+    /// Every `Host::paused` call, oldest first; kept out of `calls`.
+    pauses: StdMutex<Vec<Option<DateTime<Utc>>>>,
     focused: AtomicBool,
     degraded: Option<&'static str>,
     fail_open: AtomicBool,
@@ -43,6 +45,7 @@ impl Fake {
             shows: StdMutex::default(),
             urls: StdMutex::default(),
             notices: StdMutex::default(),
+            pauses: StdMutex::default(),
             focused: AtomicBool::new(true),
             degraded: None,
             fail_open: AtomicBool::new(false),
@@ -85,6 +88,13 @@ impl Fake {
     /// The identifiers of every notification sent, oldest first.
     fn notices(&self) -> Vec<i32> {
         self.notices
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn pauses(&self) -> Vec<Option<DateTime<Utc>>> {
+        self.pauses
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -148,6 +158,13 @@ impl Host for Fake {
             .unwrap_or_else(PoisonError::into_inner)
             .push(url.to_owned());
         Ok(())
+    }
+
+    fn paused(&self, until: Option<DateTime<Utc>>) {
+        self.pauses
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(until);
     }
 
     fn notify(&self, _show: &AlarmShow, id: i32) {
@@ -1673,5 +1690,162 @@ fn ac9_1_concurrent_changes_are_announced_in_the_order_they_were_saved() -> Test
             Some(settings::get(&db)?.lead_minutes)
         );
     }
+    Ok(())
+}
+
+// ---- F7 tray: pause, panel actions, quit (L-015) ----------------------------------------------
+
+/// Pauses alarms from `t` for `minutes`, as `app_pause` does.
+fn pause_at(rig: &Rig, t: DateTime<Utc>, minutes: u32) -> anyhow::Result<DateTime<Utc>> {
+    settings::pause(&rig.db, minutes, t)
+}
+
+#[tokio::test]
+async fn s7_1_pause_for_an_hour_keeps_a_meeting_in_20_minutes_quiet() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 40, 0))?;
+    rig.tick_at(at(13, 40, 0)).await;
+    let until = pause_at(&rig, at(13, 40, 0), 60)?;
+    assert_eq!(until, at(14, 40, 0));
+    let mut t = at(13, 40, 15);
+    while t <= at(14, 45, 0) {
+        assert_eq!(rig.tick_at(t).await.fired, 0, "fired at {t}");
+        // The meeting's window closed at 14:10, inside the pause: it expired silently.
+        if t == at(14, 10, 0) {
+            assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("expired"));
+        }
+        t += Duration::seconds(15);
+    }
+    assert_eq!(rig.host().count("open"), 0);
+    // The tray heard: not paused at the first tick, paused, then resumed at 14:40 by itself.
+    assert_eq!(rig.host().pauses(), [None, Some(until), None]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_3_an_alarm_held_by_the_pause_fires_when_it_ends_inside_the_window() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    pause_at(&rig, at(13, 50, 0), 13)?;
+    // Due at 13:58, held back until 14:03.
+    assert_eq!(rig.tick_at(at(13, 58, 5)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(14, 2, 55)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(14, 3, 0)).await.fired, 1);
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("firing"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_3_resume_lets_a_held_alarm_fire_at_once_and_a_restart_keeps_the_pause() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    pause_at(&rig, at(13, 50, 0), 60)?;
+    assert_eq!(rig.tick_at(at(13, 58, 5)).await.fired, 0);
+    // A new process reads the pause from the store.
+    let restarted = Scheduler::new(Fake::new(at(13, 59, 0)));
+    assert_eq!(restarted.step(&rig.db, true).await.fired, 0);
+    assert_eq!(restarted.host.pauses(), [Some(at(14, 50, 0))]);
+    settings::resume(&rig.db)?;
+    restarted.host.set_now(at(13, 59, 10));
+    assert_eq!(restarted.step(&rig.db, true).await.fired, 1);
+    assert_eq!(restarted.host.pauses(), [Some(at(14, 50, 0)), None]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_2_panel_snooze_ahead_moves_the_alarm_later() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 40, 0))?;
+    rig.tick_at(at(13, 40, 0)).await;
+    let key = listed_key(&rig, "standup")?;
+    rig.host().set_now(at(13, 45, 0));
+    rig.sched.act_listed(&rig.db, &key, Act::Snooze(5)).await?;
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("snoozed"));
+    // Due at 13:58, so it comes at 14:03, not at 13:50.
+    assert_eq!(
+        rig.until_of("standup")?.as_deref(),
+        Some("2026-10-20T14:03:00Z")
+    );
+    assert_eq!(rig.tick_at(at(13, 58, 5)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(14, 3, 5)).await.fired, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_2_panel_dismiss_ahead_silences_every_alarm_of_the_meeting() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 40, 0))?;
+    rig.setting(AGAIN_AT_START, serde_json::json!(true))?;
+    rig.tick_at(at(13, 40, 0)).await;
+    let key = listed_key(&rig, "standup")?;
+    rig.sched.act_listed(&rig.db, &key, Act::Dismiss).await?;
+    for kind in ["lead", "start"] {
+        assert_eq!(
+            rig.state_of("standup", kind)?.as_deref(),
+            Some("dismissed"),
+            "{kind}"
+        );
+    }
+    for t in [at(13, 58, 5), at(14, 0, 5)] {
+        assert_eq!(rig.tick_at(t).await.fired, 0);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_2_panel_actions_on_the_meeting_on_screen_are_the_interrupt_buttons() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = listed_key(&rig, "standup")?;
+    rig.host().set_now(at(13, 58, 10));
+    rig.sched.act_listed(&rig.db, &key, Act::Snooze(5)).await?;
+    assert_eq!(rig.host().count("close"), 1, "the interrupt hides");
+    assert_eq!(
+        rig.until_of("standup")?.as_deref(),
+        Some("2026-10-20T14:03:10Z")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_2_panel_actions_refuse_keys_that_are_not_listed_today() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 40, 0))?;
+    rig.tick_at(at(13, 40, 0)).await;
+    let key = listed_key(&rig, "standup")?;
+    let other_day = key.replace("2026-10-20", "2026-10-21");
+    for (bad, act) in [
+        (other_day.as_str(), Act::Dismiss),
+        ("not a key", Act::Dismiss),
+        (key.as_str(), Act::Join),
+        (key.as_str(), Act::AlreadyThere),
+    ] {
+        let err = rig.sched.act_listed(&rig.db, bad, act).await.err();
+        let code = err.map(|e| crate::errors::command_error(&e).code);
+        assert_eq!(code, Some("not_found"), "{bad} {act:?}");
+    }
+    assert_eq!(
+        rig.state_of("standup", "lead")?.as_deref(),
+        Some("scheduled")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_4_quit_stops_the_scheduler_and_closes_the_interrupt() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.sched.shutdown(&rig.db).await;
+    assert_eq!(rig.host().count("close"), 1);
+    // Nothing runs after Quit, and the loop returns at once.
+    let opens = rig.host().count("open");
+    rig.tick_at(at(14, 3, 0)).await;
+    assert_eq!(rig.host().count("open"), opens);
+    tokio::time::timeout(StdDuration::from_secs(1), rig.sched.run_loop(&rig.db)).await?;
+    Ok(())
+}
+
+/// S7.2: the scheduler does not depend on the settings window. With no window at all (closing
+/// it only hides it, `tray::hides_on_close`), an alarm still fires on time.
+#[tokio::test]
+async fn s7_2_alarms_keep_firing_without_the_settings_window() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    assert!(crate::tray::hides_on_close("main"));
+    assert_eq!(rig.tick_at(at(13, 58, 5)).await.fired, 1);
+    assert_eq!(rig.host().count("open"), 1);
     Ok(())
 }

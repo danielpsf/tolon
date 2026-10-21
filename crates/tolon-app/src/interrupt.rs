@@ -284,7 +284,7 @@ pub async fn takeover(app: &AppHandle, platform: &'static dyn Platform) -> Takeo
     }
 }
 
-fn place(window: &WebviewWindow, placement: Placement) -> tauri::Result<()> {
+pub(crate) fn place(window: &WebviewWindow, placement: Placement) -> tauri::Result<()> {
     match placement {
         Placement::Logical {
             x,

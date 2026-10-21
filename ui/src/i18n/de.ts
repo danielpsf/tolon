@@ -120,6 +120,25 @@ export const de: Messages = {
         people > 0 ? ` mit ${number.format(people)} ${plural.select(people) === "one" ? "Person" : "Personen"}` : ""
       }.`,
   },
+  panel: {
+    label: "Heute in Tolon",
+    nextIn: (duration) => `Als Nächstes in ${duration}`,
+    noMore: "Heute keine Termine mehr.",
+    later: "Später am Tag",
+    pausedUntil: (time) => `Pausiert bis ${time}`,
+    pause: "1 Stunde pausieren",
+    resume: "Alarme fortsetzen",
+    settings: "Einstellungen",
+    quit: "Beenden",
+    ignored: "ignoriert",
+    allDay: "Ganztägig",
+    noLink: "Kein Link",
+    eventPage: "Terminseite",
+    summary: (minutes, quiet) =>
+      `Alarm ${number.format(minutes)} Min. vorher. ${quiet ? `Ruhezeiten ${quiet}.` : "Ruhezeiten aus."}`,
+    tooltip: (title, duration) => `${title} in ${duration}`,
+    tooltipNow: (title) => `Jetzt: ${title}`,
+  },
   relative: {
     neverSynced: "Noch nicht synchronisiert",
     syncedJustNow: "Gerade synchronisiert",

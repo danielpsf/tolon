@@ -117,6 +117,25 @@ export const ja: Messages = {
     details: (range, provider, people) =>
       `${range}${provider ? `、${provider}` : ""}${people > 0 ? `、参加者 ${number.format(people)} 人` : ""}。`,
   },
+  panel: {
+    label: "今日の Tolon",
+    nextIn: (duration) => `次の会議：${duration}後`,
+    noMore: "今日の会議はもうありません。",
+    later: "今日このあと",
+    pausedUntil: (time) => `${time} まで一時停止中`,
+    pause: "1 時間一時停止",
+    resume: "アラームを再開",
+    settings: "設定",
+    quit: "終了",
+    ignored: "無視",
+    allDay: "終日",
+    noLink: "リンクなし",
+    eventPage: "予定のページ",
+    summary: (minutes, quiet) =>
+      `会議の ${number.format(minutes)} 分前にアラーム。${quiet ? `サイレント時間：${quiet}。` : "サイレント時間はオフ。"}`,
+    tooltip: (title, duration) => `${title}、${duration}後`,
+    tooltipNow: (title) => `開催中：${title}`,
+  },
   relative: {
     neverSynced: "未同期",
     syncedJustNow: "たった今同期しました",

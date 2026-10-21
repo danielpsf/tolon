@@ -316,6 +316,88 @@
 }
 
 /*
+ * Tray panel (mockup 02): a 420 x 560 window under the tray icon, the next meeting first, the rest
+ * of today as rows (time, title, where), then Pause, Settings and Quit. Card colours in both themes.
+ */
+.tl-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm-space-5);
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--sm-space-5) var(--sm-space-5) var(--sm-space-4);
+  background: var(--sm-card);
+  border: 1px solid var(--sm-line);
+  border-radius: var(--sm-radius-l);
+}
+.tl-panel .tl-brand {
+  padding: 0;
+}
+.tl-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sm-space-3);
+}
+.tl-panel-paused {
+  color: var(--sm-signal);
+  font-size: 13px;
+}
+.tl-panel-next {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm-space-1);
+  margin: 0;
+}
+.tl-panel-next > p {
+  margin: 0;
+}
+.tl-panel-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.tl-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sm-space-2);
+  margin-top: var(--sm-space-3);
+}
+.tl-panel-list > li {
+  grid-template-columns: 7em minmax(0, 1fr) auto;
+  align-items: center;
+  padding: var(--sm-space-3) 0;
+}
+.tl-panel-time {
+  color: var(--sm-moss);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tl-panel-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-panel-ignored .tl-panel-time,
+.tl-panel-ignored .tl-panel-name {
+  color: var(--sm-muted);
+}
+.tl-panel-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm-space-2);
+  margin-top: auto;
+}
+.tl-panel-foot > p {
+  margin: 0;
+}
+.tl-panel-error {
+  color: var(--sm-danger);
+}
+
+/*
  * Right to left (Arabic and Hebrew, docs/decisions.md): grid, flex and the logical properties above
  * mirror on their own, and so do Swiss Moss controls (the switch knob uses inset-inline-start).
  */

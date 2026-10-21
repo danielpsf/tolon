@@ -156,6 +156,32 @@ export const ar: Messages = {
           : ""
       }.`,
   },
+  panel: {
+    label: "اليوم في Tolon",
+    nextIn: (duration) => `التالي بعد ${duration}`,
+    noMore: "لا اجتماعات أخرى اليوم.",
+    later: "لاحقًا اليوم",
+    pausedUntil: (time) => `متوقف مؤقتًا حتى ${time}`,
+    pause: "إيقاف مؤقت لمدة ساعة",
+    resume: "استئناف التنبيهات",
+    settings: "الإعدادات",
+    quit: "إنهاء",
+    ignored: "متجاهَل",
+    allDay: "طوال اليوم",
+    noLink: "بلا رابط",
+    eventPage: "صفحة الحدث",
+    summary: (minutes, quiet) =>
+      `التنبيه قبل ${counted(minutes, {
+        zero: (n) => `${n} دقيقة`,
+        one: () => "دقيقة واحدة",
+        two: () => "دقيقتين",
+        few: (n) => `${n} دقائق`,
+        many: (n) => `${n} دقيقة`,
+        other: (n) => `${n} دقيقة`,
+      })}. ${quiet ? `ساعات الهدوء ${iso(quiet)}.` : "ساعات الهدوء متوقفة."}`,
+    tooltip: (title, duration) => `${iso(title)} بعد ${duration}`,
+    tooltipNow: (title) => `الآن: ${iso(title)}`,
+  },
   relative: {
     neverSynced: "لم تتم المزامنة بعد",
     syncedJustNow: "تمت المزامنة الآن",

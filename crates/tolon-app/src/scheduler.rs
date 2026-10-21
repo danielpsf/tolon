@@ -22,8 +22,11 @@
 //! Everything outside the process (windows, sound, notifications, the browser, the clock) is behind
 //! [`Host`], so the unit tests run the whole loop without Tauri. The Tauri side is `tauri_host.rs`.
 //!
-//! Quiet hours come from the settings (AC8.1, `settings::read`); pause has none yet (wave 2), so
-//! `tick` gets `None` for it.
+//! Quiet hours come from the settings (AC8.1, `settings::read`), the pause from
+//! `settings::paused_until` (AC7.3): `tick` holds firing back while either applies, and an alarm
+//! that fell due meanwhile fires afterwards if its meeting is still within its window (decision
+//! "Alarm behaviour"). A change of the pause state (paused, resumed, or the pause ran out) goes to
+//! [`Host::paused`] for the tray icon and the panel; a pause wakes the loop when it ends.
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -92,6 +95,9 @@ pub trait Host: Send + Sync {
     /// The F4.5 fallback: a system notification with Join and Snooze. `id` is the notification's
     /// identifier; the host hands it back with the action (see `Scheduler::act_on_notice`).
     fn notify(&self, show: &AlarmShow, id: i32);
+    /// Alarms are paused until `until`, or no longer paused (`None`): the tray icon and the panel
+    /// follow (AC7.3). Called on the first tick and on every change.
+    fn paused(&self, until: Option<DateTime<Utc>>);
 }
 
 /// What `Host::open` found out.
@@ -187,12 +193,15 @@ pub struct Inputs {
     sound: Sound,
     repeat: bool,
     quiet: Option<QuietHours>,
+    /// When the pause ends; `None` while not paused.
+    pause: Option<DateTime<Utc>>,
 }
 
 /// `zone` is the machine's: quiet hours are local time.
-pub fn load_inputs(db: &Db, zone: Tz) -> anyhow::Result<Inputs> {
+pub fn load_inputs(db: &Db, zone: Tz, now: DateTime<Utc>) -> anyhow::Result<Inputs> {
     let store = pipeline::lock(db);
     let s = settings::read(&store)?;
+    let pause = settings::paused_until(&store, now)?;
     Ok(Inputs {
         opts: s.expand_options(),
         events: pipeline::decode_events(store.events().list_enabled()?),
@@ -201,6 +210,7 @@ pub fn load_inputs(db: &Db, zone: Tz) -> anyhow::Result<Inputs> {
         sound: s.sound.into(),
         repeat: s.sound_repeat,
         quiet: s.quiet_hours(zone),
+        pause,
     })
 }
 
@@ -238,13 +248,13 @@ pub struct Ticked {
 ///   window closed, and `plan` would then re-create it as Scheduled (S3.3, decision "Alarm behaviour").
 /// - The transitions are written after the prune, so an alarm that expired in this tick is still
 ///   stored (and visible) until the next one.
-/// - Pause is `None`: no setting exists yet. Quiet hours hold firing back only (AC8.1): the plan
-///   is written as usual, so the tray still lists what is coming.
+/// - Pause and quiet hours hold firing back only (AC7.3, AC8.1): the plan is written as usual, so
+///   the tray still lists what is coming.
 pub fn plan_and_tick(
     db: &Db,
     occurrences: &[Occurrence],
     settings: &AlarmSettings,
-    quiet: Option<&QuietHours>,
+    (pause, quiet): (Option<DateTime<Utc>>, Option<&QuietHours>),
     now: DateTime<Utc>,
 ) -> anyhow::Result<Ticked> {
     let store = pipeline::lock(db);
@@ -253,7 +263,7 @@ pub fn plan_and_tick(
     let planned: Vec<AlarmRow> = alarms.iter().map(|a| to_row(a, now)).collect();
     store.alarms().upsert_all(&planned)?;
     store.alarms().prune_before(&ts(now))?;
-    let transitions = tick(&alarms, now, None, quiet);
+    let transitions = tick(&alarms, now, pause, quiet);
     apply_transitions(&mut alarms, &transitions);
     // Only the alarms that changed: a pruned row must not come back.
     let changed: Vec<AlarmRow> = transitions
@@ -310,6 +320,39 @@ fn apply_action(db: &Db, keys: &[String], act: Act, now: DateTime<Utc>) -> anyho
             if changed {
                 rows.push(to_row(&alarm, now));
             }
+        }
+    }
+    store.alarms().upsert_all(&rows)?;
+    Ok(())
+}
+
+/// The panel's Snooze and Dismiss for a meeting whose interrupt is not on screen (AC7.2): every
+/// alarm of the meeting that is not final. Snooze moves each one `minutes` later than it was due
+/// (`tolon_core::snooze_later`); Dismiss makes each one Dismissed, so neither the lead alarm nor
+/// "again at the start" takes over the screen. A meeting without alarms (ignored, or past) changes
+/// nothing.
+fn apply_ahead(db: &Db, key: &str, act: Act, now: DateTime<Utc>) -> anyhow::Result<()> {
+    let store = pipeline::lock(db);
+    let mut rows = Vec::new();
+    for kind in [AlarmKind::Lead, AlarmKind::Start] {
+        let Some(mut alarm) = store
+            .alarms()
+            .get(key, kind.as_str())?
+            .and_then(|r| from_row(&r))
+        else {
+            continue;
+        };
+        let changed = match act {
+            Act::Snooze(minutes) => tolon_core::snooze_later(
+                &mut alarm,
+                minutes.clamp(MIN_LEAD_MINUTES, MAX_LEAD_MINUTES),
+                now,
+            ),
+            Act::Dismiss => tolon_core::dismiss(&mut alarm),
+            Act::Join | Act::AlreadyThere => false,
+        };
+        if changed {
+            rows.push(to_row(&alarm, now));
         }
     }
     store.alarms().upsert_all(&rows)?;
@@ -449,6 +492,10 @@ struct Inner {
     last_notice: i32,
     /// When the last preview started, and which sound, for the preview throttle.
     last_preview: Option<(DateTime<Utc>, Sound)>,
+    /// The pause state last handed to `Host::paused`; `None` before the first tick.
+    paused: Option<Option<DateTime<Utc>>>,
+    /// Set by `shutdown`: the loop ends and nothing opens again.
+    stopped: bool,
 }
 
 /// Previews closer together than this are dropped, so a held key or fast clicks do not stack sounds.
@@ -483,6 +530,8 @@ impl<H: Host> Scheduler<H> {
                 degraded_logged: false,
                 last_notice: notice_seed(now),
                 last_preview: None,
+                paused: None,
+                stopped: false,
             }),
             wake: Notify::new(),
         }
@@ -504,6 +553,17 @@ impl<H: Host> Scheduler<H> {
             let now = self.host.now();
             if full {
                 next_full = now + Duration::from_std(TICK).unwrap_or(Duration::seconds(15));
+            }
+            let (stopped, pause_end) = {
+                let inner = self.inner.lock().await;
+                (inner.stopped, inner.paused.flatten())
+            };
+            if stopped {
+                return;
+            }
+            // A pause ends on time (AC7.3), not up to one tick later.
+            if let Some(end) = pause_end {
+                next_full = next_full.min(end);
             }
             let due = self
                 .deadline()
@@ -533,6 +593,9 @@ impl<H: Host> Scheduler<H> {
         let now = self.host.now();
         let mut inner = self.inner.lock().await;
         let mut report = StepReport::default();
+        if inner.stopped {
+            return report;
+        }
         if full {
             report.woke = inner.last_tick.is_some_and(|t| now - t > WAKE_GAP);
             if report.woke {
@@ -540,15 +603,20 @@ impl<H: Host> Scheduler<H> {
             }
             inner.last_tick = Some(now);
             let zone = self.host.zone();
-            let evaluated = load_inputs(db, zone).and_then(|inputs| {
+            let evaluated = load_inputs(db, zone, now).and_then(|inputs| {
                 let occs = occurrences(&inputs, now, zone);
-                let ticked = plan_and_tick(db, &occs, &inputs.alarm, inputs.quiet.as_ref(), now)?;
+                let held = (inputs.pause, inputs.quiet.as_ref());
+                let ticked = plan_and_tick(db, &occs, &inputs.alarm, held, now)?;
                 Ok((inputs, occs, ticked))
             });
             match evaluated {
                 Ok((inputs, occs, ticked)) => {
                     inner.sound = inputs.sound;
                     inner.repeat = inputs.repeat;
+                    if inner.paused != Some(inputs.pause) {
+                        inner.paused = Some(inputs.pause);
+                        self.host.paused(inputs.pause);
+                    }
                     report.fired = ticked.transitions.iter().filter(|t| t.fires()).count();
                     report.expired = ticked
                         .transitions
@@ -732,6 +800,47 @@ impl<H: Host> Scheduler<H> {
             .map_err(|_| AppError::INTERNAL.into())
     }
 
+    /// The panel's Snooze and Dismiss for the next meeting (AC7.2). `key` must be one of today's
+    /// meetings, else `not_found`. When its interrupt is on screen this is exactly the interrupt's
+    /// button ([`Scheduler::act`]); otherwise it acts ahead on the stored alarms (`apply_ahead`).
+    /// Join goes through [`Scheduler::join_listed`] instead, and "already there" is not offered.
+    pub async fn act_listed(&self, db: &Db, key: &str, act: Act) -> anyhow::Result<()> {
+        if matches!(act, Act::Join | Act::AlreadyThere) {
+            return Err(AppError::NOT_FOUND.into());
+        }
+        interrupt::parse_key(key)?;
+        let now = self.host.now();
+        let today = pipeline::today_judged(db, now, self.host.zone())?;
+        if !today.iter().any(|(o, _)| o.key.to_string() == key) {
+            return Err(AppError::NOT_FOUND.into());
+        }
+        let mut inner = self.inner.lock().await;
+        let on_screen = inner
+            .open
+            .as_ref()
+            .is_some_and(|o| !o.test && o.show.meetings.iter().any(|m| m.key == key));
+        if on_screen {
+            return self.act_locked(&mut inner, db, key, act).await;
+        }
+        apply_ahead(db, key, act, now)?;
+        drop(inner);
+        self.wake();
+        Ok(())
+    }
+
+    /// Quit (AC7.4): closes any interrupt, stops the sound and the loop, and waits for the store
+    /// lock, so no tick is half written when the process exits. Later steps do nothing.
+    pub async fn shutdown(&self, db: &Db) {
+        let mut inner = self.inner.lock().await;
+        inner.stopped = true;
+        if inner.open.is_some() {
+            self.close(&mut inner);
+        }
+        self.host.stop_sound();
+        drop(pipeline::lock(db));
+        self.wake();
+    }
+
     /// One shot of `sound`, for the settings page's Play button (AC6.3).
     /// Dropped while an interrupt is open (its own sound is playing), while the last preview
     /// still plays, and within 300 ms of it. `true` when it played.
@@ -864,7 +973,7 @@ impl<H: Host> Scheduler<H> {
             if firing.is_empty() {
                 return Ok(None);
             }
-            let inputs = load_inputs(db, self.host.zone())?;
+            let inputs = load_inputs(db, self.host.zone(), now)?;
             Ok(Some((firing, occurrences(&inputs, now, self.host.zone()))))
         });
         match waiting {

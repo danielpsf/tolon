@@ -10,6 +10,7 @@ import {
   RulesPage,
   StartupPage,
 } from "./pages/SettingsPages";
+import { startTrayTooltip } from "./panel";
 import { startCalendarsFeed, useSettings } from "./store";
 import pkg from "../package.json";
 
@@ -52,6 +53,8 @@ export function App() {
     document.title = t.app.windowTitle;
   }, [t]);
   useEffect(startCalendarsFeed, []);
+  // The settings window stays loaded while hidden (closing it only hides it, S7.2) and writes the tray tooltip.
+  useEffect(() => startTrayTooltip(), []);
   const page = PAGES.find((p) => p.id === route) ?? PAGES[0];
 
   return (

@@ -196,3 +196,66 @@ Decisions:
 | hi | 2 | `quiet.weekends` | No finite verb. | Accepted: "... शांत रहते हैं". Applied after round 2, with no third call (two-round cap). |
 
 The Hebrew dual is the plain plural "דקות" after the digit, not "שתי דקות" as the review suggested, because "שתי" is the word "two" and the number is already shown in the field. The judge raised no issue on Hebrew.
+
+## L-015
+
+The tray copy of L-015 (19 new strings: the `panel` section, `settings.startup.requiresApproval` and `settings.startup.unavailable` in place of `notAvailable`, and `errors.command.login_item`) was drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues and checked by the same judge. en-US is the source and was not judged.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, JSON response format.
+- One locale per call. Each prompt held the en-US and the locale's TypeScript for the new keys only, a description of where each string shows (tray panel, tooltip, Startup page, login item error), the copy rules and the language rules of the L-039 method.
+- Round 2 ran on every locale with an accepted round 1 fix; en-GB and pt-BR had none. Two rounds at most.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 1037 | 810 (792) | 1847 | 7.0 | 0 | ok |
+| de | 1 | 1047 | 2605 (2422) | 3652 | 18.8 | 3 | fix |
+| de | 2 | 1053 | 2482 (2341) | 3535 | 18.0 | 2 | fix |
+| es | 1 | 1053 | 2775 (2598) | 3828 | 20.3 | 2 | fix |
+| es | 2 | 1062 | 2523 (2379) | 3585 | 18.2 | 2 | fix |
+| pt-BR | 1 | 1086 | 1886 (1868) | 2972 | 15.0 | 0 | ok |
+| pt-PT | 1 | 1079 | 4881 (4787) | 5960 | 34.1 | 1 | fix |
+| pt-PT | 2 | 1086 | 2038 (2020) | 3124 | 10.8 | 0 | ok |
+| ar | 1 | 1175 | 6105 (5800) | 7280 | 32.9 | 4 | fix |
+| ar | 2 | 1183 | 9252 (8957) | 10435 | 65.9 | 4 | fix |
+| tr | 1 | 1085 | 2043 (1952) | 3128 | 11.3 | 1 | fix |
+| tr | 2 | 1093 | 2036 (2018) | 3129 | 14.1 | 0 | ok |
+| hi | 1 | 1069 | 2526 (2438) | 3595 | 13.3 | 1 | fix |
+| hi | 2 | 1079 | 3630 (3544) | 4709 | 26.2 | 1 | fix |
+| zh-CN | 1 | 1063 | 3635 (3547) | 4698 | 25.1 | 1 | fix |
+| zh-CN | 2 | 1069 | 2160 (2142) | 3229 | 11.0 | 0 | ok |
+| ja | 1 | 1064 | 4271 (4087) | 5335 | 29.8 | 2 | fix |
+| ja | 2 | 1069 | 2870 (2852) | 3939 | 20.8 | 0 | ok |
+| he | 1 | 1167 | 2649 (2463) | 3816 | 19.5 | 2 | fix |
+| he | 2 | 1180 | 5102 (4841) | 6282 | 28.6 | 2 | fix |
+| All (20 calls) | | 21799 | 66279 | 88078 | | 28 | |
+
+### Issues and decisions
+
+28 issues: 20 accepted, 8 rejected. The round 2 fixes were applied without a third call (two-round cap).
+
+Accepted:
+
+| Locale | Round | Key | Change |
+|---|---|---|---|
+| tr, de, es, hi, ar, pt-PT, he, zh-CN, ja | 1 | `settings.startup.requiresApproval` | The draft dropped "so it starts when you log in"; added in each. |
+| de | 1 | `panel.nextIn` | No comma: "Als Nächstes in …". |
+| es | 1 | `errors.command.login_item` | "El inicio al iniciar sesión" repeats itself; now "Esta opción solo funciona con una copia instalada de Tolon." (own wording, not the judge's "Abrir al iniciar sesión", which is not the switch label). |
+| he | 1 | `panel.ignored` | "בהתעלמות" to the noun "התעלמות". |
+| ja | 1 | `panel.summary` | "通知" to "アラーム", the word the rest of the catalogue uses. |
+| de | 2 | `panel.later`, `errors.command.login_item` | "Später am Tag"; "funktioniert nur mit einer installierten Version von Tolon". |
+| es | 2 | `panel.later`, `panel.pausedUntil` | "Hoy más tarde"; "En pausa hasta …" without "las", which is wrong for 1:00. |
+| hi | 2 | `panel.allDay` | Nominative "पूरा दिन" as a label. |
+| he | 2 | `settings.startup.requiresApproval`, `panel.summary` | macOS's Hebrew name "פריטי פתיחה"; "שעות שקטות לא פעילות". |
+
+Rejected:
+
+| Locale | Round | Key | Judge's point | Why rejected |
+|---|---|---|---|---|
+| de | 1 | `panel.later` | "Später heute" is literal; suggests "Heute später". | Round 2 asked again with a better form, "Später am Tag", which was taken. |
+| ar | 1, 2 | `panel.label`, `settings.startup.requiresApproval`, `settings.startup.unavailable`, `errors.command.login_item` (7 issues) | Wrap the name Tolon in `iso()`. | No ar string wraps Tolon (L-039): it is one Latin word without punctuation, so the bidi algorithm keeps it in place; `iso()` is for feed and system text such as titles, hosts and keywords, which the new strings do wrap. |
+
+Choices recorded with this review: the tooltip puts "Paused until HH:MM" and the meeting on two lines (a line break needs no per-language separator), and `panel.summary` reuses `interrupt.timeRange` for the quiet hours. Native review is still required before release, as for every catalogue.

@@ -1,7 +1,16 @@
 // The only file that talks to Tauri: commands in, events out (docs/architecture.md, "Tauri commands").
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AlarmShowDto, CalendarDto, CommandError, SettingsDto, SettingsPatch, Sound } from "./api-types";
+import type {
+  AlarmShowDto,
+  CalendarDto,
+  CommandError,
+  ListedDto,
+  PauseDto,
+  SettingsDto,
+  SettingsPatch,
+  Sound,
+} from "./api-types";
 
 export const api = {
   calendarsList: () => invoke<CalendarDto[]>("calendars_list"),
@@ -19,6 +28,17 @@ export const api = {
   settingsSet: (patch: SettingsPatch) => invoke<SettingsDto>("settings_set", { patch }),
   /** Plays the sound once (AC6.3). */
   soundPreview: (sound: Sound) => invoke<void>("sound_preview", { sound }),
+  // The tray panel and the tray tooltip (F7).
+  occurrencesToday: () => invoke<ListedDto[]>("occurrences_today"),
+  occurrencesJoin: (key: string) => invoke<void>("occurrences_join", { key }),
+  occurrencesSnooze: (key: string, minutes: number) => invoke<void>("occurrences_snooze", { key, minutes }),
+  occurrencesDismiss: (key: string) => invoke<void>("occurrences_dismiss", { key }),
+  appStatus: () => invoke<PauseDto>("app_status"),
+  appPause: (minutes: number) => invoke<PauseDto>("app_pause", { minutes }),
+  appResume: () => invoke<PauseDto>("app_resume"),
+  appShowSettings: () => invoke<void>("app_show_settings"),
+  appQuit: () => invoke<void>("app_quit"),
+  trayTooltip: (text: string) => invoke<void>("tray_tooltip", { text }),
 };
 
 export const onSettingsChanged = (handler: () => void): Promise<UnlistenFn> => listen("settings:changed", handler);
@@ -30,6 +50,15 @@ export const onAlarmShow = (handler: (alarm: AlarmShowDto) => void): Promise<Unl
   listen<AlarmShowDto>("alarm:show", (e) => handler(e.payload));
 
 export const onAlarmHide = (handler: () => void): Promise<UnlistenFn> => listen("alarm:hide", handler);
+
+export const onOccurrencesChanged = (handler: () => void): Promise<UnlistenFn> =>
+  listen("occurrences:changed", handler);
+
+export const onPaused = (handler: (pause: PauseDto) => void): Promise<UnlistenFn> =>
+  listen<PauseDto>("app:paused", (e) => handler(e.payload));
+
+/** The tray icon is under the pointer: its tooltip is about to show (settings window only). */
+export const onTrayHover = (handler: () => void): Promise<UnlistenFn> => listen("tray:hover", handler);
 
 /** A rejected command carries `{ code }`; anything else (no IPC, a bug) reads as `internal`. */
 export function asCommandError(e: unknown): CommandError {

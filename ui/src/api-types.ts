@@ -121,3 +121,27 @@ export type SettingsPatch = Partial<Omit<SettingsDto, "quiet" | "ignore" | "star
   quiet?: Partial<QuietHoursDto>;
   ignore?: Partial<IgnoreDto>;
 };
+
+// The tray panel (F7): `ListedDto` in crates/tolon-app/src/pipeline.rs, `PauseDto` in commands.rs.
+
+export type IgnoredReason = "keyword" | "all_day" | "declined" | "cancelled" | "no_attendees";
+
+/** One of today's meetings from `occurrences_today`. No URL: Join goes through `occurrences_join`. */
+export interface ListedDto {
+  key: string;
+  title: string;
+  /** RFC 3339 with the machine's offset. */
+  start: string;
+  end: string;
+  all_day: boolean;
+  people: number;
+  /** Why it gets no alarm (S8.1), or null. */
+  ignored: IgnoredReason | null;
+  join: JoinDto;
+}
+
+/** `app_status`, `app_pause`, `app_resume` and the `app:paused` event. */
+export interface PauseDto {
+  /** RFC 3339 UTC, or null while alarms are not paused. */
+  paused_until: string | null;
+}

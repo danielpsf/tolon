@@ -4,7 +4,8 @@
 //! (names in docs/architecture.md, "Tauri commands"). A failed command returns
 //! `{ "code": "..." }` (see `errors`); the UI turns the code into localised copy.
 
-use chrono::Utc;
+use chrono::{DateTime, SecondsFormat, Utc};
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tolon_platform::PlatformError;
 use tolon_sync::IcsFetcher;
@@ -14,6 +15,7 @@ use crate::interrupt::{AlarmShow, InterruptState, LABEL_PREFIX};
 use crate::pipeline::{self, CalendarDto, Db, ListedDto};
 use crate::scheduler::{Act, Scheduler, TauriHost};
 use crate::settings::{self, SettingsDto, SoundChoice};
+use crate::tray::{self, PANEL};
 
 /// The scheduler of the running app, managed next to `AppState`.
 pub type AppScheduler = Scheduler<TauriHost>;
@@ -31,13 +33,28 @@ fn main_only(label: &str) -> Result<(), CommandError> {
     }
 }
 
-/// `settings_get` only: the interrupt windows read the settings too, to render in the person's
-/// appearance and language (AC9.3). Reading is all they get.
-fn main_or_interrupt(label: &str) -> Result<(), CommandError> {
+/// The tray panel's own commands: pause, resume, Snooze and Dismiss ahead, Settings, Quit.
+fn panel_only(label: &str) -> Result<(), CommandError> {
+    if label == PANEL {
+        Ok(())
+    } else {
+        Err(command_error(&AppError::NOT_FOUND.into()))
+    }
+}
+
+/// Today's meetings, Join from the list and the pause state: the settings window (for the tray
+/// tooltip) and the panel. Never an interrupt.
+fn main_or_panel(label: &str) -> Result<(), CommandError> {
+    panel_only(label).or_else(|_| main_only(label))
+}
+
+/// `settings_get` only: the interrupt windows and the panel read the settings too, to render in
+/// the person's appearance and language (AC9.3). Reading is all they get.
+fn main_panel_or_interrupt(label: &str) -> Result<(), CommandError> {
     if label.starts_with(LABEL_PREFIX) {
         Ok(())
     } else {
-        main_only(label)
+        main_or_panel(label)
     }
 }
 
@@ -180,7 +197,7 @@ pub async fn occurrences_today(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<Vec<ListedDto>, CommandError> {
-    main_only(window.label())?;
+    main_or_panel(window.label())?;
     let today =
         state(&app).and_then(|s| pipeline::today(&s.db, Utc::now(), pipeline::local_zone()));
     today.map_err(|e| command_error(&e))
@@ -193,12 +210,52 @@ pub async fn occurrences_join(
     window: tauri::WebviewWindow,
     key: String,
 ) -> Result<(), CommandError> {
-    main_only(window.label())?;
+    main_or_panel(window.label())?;
     let done = state(&app).and_then(|s| {
         let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
         scheduler.join_listed(&s.db, &key)
     });
+    if done.is_ok() {
+        tray::hide_panel(&app);
+    }
     done.map_err(|e| command_error(&e))
+}
+
+async fn listed_action(app: &AppHandle, key: &str, act: Act) -> Result<(), CommandError> {
+    let done = async {
+        let state = state(app)?;
+        let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
+        scheduler.act_listed(&state.db, key, act).await
+    }
+    .await;
+    done.map_err(|e| command_error(&e))?;
+    notify(app);
+    Ok(())
+}
+
+/// The panel's Snooze for one of today's meetings (AC7.2): the interrupt's Snooze when that
+/// meeting is on screen, else its alarms come `minutes` (1 to 60) later than they were due.
+#[tauri::command]
+pub async fn occurrences_snooze(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+    minutes: u32,
+) -> Result<(), CommandError> {
+    panel_only(window.label())?;
+    listed_action(&app, &key, Act::Snooze(minutes)).await
+}
+
+/// The panel's Dismiss for one of today's meetings (AC7.2): the interrupt's Dismiss when that
+/// meeting is on screen, else none of its alarms takes over the screen.
+#[tauri::command]
+pub async fn occurrences_dismiss(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+) -> Result<(), CommandError> {
+    panel_only(window.label())?;
+    listed_action(&app, &key, Act::Dismiss).await
 }
 
 // ---- Alarm actions (F3, F4, F5) ---------------------------------------------------------------
@@ -265,7 +322,7 @@ pub async fn settings_get(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<SettingsDto, CommandError> {
-    main_or_interrupt(window.label())?;
+    main_panel_or_interrupt(window.label())?;
     let dto = state(&app)
         .and_then(|s| settings::get(&s.db))
         .map_err(|e| command_error(&e))?;
@@ -332,6 +389,98 @@ pub async fn sound_preview(
     Ok(())
 }
 
+// ---- Tray and panel (F7) ---------------------------------------------------------------------
+
+/// Whether alarms are paused, and until when (RFC 3339 UTC). Also the `app:paused` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PauseDto {
+    pub paused_until: Option<String>,
+}
+
+impl PauseDto {
+    pub fn of(until: Option<DateTime<Utc>>) -> Self {
+        Self {
+            paused_until: until.map(|t| t.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn app_status(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<PauseDto, CommandError> {
+    main_or_panel(window.label())?;
+    state(&app)
+        .and_then(|s| settings::paused_until(&pipeline::lock(&s.db), Utc::now()))
+        .map(PauseDto::of)
+        .map_err(|e| command_error(&e))
+}
+
+/// Pause for `minutes` (1 to 60; the panel sends 60), kept across a restart (S7.1, AC7.3). The
+/// scheduler wakes, holds every alarm back until then and changes the tray icon.
+#[tauri::command]
+pub async fn app_pause(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    minutes: u32,
+) -> Result<PauseDto, CommandError> {
+    panel_only(window.label())?;
+    let until = state(&app)
+        .and_then(|s| settings::pause(&s.db, minutes, Utc::now()))
+        .map_err(|e| command_error(&e))?;
+    notify(&app);
+    Ok(PauseDto::of(Some(until)))
+}
+
+#[tauri::command]
+pub async fn app_resume(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<PauseDto, CommandError> {
+    panel_only(window.label())?;
+    state(&app)
+        .and_then(|s| settings::resume(&s.db))
+        .map_err(|e| command_error(&e))?;
+    notify(&app);
+    Ok(PauseDto::of(None))
+}
+
+/// The panel's Settings: the settings window shows and takes focus.
+#[tauri::command]
+pub async fn app_show_settings(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), CommandError> {
+    panel_only(window.label())?;
+    tray::show_settings(&app);
+    Ok(())
+}
+
+/// The panel's Quit (AC7.4): the scheduler stops with the store settled, then the process exits.
+#[tauri::command]
+pub async fn app_quit(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), CommandError> {
+    panel_only(window.label())?;
+    if let (Some(scheduler), Ok(state)) = (app.try_state::<AppScheduler>(), state(&app)) {
+        scheduler.shutdown(&state.db).await;
+    }
+    app.exit(0);
+    Ok(())
+}
+
+/// The tray tooltip, written by the settings window in the person's language (AC7.1). The text
+/// can hold a meeting title: it goes to the OS tooltip only, never to a log.
+#[tauri::command]
+pub async fn tray_tooltip(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    text: String,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    tray::set_tooltip(&app, &text);
+    Ok(())
+}
+
 /// The alarm rows, for the WebDriver tests. It exists only in the end-to-end build, whose feature no
 /// release build can have (decision "End-to-end fetch seam"). Keys and states, never titles.
 #[cfg(feature = "e2e-loopback")]
@@ -380,13 +529,35 @@ mod tests {
     }
 
     #[test]
-    fn settings_get_answers_the_main_window_and_the_interrupts_only() {
-        for label in ["main", "interrupt-0", "interrupt-screen-2"] {
-            assert_eq!(main_or_interrupt(label), Ok(()), "{label:?}");
+    fn settings_get_answers_the_main_window_the_panel_and_the_interrupts_only() {
+        for label in ["main", "panel", "interrupt-0", "interrupt-screen-2"] {
+            assert_eq!(main_panel_or_interrupt(label), Ok(()), "{label:?}");
         }
-        for label in ["interrupt", "Interrupt-0", "panel", "main-2", ""] {
+        for label in ["interrupt", "Interrupt-0", "Panel", "panel-2", "main-2", ""] {
             assert_eq!(
-                main_or_interrupt(label),
+                main_panel_or_interrupt(label),
+                Err(CommandError { code: "not_found" }),
+                "{label:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ac7_2_panel_commands_answer_the_panel_and_listing_the_main_window_too() {
+        assert_eq!(panel_only("panel"), Ok(()));
+        for label in ["main", "interrupt-0", "Panel", "panel ", ""] {
+            assert_eq!(
+                panel_only(label),
+                Err(CommandError { code: "not_found" }),
+                "{label:?}"
+            );
+        }
+        for label in ["main", "panel"] {
+            assert_eq!(main_or_panel(label), Ok(()), "{label:?}");
+        }
+        for label in ["interrupt-0", "interrupt-panel", "Main", ""] {
+            assert_eq!(
+                main_or_panel(label),
                 Err(CommandError { code: "not_found" }),
                 "{label:?}"
             );
@@ -404,10 +575,18 @@ mod tests {
             ("calendars_remove", "main_only"),
             ("calendars_set_enabled", "main_only"),
             ("calendars_sync_now", "main_only"),
-            ("occurrences_today", "main_only"),
-            ("occurrences_join", "main_only"),
+            ("occurrences_today", "main_or_panel"),
+            ("occurrences_join", "main_or_panel"),
+            ("occurrences_snooze", "panel_only"),
+            ("occurrences_dismiss", "panel_only"),
             ("alarms_test", "main_only"),
-            ("settings_get", "main_or_interrupt"),
+            ("settings_get", "main_panel_or_interrupt"),
+            ("app_status", "main_or_panel"),
+            ("app_pause", "panel_only"),
+            ("app_resume", "panel_only"),
+            ("app_show_settings", "panel_only"),
+            ("app_quit", "panel_only"),
+            ("tray_tooltip", "main_only"),
             ("settings_set", "main_only"),
             ("sound_preview", "main_only"),
         ] {

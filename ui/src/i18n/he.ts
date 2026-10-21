@@ -146,6 +146,29 @@ export const he: Messages = {
           : ""
       }.`,
   },
+  panel: {
+    label: "היום ב-Tolon",
+    nextIn: (duration) => `הבאה בעוד ${duration}`,
+    noMore: "אין עוד פגישות היום.",
+    later: "בהמשך היום",
+    pausedUntil: (time) => `מושהה עד ${time}`,
+    pause: "השהיה לשעה",
+    resume: "חידוש ההתראות",
+    settings: "הגדרות",
+    quit: "יציאה",
+    ignored: "התעלמות",
+    allDay: "כל היום",
+    noLink: "אין קישור",
+    eventPage: "דף האירוע",
+    summary: (minutes, quiet) =>
+      `התראה ${counted(minutes, {
+        one: () => "דקה אחת",
+        two: () => "שתי דקות",
+        other: (n) => `${n} דקות`,
+      })} לפני. ${quiet ? `שעות שקטות: ${iso(quiet)}.` : "שעות שקטות לא פעילות."}`,
+    tooltip: (title, duration) => `${iso(title)} בעוד ${duration}`,
+    tooltipNow: (title) => `עכשיו: ${iso(title)}`,
+  },
   relative: {
     neverSynced: "עדיין לא סונכרן",
     syncedJustNow: "סונכרן הרגע",

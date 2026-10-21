@@ -440,3 +440,38 @@ fn ac9_4_set_login_registers_and_reads_back() -> TestResult {
     assert_eq!(set_login(&stub, false)?, StartAtLogin::Disabled);
     Ok(())
 }
+
+/// S7.1, AC7.3: a pause is saved with its end, survives a reopened store, ends by itself, and
+/// Resume ends it at once. It is not a setting: `settings_set` cannot write it.
+#[test]
+fn s7_1_pause_is_saved_and_ends_on_time() -> TestResult {
+    let db = db()?;
+    let now = DateTime::parse_from_rfc3339("2026-10-20T13:40:00Z")?.with_timezone(&Utc);
+    let until = pause(&db, 60, now)?;
+    assert_eq!(until, now + Duration::hours(1));
+    let store = pipeline::lock(&db);
+    assert_eq!(
+        store.settings().get(PAUSED_UNTIL)?,
+        Some(json!("2026-10-20T14:40:00Z"))
+    );
+    assert_eq!(paused_until(&store, now)?, Some(until));
+    assert_eq!(
+        paused_until(&store, until - Duration::seconds(1))?,
+        Some(until)
+    );
+    assert_eq!(paused_until(&store, until)?, None, "resumes automatically");
+    drop(store);
+    resume(&db)?;
+    assert_eq!(paused_until(&pipeline::lock(&db), now)?, None);
+    for minutes in [0, 61] {
+        let code = pause(&db, minutes, now)
+            .err()
+            .map(|e| command_error(&e).code);
+        assert_eq!(code, Some("invalid:minutes"), "{minutes}");
+    }
+    assert_eq!(
+        refused(&db, json!({ "paused_until": "2099-01-01T00:00:00Z" })),
+        Some("invalid:patch")
+    );
+    Ok(())
+}

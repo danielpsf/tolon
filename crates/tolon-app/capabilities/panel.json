@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "panel",
+  "description": "The tray panel may listen to occurrences:changed, settings:changed and app:paused. Nothing else: no dialog, fs or shell permissions.",
+  "windows": ["panel"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

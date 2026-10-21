@@ -8,7 +8,7 @@
 //! `invalid:quiet.start`, a patch that is not an object or names an unknown field as
 //! `invalid:patch`, and nothing is saved.
 
-use chrono::NaiveTime;
+use chrono::{DateTime, Duration, NaiveTime, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -32,6 +32,11 @@ pub const QUIET_WEEKENDS: &str = "quiet_weekends";
 pub const APPEARANCE: &str = "appearance";
 pub const LOCALE: &str = "locale";
 pub const START_AT_LOGIN: &str = "start_at_login";
+/// Pause for 1 hour (AC7.3): when the pause ends, RFC 3339 UTC. App state, not a setting, so
+/// `SettingsDto` and `SettingsPatch` do not carry it; a past value means "not paused".
+pub const PAUSED_UNTIL: &str = "paused_until";
+/// The longest pause a command may ask for. The panel asks for 60.
+pub const MAX_PAUSE_MINUTES: u32 = 60;
 
 /// The shipped UI catalogues (decisions "Locale list for beta 1" and "Hebrew joins").
 pub const LOCALES: [&str; 12] = [
@@ -289,6 +294,42 @@ pub fn set_login(platform: &dyn Platform, enabled: bool) -> Result<StartAtLogin,
         .set_start_at_login(enabled)
         .inspect_err(|e| tracing::warn!(error = %e, enabled, "could not change the login item"))?;
     platform.start_at_login()
+}
+
+fn ts(t: DateTime<Utc>) -> String {
+    t.to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+/// When the pause ends, or `None` when Tolon is not paused at `now` (also for an unreadable value).
+pub fn paused_until(store: &Store, now: DateTime<Utc>) -> anyhow::Result<Option<DateTime<Utc>>> {
+    let until = store
+        .settings()
+        .get(PAUSED_UNTIL)?
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+        .map(|t| t.with_timezone(&Utc));
+    Ok(until.filter(|until| now < *until))
+}
+
+/// Pauses alarms for `minutes` (1 to 60) from `now` and returns the end (S7.1). Saved, so a
+/// restart keeps the pause. A new pause replaces the old one.
+pub fn pause(db: &Db, minutes: u32, now: DateTime<Utc>) -> anyhow::Result<DateTime<Utc>> {
+    if !(1..=MAX_PAUSE_MINUTES).contains(&minutes) {
+        return Err(AppError("invalid:minutes").into());
+    }
+    let until = now + Duration::minutes(i64::from(minutes));
+    pipeline::lock(db)
+        .settings()
+        .set(PAUSED_UNTIL, &json!(ts(until)))?;
+    Ok(until)
+}
+
+/// Ends the pause at once.
+pub fn resume(db: &Db) -> anyhow::Result<()> {
+    pipeline::lock(db)
+        .settings()
+        .set(PAUSED_UNTIL, &Value::Null)?;
+    Ok(())
 }
 
 pub fn get(db: &Db) -> anyhow::Result<SettingsDto> {

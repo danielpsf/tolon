@@ -9,10 +9,10 @@ export default defineConfig({
   server: { port: 1420, strictPort: true },
   // Vitest empties CSS files by default; the contrast test reads local.css and the Swiss Moss tokens as text.
   test: { css: { include: [/\.css\?raw$/] } },
-  // Two pages: the app, and the interrupt window the app opens once per screen.
+  // Three pages: the app, the interrupt window the app opens once per screen, and the tray panel.
   build: {
     rollupOptions: {
-      input: { main: "index.html", interrupt: "interrupt.html" },
+      input: { main: "index.html", interrupt: "interrupt.html", panel: "panel.html" },
     },
   },
 });

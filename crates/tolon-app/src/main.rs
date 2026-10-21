@@ -8,12 +8,13 @@ mod pipeline;
 mod refresh;
 mod scheduler;
 mod settings;
+mod tray;
 
 use std::path::Path;
 use std::sync::Mutex;
 
 use anyhow::Context;
-use tauri::Manager;
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tolon_platform::Platform;
 use tolon_store::Store;
@@ -55,7 +56,34 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
     )));
     tauri::async_runtime::spawn(refresh::run(app.clone()));
     tauri::async_runtime::spawn(scheduler::run(app.clone()));
+    // Without a tray (a Linux session with no status notifier host) Tolon still runs and alarms
+    // still fire; the settings window stays the way in.
+    if let Err(e) = tray::setup(app) {
+        tracing::warn!(error = %e, "could not create the tray icon");
+    }
     Ok(())
+}
+
+/// S7.2: closing the settings window hides it, and the panel hides when it loses focus.
+fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
+    match event {
+        WindowEvent::CloseRequested { api, .. } if tray::hides_on_close(window.label()) => {
+            api.prevent_close();
+            if let Err(e) = window.hide() {
+                tracing::warn!(error = %e, "could not hide the settings window");
+            }
+        }
+        WindowEvent::Focused(false) if window.label() == tray::PANEL => {
+            tray::hide_panel(window.app_handle());
+        }
+        _ => {}
+    }
+}
+
+/// Only Quit ends Tolon (AC7.4): an exit the runtime asks for on its own, such as after the
+/// last window closed, is refused; `AppHandle::exit` carries a code and goes through.
+fn keeps_running(event: &RunEvent) -> bool {
+    matches!(event, RunEvent::ExitRequested { code: None, .. })
 }
 
 fn main() -> anyhow::Result<()> {
@@ -81,6 +109,8 @@ fn main() -> anyhow::Result<()> {
             commands::calendars_sync_now,
             commands::occurrences_today,
             commands::occurrences_join,
+            commands::occurrences_snooze,
+            commands::occurrences_dismiss,
             commands::alarms_snooze,
             commands::alarms_dismiss,
             commands::alarms_join,
@@ -90,6 +120,12 @@ fn main() -> anyhow::Result<()> {
             commands::settings_get,
             commands::settings_set,
             commands::sound_preview,
+            commands::app_status,
+            commands::app_pause,
+            commands::app_resume,
+            commands::app_show_settings,
+            commands::app_quit,
+            commands::tray_tooltip,
             #[cfg(feature = "e2e-loopback")]
             commands::alarms_e2e_state,
         ])
@@ -119,7 +155,15 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())?;
+        .on_window_event(on_window_event)
+        .build(tauri::generate_context!())?
+        .run(|_app, event| {
+            if keeps_running(&event) {
+                if let RunEvent::ExitRequested { api, .. } = event {
+                    api.prevent_exit();
+                }
+            }
+        });
     Ok(())
 }
 
@@ -151,6 +195,31 @@ mod tests {
         let plist = include_str!("../Info.plist");
         assert!(plist.contains("<key>LSUIElement</key>\n\t<true/>"));
         Ok(())
+    }
+
+    /// S7.2 and AC7.4: closing the settings window hides it (`tray::hides_on_close`), and an
+    /// exit nobody asked for keeps Tolon in the tray. Only the panel's Quit exits.
+    #[test]
+    fn s7_2_close_is_not_quit() {
+        let source = include_str!("main.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        for needed in [
+            ".on_window_event(on_window_event)",
+            "api.prevent_close();",
+            "api.prevent_exit();",
+            "if keeps_running(&event)",
+        ] {
+            assert!(shipped.contains(needed), "main.rs must contain {needed}");
+        }
+        let commands = include_str!("commands.rs");
+        let quit = commands
+            .split("pub async fn app_quit(")
+            .nth(1)
+            .unwrap_or_default();
+        let quit = quit.split("#[tauri::command]").next().unwrap_or_default();
+        let stop = quit.find("scheduler.shutdown(").unwrap_or(usize::MAX);
+        let exit = quit.find("app.exit(0)").unwrap_or(0);
+        assert!(stop < exit, "Quit stops the scheduler before it exits");
     }
 
     #[test]

@@ -120,6 +120,25 @@ export const enUS = {
         people > 0 ? ` with ${number.format(people)} ${plural.select(people) === "one" ? "person" : "people"}` : ""
       }.`,
   },
+  panel: {
+    label: "Today in Tolon",
+    nextIn: (duration: string) => `Next, in ${duration}`,
+    noMore: "No more meetings today.",
+    later: "Later today",
+    pausedUntil: (time: string) => `Paused until ${time}`,
+    pause: "Pause for 1 hour",
+    resume: "Resume alarms",
+    settings: "Settings",
+    quit: "Quit",
+    ignored: "ignored",
+    allDay: "All day",
+    noLink: "No link",
+    eventPage: "Event page",
+    summary: (minutes: number, quiet: string | null) =>
+      `Alarms ${number.format(minutes)} min before. ${quiet ? `Quiet hours ${quiet}.` : "Quiet hours off."}`,
+    tooltip: (title: string, duration: string) => `${title} in ${duration}`,
+    tooltipNow: (title: string) => `Now: ${title}`,
+  },
   relative: {
     neverSynced: "Not synced yet",
     syncedJustNow: "Synced just now",

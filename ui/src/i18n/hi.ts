@@ -120,6 +120,25 @@ export const hi: Messages = {
         people > 0 ? `, ${number.format(people)} ${plural.select(people) === "one" ? "व्यक्ति" : "लोगों"} के साथ` : ""
       }।`,
   },
+  panel: {
+    label: "आज Tolon में",
+    nextIn: (duration) => `अगली मीटिंग ${duration} में`,
+    noMore: "आज और कोई मीटिंग नहीं है।",
+    later: "आज बाद में",
+    pausedUntil: (time) => `${time} तक रुका हुआ`,
+    pause: "1 घंटे के लिए रोकें",
+    resume: "अलार्म फिर से चालू करें",
+    settings: "सेटिंग्स",
+    quit: "बंद करें",
+    ignored: "अनदेखा",
+    allDay: "पूरा दिन",
+    noLink: "कोई लिंक नहीं",
+    eventPage: "इवेंट पेज",
+    summary: (minutes, quiet) =>
+      `अलार्म ${number.format(minutes)} मिनट पहले। ${quiet ? `शांत समय: ${quiet}।` : "शांत समय बंद है।"}`,
+    tooltip: (title, duration) => `${title}, ${duration} में`,
+    tooltipNow: (title) => `अभी: ${title}`,
+  },
   relative: {
     neverSynced: "अभी तक सिंक नहीं हुआ",
     syncedJustNow: "अभी-अभी सिंक हुआ",
