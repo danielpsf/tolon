@@ -363,7 +363,8 @@ pub fn show_settings(app: &AppHandle) {
     };
     let shown = app.run_on_main_thread(move || {
         bring_forward(
-            || window.unminimize().and_then(|()| window.show()),
+            || window.unminimize(),
+            || window.show(),
             &NATIVE,
             || window.set_focus(),
         );
@@ -373,14 +374,18 @@ pub fn show_settings(app: &AppHandle) {
     }
 }
 
-/// Show, then activate Tolon, then focus: an Accessory app's window does not come forward on
-/// `show()` alone (macOS), and focus goes to a window that is already shown. Failures are logged;
-/// the next step still runs.
+/// Unminimize, show, then activate Tolon, then focus: an Accessory app's window does not come
+/// forward on `show()` alone (macOS), and focus goes to a window that is already shown. Each step
+/// runs on its own: a failure is logged and the next step still runs.
 fn bring_forward(
+    unminimize: impl FnOnce() -> tauri::Result<()>,
     show: impl FnOnce() -> tauri::Result<()>,
     platform: &dyn Platform,
     focus: impl FnOnce() -> tauri::Result<()>,
 ) {
+    if let Err(e) = unminimize() {
+        tracing::warn!(error = %e, "could not unminimize the settings window");
+    }
     if let Err(e) = show() {
         tracing::warn!(error = %e, "could not show the settings window");
     }
@@ -741,39 +746,39 @@ mod tests {
     /// Decision 2026-10-22: show, then activate Tolon, then focus. The stub counts activations.
     /// The only test in this crate that activates, so the count is not raced.
     #[test]
-    fn showing_settings_shows_then_activates_then_focuses() {
+    fn showing_settings_unminimizes_shows_then_activates_then_focuses() {
         use std::cell::RefCell;
         use tolon_platform::StubPlatform;
         let before = StubPlatform.activations();
         let steps = RefCell::new(Vec::new());
+        let step = |name: &'static str| {
+            steps
+                .borrow_mut()
+                .push((name, StubPlatform.activations() - before));
+            Ok(())
+        };
         bring_forward(
-            || {
-                steps
-                    .borrow_mut()
-                    .push(("show", StubPlatform.activations() - before));
-                Ok(())
-            },
+            || step("unminimize"),
+            || step("show"),
             &StubPlatform,
-            || {
-                steps
-                    .borrow_mut()
-                    .push(("focus", StubPlatform.activations() - before));
-                Ok(())
-            },
+            || step("focus"),
         );
-        assert_eq!(steps.into_inner(), [("show", 0), ("focus", 1)]);
-        // A failed show still activates and focuses.
-        let focused = RefCell::new(false);
+        assert_eq!(steps.take(), [("unminimize", 0), ("show", 0), ("focus", 1)]);
+        // Each step is independent: a failed unminimize still shows, a failed show still
+        // activates and focuses.
         bring_forward(
             || Err(tauri::Error::WindowNotFound),
+            || step("show"),
             &StubPlatform,
-            || {
-                *focused.borrow_mut() = true;
-                Ok(())
-            },
+            || step("focus"),
         );
-        assert!(focused.into_inner());
-        assert_eq!(StubPlatform.activations() - before, 2);
+        bring_forward(
+            || Err(tauri::Error::WindowNotFound),
+            || Err(tauri::Error::WindowNotFound),
+            &StubPlatform,
+            || step("focus"),
+        );
+        assert_eq!(steps.take(), [("show", 1), ("focus", 2), ("focus", 3)]);
     }
 
     /// AC10.2: only `bring_forward` activates, and only `show_settings` calls it, so a start with
