@@ -25,7 +25,7 @@ export const zhCN: Messages = {
     kindOutlook: "已发布的 Outlook 日历",
     toggleLabel: (name) => `启用日历 ${name}`,
     addCalendar: "添加日历",
-    pasteIcalUrl: "粘贴 iCal 网址",
+    pasteIcalUrl: "粘贴 iCal 链接",
     ignoreHeading: "忽略",
     ignoreAllDay: "全天活动",
     ignoreDeclined: "我已拒绝的活动",
@@ -42,7 +42,7 @@ export const zhCN: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon 只把链接保存在这台电脑上，并且只从中读取。",
     adding: "正在添加日历",
-    empty: "还没有日历。粘贴 iCal 网址即可添加。",
+    empty: "还没有日历。粘贴 iCal 链接即可添加。",
   },
   settings: {
     sameAsSystem: "跟随系统",
@@ -81,7 +81,7 @@ export const zhCN: Messages = {
       removeKeyword: (word) => `移除“${word}”`,
     },
     appearance: {
-      subtitle: "提醒屏幕也会跟随此设置。",
+      subtitle: "提醒颜色为“默认”时，提醒屏幕会跟随此设置。",
       theme: "主题",
       light: "浅色",
       dark: "深色",

@@ -5,7 +5,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 ## macOS
 - [ ] S4.1 Interrupt shows over a full-screen app (test with QuickTime full screen) and covers the menu bar and Dock.
 - [ ] S4.1 Interrupt shows over a native full-screen app on each display (two displays, one app full screen on each in turn), and no Space switch happens with Settings open on another Space.
-- [ ] In the settings window, Cmd+V pastes into the iCal URL field and Cmd+C copies (Tolon has no menu bar, so the Edit shortcuts must still work).
+- [ ] In the settings window, Cmd+V pastes into the iCal link field and Cmd+C copies (Tolon has no menu bar, so the Edit shortcuts must still work).
 - [ ] S4.2 Two monitors: both show the interrupt; Esc on either hides both.
 - [ ] S4.3 Interrupt has focus on open; Enter joins; D dismisses; Space marks already there.
 - [ ] AC9.4 Start at login switch reflects System Settings, Login Items. Turning it off in System Settings and reopening the page shows the switch off with the hint to allow Tolon in Login Items; switching off twice shows no error.

@@ -25,7 +25,7 @@ export const tr: Messages = {
     kindOutlook: "Yayımlanmış Outlook takvimi",
     toggleLabel: (name) => `${name} takvimini etkinleştir`,
     addCalendar: "Takvim ekle",
-    pasteIcalUrl: "iCal URL'si yapıştır",
+    pasteIcalUrl: "iCal bağlantısı yapıştır",
     ignoreHeading: "Yok say",
     ignoreAllDay: "Tüm gün süren etkinlikler",
     ignoreDeclined: "Reddettiğim etkinlikler",
@@ -42,7 +42,7 @@ export const tr: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon bağlantıyı bu bilgisayarda saklar ve yalnızca okur.",
     adding: "Takvim ekleniyor",
-    empty: "Henüz takvim yok. Eklemek için bir iCal URL'si yapıştır.",
+    empty: "Henüz takvim yok. Eklemek için bir iCal bağlantısı yapıştır.",
   },
   settings: {
     sameAsSystem: "Sistemle aynı",
@@ -81,7 +81,7 @@ export const tr: Messages = {
       removeKeyword: (word) => `Kaldır: ${word}`,
     },
     appearance: {
-      subtitle: "Alarm ekranı da bu ayara uyar.",
+      subtitle: "Alarm rengi Varsayılan olduğunda alarm ekranı bu ayara uyar.",
       theme: "Tema",
       light: "Açık",
       dark: "Koyu",

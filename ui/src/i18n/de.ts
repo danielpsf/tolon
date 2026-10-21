@@ -26,7 +26,7 @@ export const de: Messages = {
     kindOutlook: "Veröffentlichter Outlook-Kalender",
     toggleLabel: (name) => `Kalender ${name} aktivieren`,
     addCalendar: "Kalender hinzufügen",
-    pasteIcalUrl: "iCal-URL einfügen",
+    pasteIcalUrl: "iCal-Link einfügen",
     ignoreHeading: "Ignorieren",
     ignoreAllDay: "Ganztägige Termine",
     ignoreDeclined: "Termine, die ich abgelehnt habe",
@@ -43,7 +43,7 @@ export const de: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon speichert den Link auf diesem Computer und liest nur daraus.",
     adding: "Kalender wird hinzugefügt",
-    empty: "Noch keine Kalender. Füge eine iCal-URL ein, um einen hinzuzufügen.",
+    empty: "Noch keine Kalender. Füge einen iCal-Link ein, um einen hinzuzufügen.",
   },
   settings: {
     sameAsSystem: "Wie im System",
@@ -82,7 +82,7 @@ export const de: Messages = {
       removeKeyword: (word) => `${word} entfernen`,
     },
     appearance: {
-      subtitle: "Auch der Alarmbildschirm folgt dieser Einstellung.",
+      subtitle: "Der Alarmbildschirm folgt dieser Einstellung, wenn seine Farbe Standard ist.",
       theme: "Design",
       light: "Hell",
       dark: "Dunkel",

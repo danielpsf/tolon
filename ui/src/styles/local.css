@@ -537,8 +537,14 @@
   flex-direction: column;
   gap: var(--sm-space-3);
   margin: var(--sm-space-8) 0 0;
+  /*
+   * The card's edge (L-046, WCAG 1.4.11) is read against the PAGE, so it is resolved here, on the figure, where
+   * the window's own tokens apply. On the card itself `data-tokens` would swap it for the pinned block's value.
+   */
+  --tl-edge: var(--sm-control-line);
 }
 .tl-preview {
+  border: 1px solid var(--tl-edge);
   display: flex;
   flex-direction: column;
   gap: var(--sm-space-2);
@@ -605,7 +611,15 @@
   opacity: 0;
 }
 .tl-swatch i {
+  /* The chip is not pinned (only its inner span is), so this is the window's token: 3:1 against the page (L-046). */
+  border: 1px solid var(--sm-control-line);
   overflow: hidden;
+}
+/* Default follows the appearance: one half in each appearance's moss (a vertical split mirrors in rtl by itself). */
+.tl-swatch i .tl-split {
+  grid-template-columns: 1fr 1fr;
+  /* The halves fill their cells; each one centres its own "Aa". */
+  place-items: stretch;
 }
 .tl-swatch i span {
   display: grid;

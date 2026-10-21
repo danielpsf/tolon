@@ -26,7 +26,7 @@ export const enGB: Messages = {
     kindOutlook: "Published Outlook calendar",
     toggleLabel: (name) => `Enable calendar ${name}`,
     addCalendar: "Add calendar",
-    pasteIcalUrl: "Paste an iCal URL",
+    pasteIcalUrl: "Paste an iCal link",
     ignoreHeading: "Ignore",
     ignoreAllDay: "All-day events",
     ignoreDeclined: "Events I declined",
@@ -43,7 +43,7 @@ export const enGB: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon keeps the link on this computer and only reads from it.",
     adding: "Adding calendar",
-    empty: "No calendars yet. Paste an iCal URL to add one.",
+    empty: "No calendars yet. Paste an iCal link to add one.",
   },
   settings: {
     sameAsSystem: "Same as the system",
@@ -82,7 +82,7 @@ export const enGB: Messages = {
       removeKeyword: (word) => `Remove ${word}`,
     },
     appearance: {
-      subtitle: "The alarm screen follows this setting too.",
+      subtitle: "The alarm screen follows this setting when its colour is Default.",
       theme: "Theme",
       light: "Light",
       dark: "Dark",

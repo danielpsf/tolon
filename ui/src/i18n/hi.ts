@@ -26,7 +26,7 @@ export const hi: Messages = {
     kindOutlook: "प्रकाशित Outlook कैलेंडर",
     toggleLabel: (name) => `कैलेंडर ${name} चालू करें`,
     addCalendar: "कैलेंडर जोड़ें",
-    pasteIcalUrl: "iCal URL चिपकाएं",
+    pasteIcalUrl: "iCal लिंक चिपकाएं",
     ignoreHeading: "अनदेखा करें",
     ignoreAllDay: "पूरे दिन के इवेंट",
     ignoreDeclined: "जिन इवेंट को मैंने अस्वीकार किया",
@@ -43,7 +43,7 @@ export const hi: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon लिंक को इसी कंप्यूटर पर रखता है और उससे सिर्फ़ पढ़ता है।",
     adding: "कैलेंडर जोड़ा जा रहा है",
-    empty: "अभी कोई कैलेंडर नहीं है। जोड़ने के लिए एक iCal URL चिपकाएं।",
+    empty: "अभी कोई कैलेंडर नहीं है। जोड़ने के लिए एक iCal लिंक चिपकाएं।",
   },
   settings: {
     sameAsSystem: "सिस्टम के अनुसार",
@@ -82,7 +82,7 @@ export const hi: Messages = {
       removeKeyword: (word) => `${word} हटाएं`,
     },
     appearance: {
-      subtitle: "अलार्म स्क्रीन भी इसी सेटिंग का पालन करती है।",
+      subtitle: "रंग डिफ़ॉल्ट होने पर अलार्म स्क्रीन इसी सेटिंग का पालन करती है।",
       theme: "थीम",
       light: "लाइट",
       dark: "डार्क",

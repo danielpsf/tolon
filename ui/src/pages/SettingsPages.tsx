@@ -442,9 +442,20 @@ export function AppearancePage() {
                       onChange={() => save({ interrupt_color: choice })}
                     />
                     <i aria-hidden="true">
-                      <span data-color={choice} data-tokens={tokensFor(choice, tokens)}>
-                        Aa
-                      </span>
+                      {choice === "theme" ? (
+                        <span className="tl-split">
+                          <span data-color={choice} data-tokens="light">
+                            Aa
+                          </span>
+                          <span data-color={choice} data-tokens="dark">
+                            Aa
+                          </span>
+                        </span>
+                      ) : (
+                        <span data-color={choice} data-tokens={tokensFor(choice, tokens)}>
+                          Aa
+                        </span>
+                      )}
                     </i>
                     <span>{p.colors[choice]}</span>
                   </label>

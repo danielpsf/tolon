@@ -37,7 +37,7 @@ export const ar: Messages = {
     kindOutlook: "تقويم Outlook منشور",
     toggleLabel: (name) => `تفعيل التقويم ${iso(name)}`,
     addCalendar: "إضافة تقويم",
-    pasteIcalUrl: "لصق عنوان URL لتقويم iCal",
+    pasteIcalUrl: "لصق رابط iCal",
     ignoreHeading: "تجاهل",
     ignoreAllDay: "الأحداث التي تستغرق اليوم كله",
     ignoreDeclined: "الأحداث التي رفضتها",
@@ -54,7 +54,7 @@ export const ar: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "يحفظ Tolon الرابط على هذا الكمبيوتر ويقرأ منه فقط.",
     adding: "جارٍ إضافة التقويم",
-    empty: "لا توجد تقويمات بعد. الصق عنوان URL لتقويم iCal لإضافة تقويم.",
+    empty: "لا توجد تقويمات بعد. الصق رابط iCal لإضافة تقويم.",
   },
   settings: {
     sameAsSystem: "مثل النظام",
@@ -101,7 +101,7 @@ export const ar: Messages = {
       removeKeyword: (word) => `إزالة ${iso(word)}`,
     },
     appearance: {
-      subtitle: "تتبع شاشة التنبيه هذا الإعداد أيضًا.",
+      subtitle: "تتبع شاشة التنبيه هذا الإعداد عندما يكون لونها افتراضي.",
       theme: "السمة",
       light: "فاتح",
       dark: "داكن",
