@@ -166,8 +166,9 @@ export function perform(action: Action, key: string): Promise<void> {
 /**
  * What one interrupt window knows. The window is reused for every alarm (it is hidden on close, not
  * destroyed), so `shown` counts the alarms it was told to show. The view is keyed by it: every
- * alarm, even a repeat of the same meeting after a snooze, starts a fresh view with no focus,
- * error, busy flag or key handler left over from the last one.
+ * alarm that follows a hide, even a repeat of the same meeting after a snooze, starts a fresh view
+ * with no focus, error, busy flag or key handler left over from the last one. An update of the
+ * alarm on screen keeps the view.
  */
 export interface AlarmView {
   alarm: AlarmShowDto | null;
@@ -185,7 +186,9 @@ export const NO_ALARM: AlarmView = { alarm: null, shown: 0 };
 export function nextAlarmView(view: AlarmView, event: AlarmEvent): AlarmView {
   switch (event.type) {
     case "show":
-      return { alarm: event.alarm, shown: view.shown + 1 };
+      // A show while an alarm is on screen is an update of it (a meeting joined the minute, one went stale):
+      // the view stays, with the person's focus. Only a show after a hide starts a new alarm.
+      return { alarm: event.alarm, shown: view.alarm ? view.shown : view.shown + 1 };
     case "hide":
       return { alarm: null, shown: view.shown };
     case "current":

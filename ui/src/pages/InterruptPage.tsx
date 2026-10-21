@@ -81,6 +81,7 @@ export function InterruptPage() {
       </main>
     );
   // Keyed by the alarm's number, not its meeting: the window is reused, and a snoozed meeting that fires again has the same key.
+  // An update of the alarm on screen keeps the number, so the person's focus stays where it is.
   return <InterruptView key={shown} alarm={alarm} first={first} screen={screen} color={color} />;
 }
 

@@ -296,7 +296,19 @@ describe("a reused window (L-048)", () => {
     meetings: [meeting(link("meet.google.com", true), { title, key })],
   });
 
-  it("every alarm:show is a new view, even a repeat of the same meeting", () => {
+  it("an alarm:show while one is on screen keeps the view, so the focus stays where the person put it", () => {
+    const first = show("First", "cal:a@1");
+    const view = nextAlarmView(NO_ALARM, { type: "show", alarm: first });
+    const regrouped = { test: false, meetings: [...first.meetings, ...show("Second", "cal:b@1").meetings] };
+    const updated = nextAlarmView(view, { type: "show", alarm: regrouped });
+    // Same count: the page keys its view by it, so it does not remount or move the focus to the primary button.
+    expect(updated.shown).toBe(view.shown);
+    expect(updated.alarm?.meetings.map((m) => m.title)).toEqual(["First", "Second"]);
+    // The stale-meeting drop is the same event with fewer meetings.
+    expect(nextAlarmView(updated, { type: "show", alarm: show("Second", "cal:b@1") }).shown).toBe(view.shown);
+  });
+
+  it("a hide then a show is a fresh view, even a repeat of the same meeting", () => {
     let view = nextAlarmView(NO_ALARM, { type: "show", alarm: show("First") });
     const first = view.shown;
     view = nextAlarmView(view, { type: "hide" });
