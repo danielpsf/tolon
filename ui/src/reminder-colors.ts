@@ -54,6 +54,7 @@ export function tokensFor(color: InterruptColor, appearance?: "light" | "dark"):
  * local.css among them) still apply inside a pinned element.
  */
 function colours(start: number): string {
+  if (start < 0) throw new Error("Swiss Moss tokens.css: token block not found");
   const block = tokens.slice(tokens.indexOf("{", start) + 1, tokens.indexOf("}", start));
   return block
     .split(";")

@@ -15,6 +15,11 @@ function palette(block: string): Record<string, string> {
   return Object.fromEntries([...block.matchAll(/(--sm-[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)].map((m) => [m[1], m[2]]));
 }
 
+it("finds both Swiss Moss token blocks in tokens.css", () => {
+  expect(tokens.indexOf(":root {")).toBeGreaterThanOrEqual(0);
+  expect(tokens.indexOf(':root[data-theme="dark"] {')).toBeGreaterThanOrEqual(0);
+});
+
 const THEMES = { light: palette(lightBlock), dark: palette(darkBlock) } as const;
 type Theme = keyof typeof THEMES;
 const APPEARANCES = ["light", "dark"] as const;
