@@ -249,3 +249,10 @@ The reminder scales every size with the screen (`--tl-u`, 1/800 of the shorter e
 - The title, the page padding and the gaps between blocks keep scaling with the screen.
 - The controls and small text do not: buttons about 52 points tall, labels 16 points (17 and semibold on the primary button), and the clock, countdown, details, key hint and consequence line at fixed Swiss Moss text sizes. On a screen smaller than 1280x800 they may shrink with the screen, never grow past these sizes.
 - The bell keeps its size relative to the countdown. Colours, the focus ring, the cut join host and contrast do not change.
+
+## 2026-10-22 Appearance page follow-ups (QA on a MacBook)
+The QA judge found that a Paper preview on the light page and an Ink preview on the dark page measure 1.00:1 against the page, so the preview reads as loose text; unselected swatch borders measure 1.24:1 and 1.48:1.
+- (overnight) The preview card and every swatch always carry a 1px border in a Swiss Moss line token that reaches 3:1 against the page in both appearances (WCAG 1.4.11); `contrast.test.ts` checks it.
+- (overnight) The Default swatch is drawn half light-appearance moss and half dark-appearance moss, so it no longer looks identical to Moss in light and shows that it follows the appearance.
+- (overnight) The Appearance subtitle no longer says the alarm screen always follows the theme; it says so only for the Default colour.
+- (overnight) Calendars says "iCal link" everywhere, as first run does, not "iCal URL".
