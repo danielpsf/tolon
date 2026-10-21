@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onOccurrencesChanged, onPaused } from "../api";
 import type { ListedDto, PauseDto } from "../api-types";
-import { Bell } from "../Bell";
+import { PeekMark } from "../PeekMark";
 import { copy } from "../copy";
 import { detailsText, primaryLabel, SNOOZE_MINUTES } from "../interrupt";
 import {
@@ -108,7 +108,7 @@ export function PanelPage() {
     <main ref={root} className="tl-panel" aria-label={t.label}>
       <header className="tl-panel-top">
         <span className="tl-brand">
-          <Bell />
+          <PeekMark />
           <span>{c.t.app.windowTitle}</span>
         </span>
         {pause.paused_until && (

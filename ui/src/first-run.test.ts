@@ -228,3 +228,44 @@ describe("first run (F10)", () => {
     expect(createCopy("ar").t.firstRun.traySystemTray).toBe("يوجد Tolon في منطقة الإعلام");
   });
 });
+
+// L-052 (owner's QA on a 1040 x 760 window): the content is centred in the window instead of hanging from the top
+// with an empty band below, and the blocks breathe with Swiss Moss space tokens.
+describe("first-run layout (L-052)", () => {
+  const body = (selector: string): string => {
+    const at = local.indexOf(`\n${selector} {`);
+    if (at < 0) throw new Error(`no rule ${selector}`);
+    return local.slice(at, local.indexOf("}", at));
+  };
+  const compact = local.slice(local.indexOf("@media (max-height: 720px)"));
+
+  it("is a full-height row with the text and the preview centred in it, and at least space-5 above and below", () => {
+    const page = body(".tl-first");
+    expect(page).toMatch(/min-height: 100vh;/);
+    expect(page).toMatch(/align-items: center;/);
+    expect(page).toMatch(/padding: var\(--sm-space-5\) var\(--sm-space-7\);/);
+    expect(body(".tl-first-preview")).toMatch(/margin: 0;/);
+  });
+
+  it("spaces mark, title, lead, steps, buttons and notes with space tokens", () => {
+    expect(body(".tl-first-text")).toMatch(/gap: var\(--sm-space-4\);/);
+    expect(body(".tl-first-mark")).toMatch(/margin-block-end: var\(--sm-space-1\);/);
+    expect(body(".tl-first .tl-head")).toMatch(/gap: var\(--sm-space-4\);[^}]*margin-bottom: var\(--sm-space-3\);/);
+    expect(body(".tl-first .sm-steps")).toMatch(/gap: var\(--sm-space-5\);[^}]*margin-bottom: var\(--sm-space-3\);/);
+  });
+
+  it("breaks a step's lines evenly and sets its second paragraph apart", () => {
+    expect(body(".tl-first .sm-steps .sm-body")).toMatch(/text-wrap: balance;/);
+    expect(body(".tl-first .sm-steps .sm-body + .sm-body")).toMatch(/margin-top: var\(--sm-space-2\);/);
+  });
+
+  it("a window shorter than 720 px gets the tight rhythm back, so 960 x 640 fits where the copy allows (D6)", () => {
+    expect(compact).toMatch(/\.tl-first-text \{\s*gap: var\(--sm-space-2\);/);
+    expect(compact).toMatch(/\.tl-first \.sm-steps \{\s*gap: var\(--sm-space-2\);/);
+  });
+
+  it("uses no physical side, so it mirrors in ar and he", () => {
+    const block = local.slice(local.indexOf(".tl-first {"), local.indexOf(".tl-first-preview {")).replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(block).not.toMatch(/\b(left|right)\b/);
+  });
+});

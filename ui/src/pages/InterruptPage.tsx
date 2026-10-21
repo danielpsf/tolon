@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState, type FocusEvent } from "react";
 import { api, onAlarmHide, onAlarmShow } from "../api";
 import type { AlarmShowDto, InterruptColor, MeetingDto } from "../api-types";
-import { Bell } from "../Bell";
+import { PeekMark } from "../PeekMark";
 import { copy } from "../copy";
 import {
   countdownText,
@@ -248,7 +248,7 @@ export function InterruptView({
         <span>{c.formatTime(now)}</span>
         <span className="tl-int-count">
           <span>{countdownText(c, start, now)}</span>
-          <Bell />
+          <PeekMark />
         </span>
       </header>
 

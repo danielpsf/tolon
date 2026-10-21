@@ -32,10 +32,40 @@
   font-weight: 600;
   line-height: 24px;
 }
-.tl-brand svg {
+.tl-brand .tl-mark {
   width: 28px;
-  height: 24px;
-  color: var(--sm-moss);
+  height: 28px;
+}
+/*
+ * Tolon's mark (PeekMark.tsx, L-052). The body, hill, eyes and cheeks are drawn inside a data-tokens="light"
+ * group, so they keep their colours in a dark window; the edge is outside it and uses the window's tokens,
+ * --tl-mark-edge, which must reach 3:1 against what the mark sits on (contrast.test.ts).
+ */
+.tl-mark {
+  flex: none;
+  overflow: visible;
+}
+.tl-mark-body {
+  fill: var(--sm-moss-deep);
+}
+.tl-mark-hill {
+  fill: var(--sm-moss);
+}
+.tl-mark-eye {
+  fill: var(--sm-paper);
+}
+.tl-mark-pupil {
+  fill: var(--sm-ink);
+}
+.tl-mark-cheek {
+  fill: var(--sm-signal);
+  fill: color-mix(in srgb, color-mix(in srgb, var(--sm-signal), var(--sm-danger)) 70%, var(--sm-danger-tint));
+}
+.tl-mark-edge {
+  fill: none;
+  stroke: var(--tl-mark-edge, var(--sm-muted));
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
 }
 .tl-version {
   margin-top: auto;
@@ -247,13 +277,14 @@
   gap: calc(24 * var(--tl-c));
 }
 .tl-int-count {
+  --tl-mark-edge: var(--tl-fg);
   display: flex;
   align-items: center;
   gap: calc(20 * var(--tl-c));
 }
-/* The bell keeps the 44:15 ratio to the countdown's 15 pt text. */
-.tl-int-count svg {
-  width: calc(44 * var(--tl-c));
+/* The mark stands where the bell did, at its size (38 pt against the countdown's 15 pt) and with the text colour as its edge. */
+.tl-int-count .tl-mark {
+  width: calc(38 * var(--tl-c));
   height: calc(38 * var(--tl-c));
 }
 .tl-int-body {
@@ -476,26 +507,35 @@
  * start, a still preview of the alarm at the end. The preview takes the interrupt's colours (moss fill,
  * on-moss text, the primary button inverted), which Swiss Moss flips for dark.
  */
-/* D6, D7: sized to fit the 960 x 640 window where the copy allows; the text column gets the width, the preview at most 340 px. */
+/*
+ * D6, D7: the text column gets the width, the preview at most 340 px. The page is a full-height row whose content
+ * (the text and the preview) is centred in it, so the space above and below balances (never less than space-5);
+ * in a window too short for it (960 x 640) the row grows with the content, so the page opens at its top.
+ */
 .tl-first {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
-  align-items: start;
+  align-items: center;
   gap: var(--sm-space-6);
   max-width: 1280px;
   min-height: 100vh;
-  padding: var(--sm-space-5) var(--sm-space-7) var(--sm-space-6);
+  padding: var(--sm-space-5) var(--sm-space-7);
 }
+/* The rhythm: mark to title space-5, title to lead space-4, lead to steps space-6, steps space-5 apart, steps to buttons space-6, buttons to notes space-4. */
 .tl-first-text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sm-space-2);
+  gap: var(--sm-space-4);
+}
+.tl-first-mark {
+  margin-block-end: var(--sm-space-1);
 }
 /* Arabic and Devanagari glyphs reach past display-l's line-height of 1: keep them off the lead. */
 .tl-first .tl-head {
-  gap: var(--sm-space-1);
+  gap: var(--sm-space-4);
+  margin-bottom: var(--sm-space-3);
 }
 /* D1 for the first-run title too: display-l's -0.035em makes its letters touch. */
 .tl-first h1 {
@@ -513,14 +553,25 @@
   min-block-size: 40px;
   min-inline-size: 40px;
 }
-.tl-first-bell svg {
+.tl-first-mark .tl-mark {
   width: 40px;
-  height: 34px;
-  color: var(--sm-moss);
+  height: 40px;
 }
 .tl-first .sm-steps {
   flex-direction: column;
-  gap: var(--sm-space-2);
+  gap: var(--sm-space-5);
+  margin-bottom: var(--sm-space-3);
+}
+/* A step's lines break evenly, so step 3 does not leave "Click the Tolon icon" hanging; its second paragraph is set apart. */
+.tl-first .sm-steps .sm-body {
+  text-wrap: balance;
+}
+.tl-first .sm-steps .sm-body + .sm-body {
+  margin-top: var(--sm-space-2);
+}
+/* The two notes under the buttons read as one block. */
+.tl-first-text > #skip-consequence + .sm-caption {
+  margin-top: calc(-1 * var(--sm-space-2));
 }
 .tl-first .sm-steps .sm-heading {
   color: var(--sm-ink);
@@ -532,11 +583,31 @@
   background: var(--sm-moss);
   color: var(--sm-on-moss);
 }
+/* A short window (960 x 640) gets the tighter rhythm back, so the buttons stay in view where the copy allows (D6). */
+@media (max-height: 720px) {
+  .tl-first-text {
+    gap: var(--sm-space-2);
+  }
+  .tl-first-mark {
+    margin-block-end: 0;
+  }
+  .tl-first .tl-head {
+    gap: var(--sm-space-1);
+    margin-bottom: 0;
+  }
+  .tl-first .sm-steps {
+    gap: var(--sm-space-2);
+    margin-bottom: 0;
+  }
+  .tl-first-text > #skip-consequence + .sm-caption {
+    margin-top: 0;
+  }
+}
 .tl-first-preview {
   display: flex;
   flex-direction: column;
   gap: var(--sm-space-3);
-  margin: var(--sm-space-8) 0 0;
+  margin: 0;
   /*
    * The card's edge (L-046, WCAG 1.4.11) is read against the PAGE, so it is resolved here, on the figure, where
    * the window's own tokens apply. On the card itself `data-tokens` would swap it for the pinned block's value.
@@ -720,8 +791,13 @@
   border-radius: 50%;
   background: var(--sm-signal);
 }
-[data-style="peek"] .tl-int-count svg {
-  display: none;
+/* In Peek the page is paper and the big character is below, so the mark is small, at the end of the pill. */
+[data-style="peek"] .tl-int-count {
+  --tl-mark-edge: var(--sm-muted);
+}
+[data-style="peek"] .tl-int-count .tl-mark {
+  width: calc(22 * var(--tl-c));
+  height: calc(22 * var(--tl-c));
 }
 [data-style="peek"] .tl-int-body {
   align-items: center;

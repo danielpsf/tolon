@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { TrayPlace } from "../api-types";
-import { Bell } from "../Bell";
+import { PeekMark } from "../PeekMark";
 import { copy, type Messages } from "../copy";
 import { firstCalendarAdded, focusAtTop, hideAndEndFirstRun } from "../first-run";
 import { colorAttr } from "../reminder-colors";
@@ -73,8 +73,8 @@ export function FirstRunPage() {
   return (
     <main className="tl-first" aria-labelledby="first-run-title">
       <div className="tl-first-text">
-        <span className="tl-first-bell">
-          <Bell />
+        <span className="tl-first-mark">
+          <PeekMark />
         </span>
         <header className="tl-head">
           <h1 className="sm-display-l" id="first-run-title">
