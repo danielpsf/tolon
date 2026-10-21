@@ -121,7 +121,7 @@ Production fetches https only. To prove S1.1 end to end, `tolon-sync` and `tolon
 
 ## 2026-10-20 Interrupt window deviations from mockup 01 (L-010)
 - The consequence line reads "Dismissing silences this reminder on this computer." Tolon has no accounts or sync, and a plain Dismiss of the lead alarm still lets the start alarm fire, so "this meeting on every device" would be false.
-- The title uses Swiss Moss `sm-display-xl` (Inter Tight, as AC4.3 and the UI brief require), not the mockup's Inter. All lengths scale with the viewport (`100vmin / 800`) so the title reaches about 300 px on a 4K screen; very long titles step down.
+- The title uses Swiss Moss `sm-display-xl` (Inter Tight, as AC4.3 and the UI brief require), not the mockup's Inter. All lengths scale with the viewport (superseded for controls, see 2026-10-22), `100vmin / 800`, so the title reaches about 300 px on a 4K screen; very long titles step down.
 - All text on the moss fill uses `--sm-on-moss`: the mockup's muted colour is 4.0:1 on light moss and fails WCAG AA.
 - The details line shows a people count, not names (the core keeps only a count; names are personal data). The count may include you.
 - The countdown says "min" (AC4.7 wording) and the key hint also explains Space.
