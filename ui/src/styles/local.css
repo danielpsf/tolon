@@ -488,6 +488,10 @@
 .tl-first .tl-head {
   gap: var(--sm-space-1);
 }
+/* D1 for the first-run title too: display-l's -0.035em makes its letters touch. */
+.tl-first h1 {
+  letter-spacing: -0.02em;
+}
 .tl-first-text > p {
   margin: 0;
 }
