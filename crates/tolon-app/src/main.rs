@@ -54,14 +54,24 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
     app.manage(commands::AppScheduler::new(scheduler::TauriHost::new(
         app.clone(),
     )));
-    tauri::async_runtime::spawn(refresh::run(app.clone()));
-    tauri::async_runtime::spawn(scheduler::run(app.clone()));
-    // Without a tray (a Linux session with no status notifier host) Tolon still runs and alarms
-    // still fire; the settings window stays the way in.
+    // Before the scheduler: its first tick sets the paused icon after a restart during a pause,
+    // and needs the icon to exist. Without a tray (a Linux session with no status notifier host)
+    // Tolon still runs and alarms still fire; the settings window stays the way in.
     if let Err(e) = tray::setup(app) {
         tracing::warn!(error = %e, "could not create the tray icon");
     }
+    tauri::async_runtime::spawn(refresh::run(app.clone()));
+    tauri::async_runtime::spawn(scheduler::run(app.clone()));
     Ok(())
+}
+
+/// The last thing before the process ends (Quit, Cmd+Q, logout): waits for the store lock, so a
+/// tick or a command that is writing finishes its transaction first. Every write commits on its
+/// own, so nothing else needs flushing.
+fn settle_store(app: &tauri::AppHandle) {
+    if let Ok(state) = commands::state(app) {
+        drop(pipeline::lock(&state.db));
+    }
 }
 
 /// S7.2: closing the settings window hides it, and the panel hides when it loses focus.
@@ -157,11 +167,13 @@ fn main() -> anyhow::Result<()> {
         })
         .on_window_event(on_window_event)
         .build(tauri::generate_context!())?
-        .run(|_app, event| {
+        .run(|app, event| {
             if keeps_running(&event) {
                 if let RunEvent::ExitRequested { api, .. } = event {
                     api.prevent_exit();
                 }
+            } else if matches!(event, RunEvent::Exit) {
+                settle_store(app);
             }
         });
     Ok(())
@@ -187,6 +199,15 @@ mod tests {
         );
         let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
         assert!(!shipped.contains(".menu("), "keep Tauri's default menu");
+        // B2: the tray exists before the scheduler's first tick, which may set the paused icon.
+        let tray = shipped.find("tray::setup(app)").unwrap_or(usize::MAX);
+        let scheduler = shipped
+            .find("spawn(scheduler::run(app.clone()))")
+            .unwrap_or(0);
+        assert!(
+            tray < scheduler,
+            "tray::setup runs before the scheduler spawns"
+        );
         let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))?;
         assert_eq!(
             conf["bundle"]["macOS"]["minimumSystemVersion"],

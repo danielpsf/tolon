@@ -222,7 +222,7 @@ pub fn native() -> &'static dyn Platform {
 }
 
 /// Tauri's monitors as screens, for platforms where `Platform::screens` is unsupported (Linux).
-fn monitor_screens(app: &AppHandle) -> Vec<Screen> {
+pub(crate) fn monitor_screens(app: &AppHandle) -> Vec<Screen> {
     let primary = app.primary_monitor().ok().flatten();
     let monitors = app.available_monitors().unwrap_or_default();
     monitors

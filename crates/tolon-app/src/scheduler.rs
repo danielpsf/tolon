@@ -377,7 +377,7 @@ fn stored_firing(db: &Db) -> anyhow::Result<Vec<Alarm>> {
 /// right before it is opened (decision "Join links are treated as untrusted").
 /// Unicode general category Cf (format), as of Unicode 16: zero-width and joiner characters, bidi
 /// marks and overrides, the BOM, tag characters. `std` has no category table, so they are listed.
-fn is_format_char(c: char) -> bool {
+pub(crate) fn is_format_char(c: char) -> bool {
     matches!(
         u32::from(c),
         0x00AD

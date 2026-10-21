@@ -19,7 +19,7 @@ use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Rect, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use tolon_platform::{Platform, Screen, NATIVE};
+use tolon_platform::{Placement, Platform, Screen, NATIVE};
 
 /// The panel's window label; `capabilities/panel.json` and the command checks use it.
 pub const PANEL: &str = "panel";
@@ -33,14 +33,12 @@ const PANEL_SIZE: (f64, f64) = (420.0, 560.0);
 const GAP: f64 = 8.0;
 /// A click on the icon right after the panel hid for the blur that click caused toggles nothing.
 const BLUR_GRACE: Duration = Duration::from_millis(300);
-/// Windows keeps at most 127 characters of a tray tooltip.
-const MAX_TOOLTIP_CHARS: usize = 120;
+/// Windows keeps at most 127 UTF-16 units of a tray tooltip (`NOTIFYICONDATAW.szTip`).
+const MAX_TOOLTIP_UNITS: usize = 127;
 
-/// The macOS menu bar takes template images; other trays get the colour icon. shortcut: the OS is
-/// read from the platform's name, as rule 9 keeps OS checks out of this crate; move it behind a
-/// `Platform` call if more tray differences appear.
+/// The macOS menu bar takes template images; other trays get the colour icon.
 fn template() -> bool {
-    NATIVE.name() == "macos"
+    NATIVE.tray_style().template_icon
 }
 
 fn icon(paused: bool) -> Image<'static> {
@@ -68,7 +66,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("Tolon")
         .show_menu_on_left_click(false)
         .on_tray_icon_event(on_icon_event);
-    if NATIVE.name() == "linux" {
+    if !NATIVE.tray_style().clicks {
         // "Tolon" is the product name and never translated, so this menu needs no catalogue.
         let open = MenuItem::with_id(app, MENU_PANEL, "Tolon", true, None::<&str>)?;
         builder = builder
@@ -110,14 +108,27 @@ pub fn set_paused(app: &AppHandle, paused: bool) {
     }
 }
 
-/// The tooltip as the page may send it: line breaks kept (the pause goes on its own line), every
-/// other control character a space, at most 120 characters. Empty means "Tolon".
+/// The tooltip as the page may send it. Line breaks stay (the pause goes on its own line); every
+/// other control character becomes a space; Unicode format characters (zero-width, bidi overrides
+/// such as U+202E) are dropped, except the first-strong isolate pair U+2068 and U+2069 the page
+/// puts around the meeting title. At most 127 UTF-16 units, cut between characters, so a
+/// surrogate pair is never split. Empty means "Tolon".
 pub fn tooltip_text(text: &str) -> String {
-    let clean: String = text
-        .chars()
-        .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
-        .take(MAX_TOOLTIP_CHARS)
-        .collect();
+    let mut clean = String::new();
+    let mut units = 0;
+    for c in text.chars() {
+        let c = match c {
+            '\n' | '\u{2068}' | '\u{2069}' => c,
+            c if c.is_control() => ' ',
+            c if crate::scheduler::is_format_char(c) => continue,
+            c => c,
+        };
+        units += c.len_utf16();
+        if units > MAX_TOOLTIP_UNITS {
+            break;
+        }
+        clean.push(c);
+    }
     let clean = clean.trim();
     if clean.is_empty() {
         "Tolon".to_owned()
@@ -160,44 +171,6 @@ pub fn panel_origin(icon: Px, screen: Px, panel: (f64, f64), gap: f64) -> (f64, 
         clamp(x, screen.x + gap, screen.x + screen.w - w - gap),
         clamp(y, screen.y + gap, screen.y + screen.h - h - gap),
     )
-}
-
-fn px_of(rect: &Rect, scale: f64) -> Px {
-    let p = rect.position.to_physical::<f64>(scale);
-    let s = rect.size.to_physical::<f64>(scale);
-    Px {
-        x: p.x,
-        y: p.y,
-        w: s.width,
-        h: s.height,
-    }
-}
-
-/// The screen under `point` (physical), else the primary one: `(rect, scale factor)`.
-fn screen_at(app: &AppHandle, x: f64, y: f64) -> Option<(Px, f64)> {
-    let as_px = |m: &tauri::Monitor| {
-        let (p, s) = (m.position(), m.size());
-        Px {
-            x: f64::from(p.x),
-            y: f64::from(p.y),
-            w: f64::from(s.width),
-            h: f64::from(s.height),
-        }
-    };
-    let monitors = app.available_monitors().unwrap_or_default();
-    monitors
-        .iter()
-        .find(|m| {
-            let r = as_px(m);
-            r.x <= x && x < r.x + r.w && r.y <= y && y < r.y + r.h
-        })
-        .map(|m| (as_px(m), m.scale_factor()))
-        .or_else(|| {
-            app.primary_monitor()
-                .ok()
-                .flatten()
-                .map(|m| (as_px(&m), m.scale_factor()))
-        })
 }
 
 /// The panel window, created hidden the first time.
@@ -262,47 +235,119 @@ pub fn hide_panel(app: &AppHandle) {
     }
 }
 
-fn place(app: &AppHandle, window: &WebviewWindow, rect: Option<Rect>) {
-    let scale_guess = window.scale_factor().unwrap_or(1.0);
-    let icon = match rect {
-        Some(rect) => px_of(&rect, scale_guess),
-        None => match app.cursor_position() {
-            Ok(p) => Px {
-                x: p.x,
-                y: p.y,
-                w: 1.0,
-                h: 1.0,
-            },
-            Err(_) => Px {
-                x: 0.0,
-                y: 0.0,
-                w: 1.0,
-                h: 1.0,
-            },
+/// Where the panel goes, in the unit `Screen::placement` uses on this OS (`logical`: points on
+/// macOS, else physical pixels). `pointer` is the click, in that unit; `icon` the tray icon's
+/// rectangle as Tauri reports it, in physical pixels of the icon's own screen. The screen is the
+/// one under the pointer (else the main one), and the icon is converted with that screen's scale,
+/// never the panel window's: on a Retina screen beside a 1x one the two differ (decision
+/// "Platform contract after L-012"). Without an icon the pointer stands in for it.
+pub fn panel_placement(
+    screens: &[Screen],
+    pointer: Option<(f64, f64)>,
+    icon: Option<Px>,
+    logical: bool,
+) -> Option<Placement> {
+    let on = |s: &&Screen, (x, y): (f64, f64)| {
+        if logical {
+            s.contains_logical(x, y)
+        } else {
+            s.contains_physical(x, y)
+        }
+    };
+    let screen = pointer
+        .and_then(|p| screens.iter().find(|s| on(s, p)))
+        .or_else(|| screens.iter().find(|s| s.is_main))
+        .or_else(|| screens.first())?;
+    let (to_unit, unit) = if logical {
+        (screen.scale_factor.max(f64::MIN_POSITIVE), 1.0)
+    } else {
+        (1.0, screen.scale_factor)
+    };
+    let icon = match (icon, pointer) {
+        (Some(i), _) => Px {
+            x: i.x / to_unit,
+            y: i.y / to_unit,
+            w: i.w / to_unit,
+            h: i.h / to_unit,
+        },
+        (None, Some((x, y))) => Px {
+            x,
+            y,
+            w: 1.0,
+            h: 1.0,
+        },
+        (None, None) => Px {
+            x: 0.0,
+            y: 0.0,
+            w: 1.0,
+            h: 1.0,
         },
     };
-    let Some((screen, scale)) = screen_at(app, icon.x + icon.w / 2.0, icon.y + icon.h / 2.0) else {
+    let area = if logical {
+        Px {
+            x: screen.x,
+            y: screen.y,
+            w: screen.width,
+            h: screen.height,
+        }
+    } else {
+        Px {
+            x: f64::from(screen.physical_x),
+            y: f64::from(screen.physical_y),
+            w: f64::from(screen.physical_width),
+            h: f64::from(screen.physical_height),
+        }
+    };
+    let (w, h) = (PANEL_SIZE.0 * unit, PANEL_SIZE.1 * unit);
+    let (x, y) = panel_origin(icon, area, (w, h), GAP * unit);
+    if logical {
+        return Some(Placement::Logical {
+            x,
+            y,
+            width: PANEL_SIZE.0,
+            height: PANEL_SIZE.1,
+        });
+    }
+    let px = |v: f64| v.round().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32;
+    Some(Placement::Physical {
+        x: px(x),
+        y: px(y),
+        width: px(w).unsigned_abs(),
+        height: px(h).unsigned_abs(),
+    })
+}
+
+/// Runs on the main thread (tray and menu events do), where `Platform` calls belong.
+fn place(app: &AppHandle, window: &WebviewWindow, rect: Option<Rect>) {
+    let screens =
+        crate::interrupt::screens_or(NATIVE.screens(), || crate::interrupt::monitor_screens(app));
+    let logical = screens
+        .first()
+        .is_some_and(|s| matches!(s.placement(), Placement::Logical { .. }));
+    // The platform's pointer is in the placement unit; Tauri's cursor is physical, which is the
+    // unit only where placement is physical (Linux, where the platform has no pointer).
+    let pointer = NATIVE.pointer().ok().or_else(|| {
+        app.cursor_position()
+            .ok()
+            .filter(|_| !logical)
+            .map(|p| (p.x, p.y))
+    });
+    let icon = rect.map(|r| {
+        let (p, s) = (
+            r.position.to_physical::<f64>(1.0),
+            r.size.to_physical::<f64>(1.0),
+        );
+        Px {
+            x: p.x,
+            y: p.y,
+            w: s.width,
+            h: s.height,
+        }
+    });
+    let Some(placement) = panel_placement(&screens, pointer, icon, logical) else {
         return;
     };
-    let (w, h) = (PANEL_SIZE.0 * scale, PANEL_SIZE.1 * scale);
-    let (x, y) = panel_origin(icon, screen, (w, h), GAP * scale);
-    // The panel's rectangle as a `Screen`, so `Screen::placement` picks the unit the OS places
-    // windows in (decision "Platform contract after L-012": logical points on macOS).
-    let px = |v: f64| v.round().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32;
-    let rect = Screen {
-        id: 0,
-        x: x / scale,
-        y: y / scale,
-        width: PANEL_SIZE.0,
-        height: PANEL_SIZE.1,
-        physical_x: px(x),
-        physical_y: px(y),
-        physical_width: px(w).unsigned_abs(),
-        physical_height: px(h).unsigned_abs(),
-        scale_factor: scale,
-        is_main: false,
-    };
-    if let Err(e) = crate::interrupt::place(window, rect.placement()) {
+    if let Err(e) = crate::interrupt::place(window, placement) {
         tracing::warn!(error = %e, "could not place the tray panel");
     }
 }
@@ -418,7 +463,116 @@ mod tests {
             tooltip_text("Paused until 16:00\nStandup in 5 min"),
             "Paused until 16:00\nStandup in 5 min"
         );
-        assert_eq!(tooltip_text(&"x".repeat(500)).chars().count(), 120);
+        assert_eq!(tooltip_text(&"x".repeat(500)).encode_utf16().count(), 127);
+    }
+
+    /// N2: format characters cannot reorder or hide the tooltip; the page's isolates stay; the
+    /// 127-unit cut never splits a surrogate pair.
+    #[test]
+    fn ac7_1_the_tooltip_drops_format_characters_and_cuts_between_characters() {
+        assert_eq!(
+            tooltip_text("Stand\u{200B}up\u{202E} in 5 min"),
+            "Standup in 5 min"
+        );
+        assert_eq!(
+            tooltip_text("\u{2068}Standup\u{2069} in 5 min"),
+            "\u{2068}Standup\u{2069} in 5 min"
+        );
+        // 126 units, then an emoji of two: it does not fit, so it is left out whole.
+        let cut = tooltip_text(&format!("{}\u{1F600}", "x".repeat(126)));
+        assert_eq!(cut.encode_utf16().count(), 126);
+        assert!(!cut.contains('\u{1F600}'));
+        let fits = tooltip_text(&format!("{}\u{1F600}", "x".repeat(125)));
+        assert_eq!(fits.encode_utf16().count(), 127);
+        assert!(fits.ends_with('\u{1F600}'));
+    }
+
+    fn screen(id: u32, (x, y, w, h): (f64, f64, f64, f64), scale: f64, main: bool) -> Screen {
+        let px = |v: f64| (v * scale).round() as i32;
+        Screen {
+            id,
+            x,
+            y,
+            width: w,
+            height: h,
+            physical_x: px(x),
+            physical_y: px(y),
+            physical_width: px(w).unsigned_abs(),
+            physical_height: px(h).unsigned_abs(),
+            scale_factor: scale,
+            is_main: main,
+        }
+    }
+
+    /// N3, AC7.2 on macOS (logical points): a Retina primary at 2x and a 1x screen to its right.
+    /// Each icon is converted with its own screen's scale, so the panel lands under it on the
+    /// right screen; the old code divided by the panel window's scale and put a 1x icon at half
+    /// its x, on the Retina screen.
+    #[test]
+    fn ac7_2_the_panel_lands_under_the_icon_on_a_retina_plus_1x_setup() {
+        let screens = [
+            screen(1, (0.0, 0.0, 1440.0, 900.0), 2.0, true),
+            screen(2, (1440.0, 0.0, 1920.0, 1080.0), 1.0, false),
+        ];
+        // Icon on the 1x screen at 2500 points: tray-icon reports 2500 px (scale 1).
+        let icon = Px {
+            x: 2500.0,
+            y: 0.0,
+            w: 22.0,
+            h: 24.0,
+        };
+        let on_1x = panel_placement(&screens, Some((2505.0, 10.0)), Some(icon), true);
+        assert_eq!(
+            on_1x,
+            Some(Placement::Logical {
+                x: 2511.0 - 210.0,
+                y: 32.0,
+                width: 420.0,
+                height: 560.0
+            })
+        );
+        // Icon on the Retina screen at 900 points: tray-icon reports 1800 px (scale 2).
+        let icon = Px {
+            x: 1800.0,
+            y: 0.0,
+            w: 44.0,
+            h: 48.0,
+        };
+        let on_retina = panel_placement(&screens, Some((905.0, 10.0)), Some(icon), true);
+        assert_eq!(
+            on_retina,
+            Some(Placement::Logical {
+                x: 911.0 - 210.0,
+                y: 32.0,
+                width: 420.0,
+                height: 560.0
+            })
+        );
+    }
+
+    /// AC7.2 on Windows (physical pixels): a 150 % taskbar icon, the panel above it in pixels.
+    #[test]
+    fn ac7_2_the_panel_is_placed_in_physical_pixels_where_placement_is_physical() {
+        let screens = [screen(1, (0.0, 0.0, 1280.0, 720.0), 1.5, true)];
+        let icon = Px {
+            x: 1800.0,
+            y: 1035.0,
+            w: 36.0,
+            h: 45.0,
+        };
+        let placed = panel_placement(&screens, Some((1810.0, 1050.0)), Some(icon), false);
+        assert_eq!(
+            placed,
+            Some(Placement::Physical {
+                x: 1920 - 630 - 12,
+                y: 1035 - 840 - 12,
+                width: 630,
+                height: 840
+            })
+        );
+        // No pointer and no icon: the main screen's corner, never a crash.
+        assert!(panel_placement(&screens, None, None, false).is_some());
+        assert_eq!(panel_placement(&[], None, None, false), None);
     }
 
     #[test]
