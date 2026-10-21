@@ -1,7 +1,7 @@
 // View logic for the interrupt page (F4): what to show and which command a key or a click runs.
 // The schedule, the join link and the alarm state stay in Rust (docs/agents/ui.md).
 import { api } from "./api";
-import type { JoinDto, MeetingDto } from "./api-types";
+import type { AlarmShowDto, JoinDto, MeetingDto } from "./api-types";
 import type { Copy } from "./copy";
 
 /** The Snooze button and the Esc key (AC4.4). The Alarms setting will own the number later. */
@@ -160,5 +160,36 @@ export function perform(action: Action, key: string): Promise<void> {
     case "join":
     case "open_event":
       return api.alarmsJoin(key);
+  }
+}
+
+/**
+ * What one interrupt window knows. The window is reused for every alarm (it is hidden on close, not
+ * destroyed), so `shown` counts the alarms it was told to show. The view is keyed by it: every
+ * alarm, even a repeat of the same meeting after a snooze, starts a fresh view with no focus,
+ * error, busy flag or key handler left over from the last one.
+ */
+export interface AlarmView {
+  alarm: AlarmShowDto | null;
+  shown: number;
+}
+
+export type AlarmEvent =
+  | { type: "show"; alarm: AlarmShowDto }
+  | { type: "hide" }
+  /** The answer to `alarms_current`, asked when the page loads. */
+  | { type: "current"; alarm: AlarmShowDto | null };
+
+export const NO_ALARM: AlarmView = { alarm: null, shown: 0 };
+
+export function nextAlarmView(view: AlarmView, event: AlarmEvent): AlarmView {
+  switch (event.type) {
+    case "show":
+      return { alarm: event.alarm, shown: view.shown + 1 };
+    case "hide":
+      return { alarm: null, shown: view.shown };
+    case "current":
+      // An `alarm:show` that arrived while the page loaded is newer than the pulled answer.
+      return view.alarm || !event.alarm ? view : { alarm: event.alarm, shown: view.shown + 1 };
   }
 }
