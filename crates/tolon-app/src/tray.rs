@@ -397,19 +397,22 @@ fn bring_forward(
     }
 }
 
-/// The settings window's inner size and minimum size, logical pixels, fitted to a screen's work
-/// area (`area`, without the menu bar, Dock or taskbar) where the window frame takes `frame`. The
-/// sizes from `tauri.conf.json` only shrink, never grow, so the whole window stays on a small
-/// screen such as 1366x768.
+/// The inner size and minimum size to give Tauri for the settings window, logical pixels, so the
+/// page gets `size` (and at least `min`) where the screen's work area allows (`area`, without the
+/// menu bar, Dock or taskbar). `frame` is what the window adds around Tauri's inner size (title
+/// bar and borders on Windows), `covered` how much of the inner size the title bar hides (macOS,
+/// `Platform::title_bar_overlap`). The page sizes from `tauri.conf.json` only shrink, never grow,
+/// so the whole window stays on a small screen such as 1366x768.
 pub fn fit_settings_size(
     size: (f64, f64),
     min: (f64, f64),
     area: (f64, f64),
     frame: (f64, f64),
+    covered: f64,
 ) -> ((f64, f64), (f64, f64)) {
     let room = ((area.0 - frame.0).max(1.0), (area.1 - frame.1).max(1.0));
-    let size = (size.0.min(room.0), size.1.min(room.1));
-    (size, (min.0.min(size.0), min.1.min(size.1)))
+    let size = (size.0.min(room.0), (size.1 + covered).min(room.1));
+    (size, (min.0.min(size.0), (min.1 + covered).min(size.1)))
 }
 
 /// Fits the settings window, created hidden from `tauri.conf.json`, to the work area of its
@@ -437,6 +440,11 @@ pub fn fit_settings(app: &AppHandle) {
         f64::from(outer.width.saturating_sub(inner.width)) / scale,
         f64::from(outer.height.saturating_sub(inner.height)) / scale,
     );
+    // Runs in `setup`, on the main thread, where `Platform` calls belong.
+    let covered = NATIVE.title_bar_overlap(&window).unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "could not read the title bar height");
+        0.0
+    });
     let (size, min) = fit_settings_size(
         (conf.width, conf.height),
         (
@@ -445,6 +453,7 @@ pub fn fit_settings(app: &AppHandle) {
         ),
         (area.width, area.height),
         frame,
+        covered,
     );
     let fitted = window
         .set_min_size(Some(tauri::LogicalSize::new(min.0, min.1)))
@@ -843,14 +852,16 @@ mod tests {
 
     #[test]
     fn the_settings_window_keeps_its_size_where_it_fits() {
-        // 1728x1117 MacBook: the menu bar takes 37 points, the title bar 28.
+        // 1728x1117 MacBook (measured): a 1083-point work area; Tauri's inner size is the whole
+        // frame and the title bar covers 32 points of it, so the page gets 760 in a 792 frame.
         let fitted = fit_settings_size(
             (1040.0, 760.0),
             (880.0, 620.0),
             (1728.0, 1080.0),
-            (0.0, 28.0),
+            (0.0, 0.0),
+            32.0,
         );
-        assert_eq!(fitted, ((1040.0, 760.0), (880.0, 620.0)));
+        assert_eq!(fitted, ((1040.0, 792.0), (880.0, 652.0)));
     }
 
     #[test]
@@ -861,13 +872,26 @@ mod tests {
             (880.0, 620.0),
             (1366.0, 728.0),
             (16.0, 39.0),
+            0.0,
         );
         assert_eq!(fitted, ((1040.0, 689.0), (880.0, 620.0)));
         // Smaller than the minimum: the minimum gives way, so the window still fits.
-        let tiny = fit_settings_size((1040.0, 760.0), (880.0, 620.0), (800.0, 560.0), (0.0, 0.0));
+        let tiny = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (800.0, 560.0),
+            (0.0, 0.0),
+            0.0,
+        );
         assert_eq!(tiny, ((800.0, 560.0), (800.0, 560.0)));
         // A frame larger than the area never gives a size below one pixel.
-        let none = fit_settings_size((1040.0, 760.0), (880.0, 620.0), (10.0, 10.0), (40.0, 40.0));
+        let none = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (10.0, 10.0),
+            (40.0, 40.0),
+            0.0,
+        );
         assert_eq!(none, ((1.0, 1.0), (1.0, 1.0)));
     }
 
