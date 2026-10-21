@@ -12,6 +12,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] AC9.4 A development build (`cargo run`) shows the switch off, and turning it on shows an error without a crash.
 - [ ] AC12.3 Fresh user account: install from the DMG following `docs/install.md` only; reach first run.
 - [ ] AC11.2 Install an update through the in-app updater; note whether Gatekeeper asks again.
+- [ ] L-044 With Tolon running and its menu bar icon hidden behind the notch, opening Tolon again from Finder or Spotlight brings the settings window to the front.
 - [ ] AC3.4 Sleep the Mac across an alarm time with a full-screen app open; after wake the interrupt shows over it within 15 s.
 
 ## Windows
@@ -19,11 +20,13 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] AC12.3 Fresh machine or VM: `.msi` through SmartScreen "More info, Run anyway"; reach first run.
 - [ ] AC9.4 Start at login appears in Task Manager, Startup apps. Disable it there, then turn the switch on in Tolon, and note what the switch shows (Windows keeps the Task Manager choice).
 - [ ] S4.4 When the interrupt cannot take focus, the fallback notification shows Snooze and Join; each acts on that meeting only.
+- [ ] L-044 Starting Tolon a second time from the Start menu brings the running settings window forward and starts no second copy.
 
 ## Linux
 - [ ] S4.4 On a Wayland session (GNOME), the fallback notification shows Join and Snooze and the sound plays.
 - [ ] S4.1 On X11, the interrupt covers a full-screen browser video.
 - [ ] AC12.3 `.AppImage` runs after `chmod +x`; `.deb` installs on Ubuntu 22.04 and 24.04.
+- [ ] L-044 Starting Tolon a second time (applications menu, or the AppImage again) brings the running settings window forward and starts no second copy.
 - [ ] AC9.4 Turning start at login on writes `~/.config/autostart/dev.tolon.desktop` with `Exec=` pointing at the AppImage path, and Tolon starts after logging out and in.
 
 ## Every OS
