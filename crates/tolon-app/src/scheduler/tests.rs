@@ -1849,3 +1849,132 @@ async fn s7_2_alarms_keep_firing_without_the_settings_window() -> TestResult {
     assert_eq!(rig.host().count("open"), 1);
     Ok(())
 }
+
+// ---- L-015 review: pause holds every interrupt, snooze ahead edges ---------------------------
+
+/// `until` of the stored alarm `uid`/`kind`.
+fn until_of_kind(rig: &Rig, uid: &str, kind: &str) -> anyhow::Result<Option<String>> {
+    let rows = pipeline::lock(&rig.db).alarms().list()?;
+    Ok(rows
+        .into_iter()
+        .find(|r| r.occurrence_key.contains(&format!(":{uid}@")) && r.kind == kind)
+        .and_then(|r| r.until))
+}
+
+#[test]
+fn ac7_3_the_loop_wakes_at_the_pause_end_not_a_tick_later() {
+    let now = at(14, 2, 55);
+    assert_eq!(next_full_tick(now, None), at(14, 3, 10));
+    assert_eq!(next_full_tick(now, Some(at(14, 3, 0))), at(14, 3, 0));
+    assert_eq!(next_full_tick(now, Some(at(15, 0, 0))), at(14, 3, 10));
+    // A pause end already passed is no deadline.
+    assert_eq!(next_full_tick(now, Some(at(14, 0, 0))), at(14, 3, 10));
+}
+
+#[tokio::test]
+async fn ac7_3_a_pause_and_quiet_hours_together_fire_after_the_later_of_both() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    // 13:58 is quiet, 14:00 is not: alone, the alarm would wait for the start (decision "Quiet
+    // hours and settings details"). Paused until 14:03, it waits for that too.
+    settings::apply(
+        &rig.db,
+        &serde_json::json!({ "quiet": { "enabled": true, "start": "13:55", "end": "14:00" } }),
+    )?;
+    pause_at(&rig, at(13, 50, 0), 13)?;
+    for t in [at(13, 58, 5), at(14, 0, 5), at(14, 2, 55)] {
+        assert_eq!(rig.tick_at(t).await.fired, 0, "fired at {t}");
+    }
+    assert_eq!(rig.tick_at(at(14, 3, 0)).await.fired, 1);
+    assert_eq!(rig.host().count("open"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_3_an_open_interrupt_stays_during_a_pause_and_nothing_else_opens() -> TestResult {
+    let rig = Rig::new(
+        &[STANDUP, ("review", "Review", "140500", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let standup = rig.key(0)?;
+    // The review's lead alarm fires too; it waits behind the open interrupt (another minute).
+    assert_eq!(rig.tick_at(at(14, 3, 5)).await.fired, 1);
+    assert_eq!(rig.host().count("open"), 1);
+    pause_at(&rig, at(14, 3, 10), 5)?;
+    rig.tick_at(at(14, 3, 15)).await;
+    assert_eq!(rig.host().count("close"), 0, "the open interrupt stays");
+    // Handling it would hand the screen to the waiting review: not while paused.
+    rig.act(at(14, 3, 20), &standup, Act::Dismiss).await?;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().count("open"), 1);
+    rig.tick_at(at(14, 8, 0)).await;
+    assert_eq!(rig.host().count("open"), 1, "still paused at 14:08:00");
+    // The pause ends at 14:08:10, inside the review's window (14:15): it opens then.
+    rig.tick_at(at(14, 8, 10)).await;
+    assert_eq!(rig.host().count("open"), 2);
+    assert_eq!(rig.last_show()?.meetings[0].title, "Review");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_3_a_restart_during_a_pause_opens_no_interrupt_until_it_ends() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("firing"));
+    pause_at(&rig, at(13, 58, 10), 5)?;
+    // A new process: the alarm is Firing in the store, but the first tick is paused.
+    let restarted = Scheduler::new(Fake::new(at(13, 59, 0)));
+    restarted.step(&rig.db, true).await;
+    assert_eq!(restarted.host.count("open"), 0);
+    assert_eq!(restarted.host.pauses(), [Some(at(14, 3, 10))]);
+    restarted.host.set_now(at(14, 3, 10));
+    restarted.step(&rig.db, true).await;
+    assert_eq!(restarted.host.count("open"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_2_panel_snooze_ahead_moves_the_start_alarm_once_the_lead_is_done() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.setting(AGAIN_AT_START, serde_json::json!(true))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.act(at(13, 58, 10), &rig.key(0)?, Act::Dismiss).await?;
+    // The lead alarm is dismissed; the start alarm (14:00) is the one the panel moves.
+    let key = listed_key(&rig, "standup")?;
+    rig.host().set_now(at(13, 59, 0));
+    assert!(!rig.sched.act_listed(&rig.db, &key, Act::Snooze(5)).await?);
+    assert_eq!(
+        rig.state_of("standup", "lead")?.as_deref(),
+        Some("dismissed")
+    );
+    assert_eq!(
+        rig.state_of("standup", "start")?.as_deref(),
+        Some("snoozed")
+    );
+    assert_eq!(
+        until_of_kind(&rig, "standup", "start")?.as_deref(),
+        Some("2026-10-20T14:05:00Z")
+    );
+    assert_eq!(rig.tick_at(at(14, 0, 5)).await.fired, 0);
+    assert_eq!(rig.tick_at(at(14, 5, 5)).await.fired, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac7_2_a_panel_snooze_past_the_window_ends_the_reminders_and_says_so() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 40, 0))?;
+    rig.tick_at(at(13, 40, 0)).await;
+    let key = listed_key(&rig, "standup")?;
+    rig.host().set_now(at(13, 45, 0));
+    // 13:58 to 14:03, then 14:08: both still inside the window that closes at 14:10.
+    for _ in 0..2 {
+        assert!(!rig.sched.act_listed(&rig.db, &key, Act::Snooze(5)).await?);
+    }
+    // 14:13 would be after it: the reminder ends and the panel is told.
+    assert!(rig.sched.act_listed(&rig.db, &key, Act::Snooze(5)).await?);
+    assert_eq!(rig.state_of("standup", "lead")?.as_deref(), Some("expired"));
+    assert_eq!(rig.tick_at(at(14, 8, 5)).await.fired, 0);
+    // A Dismiss never reports an end.
+    assert!(!rig.sched.act_listed(&rig.db, &key, Act::Dismiss).await?);
+    Ok(())
+}

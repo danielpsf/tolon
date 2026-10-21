@@ -221,16 +221,23 @@ pub async fn occurrences_join(
     done.map_err(|e| command_error(&e))
 }
 
-async fn listed_action(app: &AppHandle, key: &str, act: Act) -> Result<(), CommandError> {
+async fn listed_action(app: &AppHandle, key: &str, act: Act) -> Result<bool, CommandError> {
     let done = async {
         let state = state(app)?;
         let scheduler = app.try_state::<AppScheduler>().ok_or(AppError::NOT_READY)?;
         scheduler.act_listed(&state.db, key, act).await
     }
     .await;
-    done.map_err(|e| command_error(&e))?;
+    let ended = done.map_err(|e| command_error(&e))?;
     notify(app);
-    Ok(())
+    Ok(ended)
+}
+
+/// What the panel's Snooze did. `ended`: the snooze would have come after the meeting's window
+/// (start + 10 min), so its reminders ended instead and the panel says so (L-015 N7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct SnoozeDto {
+    pub ended: bool,
 }
 
 /// The panel's Snooze for one of today's meetings (AC7.2): the interrupt's Snooze when that
@@ -241,9 +248,10 @@ pub async fn occurrences_snooze(
     window: tauri::WebviewWindow,
     key: String,
     minutes: u32,
-) -> Result<(), CommandError> {
+) -> Result<SnoozeDto, CommandError> {
     panel_only(window.label())?;
-    listed_action(&app, &key, Act::Snooze(minutes)).await
+    let ended = listed_action(&app, &key, Act::Snooze(minutes)).await?;
+    Ok(SnoozeDto { ended })
 }
 
 /// The panel's Dismiss for one of today's meetings (AC7.2): the interrupt's Dismiss when that
@@ -255,7 +263,7 @@ pub async fn occurrences_dismiss(
     key: String,
 ) -> Result<(), CommandError> {
     panel_only(window.label())?;
-    listed_action(&app, &key, Act::Dismiss).await
+    listed_action(&app, &key, Act::Dismiss).await.map(|_| ())
 }
 
 // ---- Alarm actions (F3, F4, F5) ---------------------------------------------------------------

@@ -330,10 +330,13 @@ fn apply_action(db: &Db, keys: &[String], act: Act, now: DateTime<Utc>) -> anyho
 /// alarm of the meeting that is not final. Snooze moves each one `minutes` later than it was due
 /// (`tolon_core::snooze_later`); Dismiss makes each one Dismissed, so neither the lead alarm nor
 /// "again at the start" takes over the screen. A meeting without alarms (ignored, or past) changes
-/// nothing.
-fn apply_ahead(db: &Db, key: &str, act: Act, now: DateTime<Utc>) -> anyhow::Result<()> {
+/// nothing. `true` when a Snooze ended the reminders instead: every alarm it moved would have come
+/// after the meeting's window, so each one expired (decision "Tray panel, pause and window
+/// rights"; the panel says so).
+fn apply_ahead(db: &Db, key: &str, act: Act, now: DateTime<Utc>) -> anyhow::Result<bool> {
     let store = pipeline::lock(db);
     let mut rows = Vec::new();
+    let mut ended = None;
     for kind in [AlarmKind::Lead, AlarmKind::Start] {
         let Some(mut alarm) = store
             .alarms()
@@ -352,11 +355,24 @@ fn apply_ahead(db: &Db, key: &str, act: Act, now: DateTime<Utc>) -> anyhow::Resu
             Act::Join | Act::AlreadyThere => false,
         };
         if changed {
+            if matches!(act, Act::Snooze(_)) {
+                let expired = alarm.state == AlarmState::Expired;
+                ended = Some(ended.unwrap_or(true) && expired);
+            }
             rows.push(to_row(&alarm, now));
         }
     }
     store.alarms().upsert_all(&rows)?;
-    Ok(())
+    Ok(ended.unwrap_or(false))
+}
+
+/// When the next full tick is due after one at `now`: one tick later, or the end of a pause if
+/// that comes first, so the pause ends on time (AC7.3) and not up to 15 s late.
+pub fn next_full_tick(now: DateTime<Utc>, pause_end: Option<DateTime<Utc>>) -> DateTime<Utc> {
+    let tick = now + Duration::from_std(TICK).unwrap_or(Duration::seconds(15));
+    pause_end
+        .filter(|end| *end > now)
+        .map_or(tick, |end| end.min(tick))
 }
 
 /// Alarms in the store that are Firing now, for when an interrupt closes and another minute waits.
@@ -551,9 +567,6 @@ impl<H: Host> Scheduler<H> {
             let full = changed || self.host.now() >= next_full;
             self.step(db, full).await;
             let now = self.host.now();
-            if full {
-                next_full = now + Duration::from_std(TICK).unwrap_or(Duration::seconds(15));
-            }
             let (stopped, pause_end) = {
                 let inner = self.inner.lock().await;
                 (inner.stopped, inner.paused.flatten())
@@ -561,9 +574,8 @@ impl<H: Host> Scheduler<H> {
             if stopped {
                 return;
             }
-            // A pause ends on time (AC7.3), not up to one tick later.
-            if let Some(end) = pause_end {
-                next_full = next_full.min(end);
+            if full {
+                next_full = next_full_tick(now, pause_end);
             }
             let due = self
                 .deadline()
@@ -625,7 +637,9 @@ impl<H: Host> Scheduler<H> {
                         .count();
                     self.drop_stale_meetings(&mut inner, &ticked.firing, now)
                         .await;
-                    self.present(&mut inner, &ticked.firing, &occs, now).await;
+                    let paused = inputs.pause.is_some();
+                    self.present(&mut inner, &ticked.firing, &occs, now, paused)
+                        .await;
                 }
                 // The next tick tries again; nothing fires from a half-read store.
                 Err(e) => tracing::warn!(error = %e, "scheduler tick failed"),
@@ -636,14 +650,21 @@ impl<H: Host> Scheduler<H> {
     }
 
     /// Shows what is Firing. An open interrupt takes the meetings of its own start minute (AC3.5);
-    /// another minute waits for it to close. A test interrupt gives way to a real one.
+    /// another minute waits for it to close. A test interrupt gives way to a real one. While
+    /// `paused`, nothing opens or grows, not even an alarm already Firing in the store (the first
+    /// tick after a restart, a close that hands over to a waiting minute): it waits for the pause
+    /// to end. An interrupt already on screen when the pause began stays until it is handled.
     async fn present(
         &self,
         inner: &mut Inner,
         firing: &[Alarm],
         occs: &[Occurrence],
         now: DateTime<Utc>,
+        paused: bool,
     ) {
+        if paused {
+            return;
+        }
         let groups = group_firing(firing, occs);
         if let Some(open) = inner.open.as_ref().filter(|o| !o.test) {
             let grown = groups.iter().find(|g| {
@@ -804,7 +825,9 @@ impl<H: Host> Scheduler<H> {
     /// meetings, else `not_found`. When its interrupt is on screen this is exactly the interrupt's
     /// button ([`Scheduler::act`]); otherwise it acts ahead on the stored alarms (`apply_ahead`).
     /// Join goes through [`Scheduler::join_listed`] instead, and "already there" is not offered.
-    pub async fn act_listed(&self, db: &Db, key: &str, act: Act) -> anyhow::Result<()> {
+    ///
+    /// `true` when a Snooze ended the reminders: it would have come after the meeting's window.
+    pub async fn act_listed(&self, db: &Db, key: &str, act: Act) -> anyhow::Result<bool> {
         if matches!(act, Act::Join | Act::AlreadyThere) {
             return Err(AppError::NOT_FOUND.into());
         }
@@ -820,12 +843,15 @@ impl<H: Host> Scheduler<H> {
             .as_ref()
             .is_some_and(|o| !o.test && o.show.meetings.iter().any(|m| m.key == key));
         if on_screen {
-            return self.act_locked(&mut inner, db, key, act).await;
+            return self
+                .act_locked(&mut inner, db, key, act)
+                .await
+                .map(|()| false);
         }
-        apply_ahead(db, key, act, now)?;
+        let ended = apply_ahead(db, key, act, now)?;
         drop(inner);
         self.wake();
-        Ok(())
+        Ok(ended)
     }
 
     /// Quit (AC7.4): closes any interrupt, stops the sound and the loop, and waits for the store
@@ -974,10 +1000,17 @@ impl<H: Host> Scheduler<H> {
                 return Ok(None);
             }
             let inputs = load_inputs(db, self.host.zone(), now)?;
-            Ok(Some((firing, occurrences(&inputs, now, self.host.zone()))))
+            let paused = inputs.pause.is_some();
+            Ok(Some((
+                firing,
+                occurrences(&inputs, now, self.host.zone()),
+                paused,
+            )))
         });
         match waiting {
-            Ok(Some((firing, occs))) => self.present(inner, &firing, &occs, now).await,
+            Ok(Some((firing, occs, paused))) => {
+                self.present(inner, &firing, &occs, now, paused).await
+            }
             Ok(None) => {}
             Err(e) => tracing::warn!(error = %e, "could not look for waiting meetings"),
         }
