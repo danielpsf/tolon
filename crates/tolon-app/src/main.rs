@@ -190,6 +190,7 @@ fn main() -> anyhow::Result<()> {
                     handle.exit(1);
                 });
             } else {
+                tray::fit_settings(app.handle());
                 // F10: the settings window was created hidden; it shows (and takes focus) only on
                 // first run. With a calendar Tolon starts in the tray and takes no focus (AC10.2).
                 let calendars = commands::state(app.handle())

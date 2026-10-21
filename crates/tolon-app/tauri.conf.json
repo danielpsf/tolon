@@ -14,8 +14,10 @@
       {
         "label": "main",
         "title": "Tolon",
-        "width": 960,
-        "height": 640,
+        "width": 1040,
+        "height": 760,
+        "minWidth": 880,
+        "minHeight": 620,
         "visible": false
       }
     ],

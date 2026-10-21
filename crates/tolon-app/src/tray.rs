@@ -392,6 +392,65 @@ fn bring_forward(
     }
 }
 
+/// The settings window's inner size and minimum size, logical pixels, fitted to a screen's work
+/// area (`area`, without the menu bar, Dock or taskbar) where the window frame takes `frame`. The
+/// sizes from `tauri.conf.json` only shrink, never grow, so the whole window stays on a small
+/// screen such as 1366x768.
+pub fn fit_settings_size(
+    size: (f64, f64),
+    min: (f64, f64),
+    area: (f64, f64),
+    frame: (f64, f64),
+) -> ((f64, f64), (f64, f64)) {
+    let room = ((area.0 - frame.0).max(1.0), (area.1 - frame.1).max(1.0));
+    let size = (size.0.min(room.0), size.1.min(room.1));
+    (size, (min.0.min(size.0), min.1.min(size.1)))
+}
+
+/// Fits the settings window, created hidden from `tauri.conf.json`, to the work area of its
+/// screen (else the primary one) and centres it there. Once at start, before it may show; a
+/// failure keeps the configured size.
+pub fn fit_settings(app: &AppHandle) {
+    let (Some(window), Some(conf)) = (
+        app.get_webview_window(MAIN),
+        app.config().app.windows.iter().find(|w| w.label == MAIN),
+    ) else {
+        return;
+    };
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let (Some(monitor), Ok(outer), Ok(inner)) = (monitor, window.outer_size(), window.inner_size())
+    else {
+        return;
+    };
+    let scale = monitor.scale_factor().max(f64::MIN_POSITIVE);
+    let area = monitor.work_area().size.to_logical::<f64>(scale);
+    let frame = (
+        f64::from(outer.width.saturating_sub(inner.width)) / scale,
+        f64::from(outer.height.saturating_sub(inner.height)) / scale,
+    );
+    let (size, min) = fit_settings_size(
+        (conf.width, conf.height),
+        (
+            conf.min_width.unwrap_or(conf.width),
+            conf.min_height.unwrap_or(conf.height),
+        ),
+        (area.width, area.height),
+        frame,
+    );
+    let fitted = window
+        .set_min_size(Some(tauri::LogicalSize::new(min.0, min.1)))
+        .and_then(|()| window.set_size(tauri::LogicalSize::new(size.0, size.1)))
+        .and_then(|()| window.center());
+    if let Err(e) = fitted {
+        tracing::warn!(error = %e, "could not fit the settings window to the screen");
+    }
+}
+
+/// What closing a window does (S7.2): the settings window only hides, so Tolon keeps running in
 /// the tray; every other window closes.
 pub fn hides_on_close(label: &str) -> bool {
     label == MAIN
@@ -745,6 +804,66 @@ mod tests {
             .unwrap_or_default();
         let show = show.split("\nfn bring_forward(").next().unwrap_or_default();
         assert!(show.contains("bring_forward("));
+    }
+
+    /// The window sizes in `tauri.conf.json`: first run fits on a 1728x1117 MacBook without
+    /// scrolling, and the minimum keeps the settings layout usable.
+    #[test]
+    fn the_settings_window_defaults_to_1040_by_760_with_an_880_by_620_minimum() -> anyhow::Result<()>
+    {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))?;
+        let main = &conf["app"]["windows"][0];
+        assert_eq!(main["label"], serde_json::json!(MAIN));
+        for (key, value) in [
+            ("width", 1040),
+            ("height", 760),
+            ("minWidth", 880),
+            ("minHeight", 620),
+        ] {
+            assert_eq!(main[key], serde_json::json!(value), "{key}");
+        }
+        let source = include_str!("main.rs");
+        let fit = source
+            .find("tray::fit_settings(app.handle())")
+            .unwrap_or(usize::MAX);
+        let show = source
+            .find("tray::show_settings(app.handle())")
+            .unwrap_or(0);
+        assert!(
+            fit < show,
+            "the window is fitted before it may show at start"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_settings_window_keeps_its_size_where_it_fits() {
+        // 1728x1117 MacBook: the menu bar takes 37 points, the title bar 28.
+        let fitted = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (1728.0, 1080.0),
+            (0.0, 28.0),
+        );
+        assert_eq!(fitted, ((1040.0, 760.0), (880.0, 620.0)));
+    }
+
+    #[test]
+    fn the_settings_window_shrinks_to_a_1366_by_768_work_area() {
+        // Windows at 100 %: a 40 px taskbar; the frame takes 16 by 39 px.
+        let fitted = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (1366.0, 728.0),
+            (16.0, 39.0),
+        );
+        assert_eq!(fitted, ((1040.0, 689.0), (880.0, 620.0)));
+        // Smaller than the minimum: the minimum gives way, so the window still fits.
+        let tiny = fit_settings_size((1040.0, 760.0), (880.0, 620.0), (800.0, 560.0), (0.0, 0.0));
+        assert_eq!(tiny, ((800.0, 560.0), (800.0, 560.0)));
+        // A frame larger than the area never gives a size below one pixel.
+        let none = fit_settings_size((1040.0, 760.0), (880.0, 620.0), (10.0, 10.0), (40.0, 40.0));
+        assert_eq!(none, ((1.0, 1.0), (1.0, 1.0)));
     }
 
     #[test]
