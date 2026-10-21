@@ -16,10 +16,12 @@ export function statusOf(calendar: CalendarDto, c: Copy, now: number = Date.now(
   return { text: Number.isNaN(at) ? c.t.relative.neverSynced : c.syncedAgo(at, now), failed: false };
 }
 
-/** "Work, iCal subscription" for a feed (the only kind in beta 1), the bare name for anything else. */
+/** "Work, iCal subscription" for a feed, "Team, Google Calendar, signed in" for Google, the bare name for anything else. */
 export function titleOf(calendar: CalendarDto, c: Copy): string {
   const { calendars } = c.t;
-  return calendar.kind === "ics" ? calendars.nameWithKind(calendar.name, calendars.kindIcs) : calendar.name;
+  if (calendar.kind === "ics") return calendars.nameWithKind(calendar.name, calendars.kindIcs);
+  if (calendar.kind === "google") return calendars.nameWithKind(calendar.name, calendars.kindGoogle);
+  return calendar.name;
 }
 
 /** Any rejection from a command, as the sentence to show. */

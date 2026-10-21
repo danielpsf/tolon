@@ -8,7 +8,7 @@ import { colorAttr } from "../reminder-colors";
 import { useSettings } from "../store";
 import { errorText } from "../view";
 import { AlarmPreview, useTestAlarmOpen } from "./AlarmPreview";
-import { AddCalendarForm } from "./CalendarsPage";
+import { AddCalendarForm, GoogleSignIn, useGoogleAvailable } from "./CalendarsPage";
 
 /** The tray step's title for where the icon lives, or null while Rust has not answered. */
 export function trayTitle(t: Messages["firstRun"], place: TrayPlace | null): string | null {
@@ -52,6 +52,7 @@ export function FirstRunPage() {
   const [testing, setTesting] = useTestAlarmOpen();
   const paste = useRef<HTMLButtonElement>(null);
   const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
+  const google = useGoogleAvailable();
 
   // Focus on the primary button, never "Try a test alarm" (Enter would take over the screen), and
   // without the scroll that autoFocus does: the window opens at the top (D6, D8).
@@ -87,7 +88,7 @@ export function FirstRunPage() {
           <li>
             <div>
               <h2 className="sm-heading">{t.addTitle}</h2>
-              <div className="sm-body">{t.addBody}</div>
+              <div className="sm-body">{google ? t.addBodyGoogle : t.addBody}</div>
             </div>
           </li>
           <li>
@@ -159,6 +160,7 @@ export function FirstRunPage() {
             }}
           />
         )}
+        {google && <GoogleSignIn onAdded={(calendar) => void firstCalendarAdded(calendar)} />}
         <p className="sm-caption">{t.footer}</p>
       </div>
       {/* In the reminder colour the person chose (L-043), as the test alarm will be. */}

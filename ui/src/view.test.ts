@@ -15,6 +15,7 @@ const calendar = (over: Partial<CalendarDto> = {}): CalendarDto => ({
   display_url: "https://calendar.google.com",
   last_sync_at: "2026-10-20T09:59:00Z",
   last_error: null,
+  account: null,
   ...over,
 });
 
@@ -60,6 +61,12 @@ describe("statusOf", () => {
 describe("titleOf", () => {
   it("labels a feed with its kind, as 'Work, iCal subscription' in mockup 03", () => {
     expect(titleOf(calendar(), en)).toBe("Work, iCal subscription");
+  });
+
+  it("labels a Google calendar as signed in", () => {
+    expect(titleOf(calendar({ kind: "google", name: "Team", account: "a@example.com" }), en)).toBe(
+      "Team, Google Calendar, signed in",
+    );
   });
 
   it("leaves a kind it does not know with the bare name", () => {

@@ -9,6 +9,10 @@ export const SYNC_ERROR_KINDS = [
   "network",
   "unsupported_scheme",
   "invalid_url",
+  // Google calendars (F13): sign in again, the keychain could not be read, an answer Tolon could not read.
+  "auth",
+  "keychain",
+  "google",
 ] as const;
 
 export type SyncErrorKind = (typeof SYNC_ERROR_KINDS)[number];
@@ -27,6 +31,11 @@ export const COMMAND_ERROR_CODES = [
   "login_item",
   "update_check",
   "update_install",
+  "google_unavailable",
+  "google_denied",
+  "google_cancelled",
+  "google_sign_in",
+  "keychain",
 ] as const;
 
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
@@ -67,6 +76,24 @@ export interface CalendarDto {
   /** RFC 3339 timestamp, or null when the calendar never synced. */
   last_sync_at: string | null;
   last_error: SyncError | null;
+  /** A Google calendar's account (its address); null for a feed. */
+  account: string | null;
+}
+
+/** One calendar of the signed-in Google account: `RemoteCalendarDto` in crates/tolon-app/src/google.rs. */
+export interface GoogleCalendarDto {
+  /** Google's calendar id, sent back to `calendars_add_google`. */
+  id: string;
+  name: string;
+  primary: boolean;
+  /** Already in Tolon. */
+  added: boolean;
+}
+
+/** `calendars_google_sign_in`: the account and its calendars to pick from. No token ever reaches the page. */
+export interface GoogleAccountDto {
+  account: string;
+  calendars: GoogleCalendarDto[];
 }
 
 /** Where a meeting's join button leads. The URL stays in Rust; the page only gets the host (AC1.3). */

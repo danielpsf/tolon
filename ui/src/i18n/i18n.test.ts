@@ -12,6 +12,9 @@ const SYNC_KINDS = [
   "network",
   "unsupported_scheme",
   "invalid_url",
+  "auth",
+  "keychain",
+  "google",
 ] as const;
 
 /** Dotted path of every leaf, with its type ("string" or "function"). */
