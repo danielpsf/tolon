@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { api, onAlarmHide, onAlarmShow } from "../api";
-import type { AlarmShowDto, MeetingDto } from "../api-types";
+import type { AlarmShowDto, InterruptColor, MeetingDto } from "../api-types";
 import { Bell } from "../Bell";
 import { copy } from "../copy";
 import {
@@ -18,7 +18,7 @@ import {
   titleSize,
   type Action,
 } from "../interrupt";
-import { colorAttr } from "../reminder-colors";
+import { colorAttr, PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
 import { useSettings } from "../store";
 import { errorText } from "../view";
 
@@ -67,7 +67,12 @@ export function InterruptPage() {
   const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
   const { interrupt: t } = copy().t;
   const first = alarm?.meetings[0];
-  if (!alarm || !first) return <main className="tl-int" aria-label={t.region} data-screen={screen} data-color={color} />;
+  if (!alarm || !first)
+    return (
+      <main className="tl-int" aria-label={t.region} data-screen={screen} data-color={color} data-tokens={tokensFor(color)}>
+        <style>{PREVIEW_TOKENS}</style>
+      </main>
+    );
   return <InterruptView key={first.key} alarm={alarm} first={first} screen={screen} color={color} />;
 }
 
@@ -80,7 +85,7 @@ function InterruptView({
   alarm: AlarmShowDto;
   first: MeetingDto;
   screen: string | null;
-  color: string;
+  color: InterruptColor;
 }) {
   const c = copy();
   const { interrupt: t } = c.t;
@@ -199,9 +204,12 @@ function InterruptView({
       aria-describedby={single ? "tl-int-details" : undefined}
       data-screen={screen}
       data-color={color}
+      // Every choice but Default is pinned to Swiss Moss's light values, in a dark window too (L-043).
+      data-tokens={tokensFor(color)}
       onFocus={(e) => setFocused(actionOf(e.target))}
       onBlur={keepFocus}
     >
+      <style>{PREVIEW_TOKENS}</style>
       <header className="tl-int-top">
         <span>{c.formatTime(now)}</span>
         <span className="tl-int-count">

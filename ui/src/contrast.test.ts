@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INTERRUPT_COLORS, type InterruptColor } from "./api-types";
-import { LINE_MIX, PREVIEW_TOKENS, REMINDER_PAIRS } from "./reminder-colors";
+import { LINE_MIX, PREVIEW_TOKENS, REMINDER_PAIRS, tokensFor } from "./reminder-colors";
 import local from "./styles/local.css?raw";
 import tokens from "swiss-moss/tokens/tokens.css?raw";
 
@@ -86,7 +86,10 @@ const PAIRS: [string, [string, string], [string, string]][] = [
   ["swatch sample", [".tl-swatch i span", "background"], [".tl-swatch i span", "color"]],
 ];
 
-const EVERY = INTERRUPT_COLORS.flatMap((color) => APPEARANCES.map((theme) => [color, theme] as const));
+// Where each colour is drawn: Default in both appearances, every other choice pinned to light (L-043).
+const EVERY = INTERRUPT_COLORS.flatMap((color) =>
+  (color === "theme" ? APPEARANCES : (["light"] as const)).map((theme) => [color, theme] as const),
+);
 
 /** The ratios of one pair, for the table in the report. */
 function ratios(color: InterruptColor, theme: Theme) {
@@ -174,19 +177,12 @@ describe("interrupt contrast for every reminder colour (AC4.3, L-043)", () => {
       "theme light: text 5.00, primary 7.74, hover 7.74, line 3.35",
       "theme dark: text 8.61, primary 11.11, hover 11.11, line 4.50",
       "moss light: text 5.00, primary 7.74, hover 7.74, line 3.35",
-      "moss dark: text 8.61, primary 11.11, hover 11.11, line 4.50",
       "moss-deep light: text 7.74, primary 7.74, hover 5.00, line 4.77",
-      "moss-deep dark: text 11.11, primary 11.11, hover 8.61, line 5.19",
       "ink light: text 16.64, primary 16.64, hover 4.98, line 8.59",
-      "ink dark: text 14.26, primary 14.26, hover 7.15, line 5.92",
       "paper light: text 16.64, primary 16.64, hover 13.40, line 6.33",
-      "paper dark: text 14.26, primary 14.26, hover 9.67, line 7.50",
       "info light: text 7.16, primary 7.16, hover 17.66, line 4.46",
-      "info dark: text 8.40, primary 8.40, hover 14.26, line 4.46",
       "signal light: text 5.33, primary 5.33, hover 17.66, line 3.49",
-      "signal dark: text 8.12, primary 8.12, hover 14.26, line 4.40",
       "danger light: text 6.82, primary 6.82, hover 17.66, line 4.18",
-      "danger dark: text 6.84, primary 6.84, hover 14.26, line 3.97",
     ]);
   });
 
@@ -198,6 +194,13 @@ describe("interrupt contrast for every reminder colour (AC4.3, L-043)", () => {
 });
 
 describe("preview tokens (AC4.3, L-043)", () => {
+  it("pins every choice but Default to the light block, so a dark window draws them with the light values", () => {
+    for (const color of INTERRUPT_COLORS) {
+      expect(tokensFor(color, "dark"), color).toBe(color === "theme" ? "dark" : "light");
+      expect(tokensFor(color), color).toBe(color === "theme" ? undefined : "light");
+    }
+  });
+
   it("scopes Swiss Moss's own light and dark values to data-tokens, so a preview shows either appearance", () => {
     for (const [theme, values] of Object.entries(THEMES)) {
       const block = new RegExp(`\\[data-tokens=${theme}\\]\\{([^}]*)\\}`).exec(PREVIEW_TOKENS)?.[1] ?? "";

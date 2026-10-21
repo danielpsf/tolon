@@ -5,7 +5,7 @@ import { api, asCommandError } from "../api";
 import { APPEARANCES, INTERRUPT_COLORS, SOUNDS, type SettingsDto, type SettingsPatch } from "../api-types";
 import { copy, LOCALES, NATIVE_NAMES, RTL_LOCALES } from "../copy";
 import { SNOOZE_MINUTES } from "../interrupt";
-import { colorAttr, PREVIEW_TOKENS } from "../reminder-colors";
+import { colorAttr, PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
 import { useSettings } from "../store";
 import { addKeywords, errorText, MAX_KEYWORD_LENGTH, MAX_KEYWORDS, parseLead, splitTyped } from "../view";
 import { AlarmPreview, useTestAlarmOpen } from "./AlarmPreview";
@@ -378,8 +378,9 @@ export function AppearancePage() {
   const { t } = c;
   const p = t.settings.appearance;
   const labels = { auto: t.settings.sameAsSystem, light: p.light, dark: p.dark };
-  // The preview's appearance: the window's until the person flips it. Only the preview changes (L-043).
-  const [shown, setShown] = useState<"light" | "dark" | null>(null);
+  // The Default preview's appearance: the window's until the person flips it, and again after a Theme
+  // change. Only the preview changes (L-043).
+  const [shown, setShown] = useState<{ appearance: SettingsDto["appearance"]; tokens: "light" | "dark" } | null>(null);
   const [testing, setTesting] = useTestAlarmOpen();
   const [testError, setTestError] = useState<string | null>(null);
 
@@ -398,8 +399,9 @@ export function AppearancePage() {
   return (
     <SettingsPage title={t.nav.appearance} subtitle={p.subtitle}>
       {(s, save) => {
-        const tokens = shown ?? windowTheme();
+        const tokens = shown?.appearance === s.appearance ? shown.tokens : windowTheme();
         const other = tokens === "dark" ? "light" : "dark";
+        const color = colorAttr(s.interrupt_color);
         return (
           <>
             <div className="sm-field">
@@ -430,32 +432,40 @@ export function AppearancePage() {
               </span>
               {/* Native radios: arrow keys move the choice and save it, Tab enters on the checked one. */}
               <div className="tl-colors" role="radiogroup" aria-labelledby="color-heading" aria-describedby="color-hint">
-                {INTERRUPT_COLORS.map((color) => (
-                  <label key={color} className="sm-swatch tl-swatch">
+                {INTERRUPT_COLORS.map((choice) => (
+                  <label key={choice} className="sm-swatch tl-swatch">
                     <input
                       type="radio"
                       name="interrupt_color"
-                      value={color}
-                      checked={colorAttr(s.interrupt_color) === color}
-                      onChange={() => save({ interrupt_color: color })}
+                      value={choice}
+                      checked={choice === color}
+                      onChange={() => save({ interrupt_color: choice })}
                     />
                     <i aria-hidden="true">
-                      <span data-color={color} data-tokens={tokens}>
+                      <span data-color={choice} data-tokens={tokensFor(choice, tokens)}>
                         Aa
                       </span>
                     </i>
-                    <span>{p.colors[color]}</span>
+                    <span>{p.colors[choice]}</span>
                   </label>
                 ))}
               </div>
             </div>
             <div className="tl-color-preview">
               <style>{PREVIEW_TOKENS}</style>
-              <AlarmPreview color={colorAttr(s.interrupt_color)} tokens={tokens} />
+              <AlarmPreview color={color} tokens={tokens} />
               <div className="sm-cluster">
-                <button type="button" className="sm-btn" data-action="preview-theme" onClick={() => setShown(other)}>
-                  {other === "dark" ? p.previewDark : p.previewLight}
-                </button>
+                {/* Only Default changes with the appearance; the other colours look the same in both. */}
+                {color === "theme" && (
+                  <button
+                    type="button"
+                    className="sm-btn"
+                    data-action="preview-theme"
+                    onClick={() => setShown({ appearance: s.appearance, tokens: other })}
+                  >
+                    {other === "dark" ? p.previewDark : p.previewLight}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="sm-btn"

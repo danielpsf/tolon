@@ -155,8 +155,10 @@
 
 /*
  * Reminder colours (L-043): each `data-color` is a pair of Swiss Moss tokens, the same table as
- * ui/src/reminder-colors.ts (contrast.test.ts checks that they agree and that every pair reaches AA
- * in light and dark). The interrupt, the previews and the swatches draw with these properties only.
+ * ui/src/reminder-colors.ts (contrast.test.ts checks that they agree and that every pair reaches AA).
+ * Default follows the appearance; the page pins every other choice to Swiss Moss's light values with
+ * `data-tokens="light"` (PREVIEW_TOKENS). The interrupt, the previews and the swatches draw with these
+ * properties only.
  * `:where()` keeps the default at no specificity, so any `[data-color="..."]` below wins.
  */
 :where([data-color]) {

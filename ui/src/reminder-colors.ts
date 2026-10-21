@@ -1,7 +1,8 @@
 // The reminder colours (L-043, docs/decisions.md "Reminder colour (L-043)"): one Swiss Moss token pair
-// per `interrupt_color`. Swiss Moss gives every token a light and a dark value, so one pair serves both
-// appearances. local.css maps the same pairs to `--tl-*` properties under `[data-color]`;
-// contrast.test.ts checks that the two agree and that every pair reaches AA in light and dark.
+// per `interrupt_color`. Only "theme" (Default) follows the light or dark appearance; every other choice
+// is pinned to Swiss Moss's light values (`tokensFor`), so the colour a person picks is the one they get.
+// local.css maps the same pairs to `--tl-*` properties under `[data-color]`; contrast.test.ts checks that
+// the two agree and that every pair reaches AA where it is drawn.
 import tokens from "swiss-moss/tokens/tokens.css?raw";
 import { INTERRUPT_COLORS, type InterruptColor } from "./api-types";
 
@@ -37,6 +38,14 @@ export const REMINDER_PAIRS: Record<InterruptColor, ReminderPair> = {
 /** The `data-color` for a setting; anything unknown (an older or newer backend) is the default. */
 export function colorAttr(color: string | null | undefined): InterruptColor {
   return INTERRUPT_COLORS.find((c) => c === color) ?? "theme";
+}
+
+/**
+ * The `data-tokens` a reminder colour draws with: Default follows `appearance` (undefined: the window's
+ * own), every other choice is pinned to Swiss Moss's light block. The element also needs PREVIEW_TOKENS.
+ */
+export function tokensFor(color: InterruptColor, appearance?: "light" | "dark"): "light" | "dark" | undefined {
+  return color === "theme" ? appearance : "light";
 }
 
 const body = (start: number) => tokens.slice(tokens.indexOf("{", start) + 1, tokens.indexOf("}", start));

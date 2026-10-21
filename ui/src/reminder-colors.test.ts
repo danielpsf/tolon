@@ -65,10 +65,13 @@ describe("data-color (L-043)", () => {
     for (const other of [undefined, null, "", "blue", "MOSS", "moss_deep"]) expect(colorAttr(other)).toBe("theme");
   });
 
-  it.each(INTERRUPT_COLORS)("the interrupt root carries data-color=%s from the settings", (color) => {
+  it.each(INTERRUPT_COLORS)("the interrupt root carries data-color=%s from the settings, pinned to light unless Default", (color) => {
     initCopy("en-US");
     shown({ interrupt_color: color });
-    expect(render(InterruptPage)).toMatch(new RegExp(`^<main class="tl-int"[^>]* data-color="${color}"`));
+    const html = render(InterruptPage);
+    expect(html).toMatch(new RegExp(`^<main class="tl-int"[^>]* data-color="${color}"`));
+    if (color === "theme") expect(html).not.toMatch(/^<main [^>]*data-tokens=/);
+    else expect(html).toMatch(/^<main [^>]*data-tokens="light"><style>\[data-tokens=light\]\{/);
   });
 
   it("the interrupt is the default before the settings are in", () => {
@@ -79,7 +82,7 @@ describe("data-color (L-043)", () => {
   it("the first-run preview follows the choice", () => {
     initCopy("en-US");
     shown({ interrupt_color: "danger" });
-    expect(render(FirstRunPage)).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="danger">/);
+    expect(render(FirstRunPage)).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="danger" data-tokens="light">/);
   });
 });
 
@@ -107,18 +110,32 @@ describe("Appearance page (L-043)", () => {
     }
   });
 
+  it("B1 in a dark window Default turns dark and every other swatch keeps its light values", () => {
+    initCopy("en-US");
+    shown({ interrupt_color: "ink", appearance: "dark" });
+    vi.stubGlobal("document", { documentElement: { dataset: { theme: "dark" } } });
+    const html = render(AppearancePage);
+    expect(html).toContain('<span data-color="theme" data-tokens="dark">Aa</span>');
+    for (const color of INTERRUPT_COLORS.filter((c) => c !== "theme")) {
+      expect(html).toContain(`<span data-color="${color}" data-tokens="light">Aa</span>`);
+    }
+    // The preview of a pinned colour is light too, and the dark/light toggle is for Default only.
+    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="ink" data-tokens="light">/);
+    expect(html).not.toContain('data-action="preview-theme"');
+  });
+
   it("previews the alarm in the chosen colour and the window's appearance, with a button for the other one", () => {
     initCopy("en-US");
-    shown({ interrupt_color: "signal" });
+    shown({ interrupt_color: "theme" });
     let html = render(AppearancePage);
-    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="signal" data-tokens="light">/);
+    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="theme" data-tokens="light">/);
     expect(html).toMatch(/<button type="button" class="sm-btn" data-action="preview-theme">Preview in dark<\/button>/);
     expect(html).toMatch(/<button type="button" class="sm-btn" data-action="test-alarm" aria-disabled="false">Show a test alarm<\/button>/);
     expect(html).toContain("<style>[data-tokens=light]{");
 
     vi.stubGlobal("document", { documentElement: { dataset: { theme: "dark" } } });
     html = render(AppearancePage);
-    expect(html).toMatch(/data-color="signal" data-tokens="dark"/);
+    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="theme" data-tokens="dark">/);
     expect(html).toContain(">Preview in light</button>");
   });
 

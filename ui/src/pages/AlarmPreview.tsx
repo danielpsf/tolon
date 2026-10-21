@@ -3,12 +3,14 @@ import { onAlarmHide } from "../api";
 import type { InterruptColor } from "../api-types";
 import { copy } from "../copy";
 import { SNOOZE_MINUTES } from "../interrupt";
+import { PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
 
 const MINUTE = 60_000;
 
 /**
  * A still picture of the interrupt (mockup 05): a sample meeting at 14:00 today, seen at 13:58, in the
- * reminder colour `color` (L-043). `tokens` draws it in that appearance whatever the window's is. Not interactive.
+ * reminder colour `color` (L-043). Default draws in `tokens` (the window's appearance when unset); every
+ * other colour is pinned to light, as on the interrupt. Not interactive.
  */
 export function AlarmPreview({ color, tokens }: { color: InterruptColor; tokens?: "light" | "dark" }) {
   const c = copy();
@@ -19,7 +21,8 @@ export function AlarmPreview({ color, tokens }: { color: InterruptColor; tokens?
   const range = i.timeRange(c.formatTime(start), c.formatTime(start.getTime() + 45 * MINUTE));
   return (
     <figure className="tl-first-preview">
-      <div className="tl-preview" aria-hidden="true" data-color={color} data-tokens={tokens}>
+      <style>{PREVIEW_TOKENS}</style>
+      <div className="tl-preview" aria-hidden="true" data-color={color} data-tokens={tokensFor(color, tokens)}>
         <div className="tl-preview-top">
           <span>{c.formatTime(now)}</span>
           <span>{c.startsIn(start, now)}</span>
