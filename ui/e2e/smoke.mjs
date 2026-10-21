@@ -58,8 +58,11 @@ before(async () => {
   await startApp();
 });
 
-/** Starts the app in a new WebDriver session; the data dir is tauri-driver's, so it survives a restart. */
-async function startApp() {
+/**
+ * Starts the app in a new WebDriver session; the data dir is tauri-driver's, so it survives a restart.
+ * `route` opens a settings page; with none, a launch without calendars opens on first run (F10), as Tolon does.
+ */
+async function startApp(route = "#/calendars") {
   driver = await new Builder()
     .usingServer(driverUrl)
     .withCapabilities({ browserName: "wry", "tauri:options": { application } })
@@ -67,6 +70,7 @@ async function startApp() {
   // The language follows the system by default; the `lang` query parameter pins it so the copy below is English.
   const url = new URL(await driver.getCurrentUrl());
   url.search = "?lang=en-US";
+  url.hash = route;
   await driver.get(url.href);
 }
 
@@ -573,4 +577,59 @@ test("window rights: the settings window reads the pause and the current alarm, 
   assert.deepEqual(await invoke("tray_tooltip", { text: "Tolon" }), { answer: null });
   // The notification's wording (L-038) answers the settings window, which refuses a bundle that is not valid.
   assert.deepEqual(await invoke("notify_copy_set", { copy: {} }), { code: "invalid:notify_copy" });
+});
+
+// ---- First run (L-018) --------------------------------------------------------------------------
+// Every test above removes what it adds, so Tolon has no calendar again, as on a first launch. A launch on
+// no page opens the settings window on first run (AC10.1); the first calendar hides it, and the next launch
+// opens no window (AC10.2). The page's `document.visibilityState` is how WebDriver sees a hidden window,
+// and a hidden window is driven by script only. Runs last: the window stays hidden afterwards.
+
+const visibility = () => driver.executeScript(() => document.visibilityState);
+
+test("ac10_1 with no calendar Tolon opens on first run and its test alarm fires, and ac10_2 the first calendar closes it for good", async () => {
+  const { server, port } = await fixtureServer();
+  try {
+    await driver.quit();
+    await startApp("");
+    assert.equal(await (await find("#first-run-title")).getText(), "Never miss a meeting again.");
+    assert.equal((await driver.findElements(By.css(".tl-first .sm-steps > li"))).length, 3);
+    // No template tray icon on Linux or Windows, so the tray step says system tray.
+    await waitFor(
+      "the tray step",
+      async () => (await driver.findElement(By.css(".tl-first .sm-steps > li:last-child h2")).getText()) === "Tolon is in the system tray",
+    );
+    assert.equal(await visibility(), "visible");
+
+    // "Try a test alarm" opens a real interrupt from this window; Esc closes it.
+    const main = await driver.getWindowHandle();
+    await (await find('button[data-action="test-alarm"]')).click();
+    const handles = await waitFor("the test interrupt", async () => {
+      const found = await interruptHandles(main);
+      return found.length > 0 && found;
+    });
+    await driver.switchTo().window(handles[0]);
+    await pressAndWaitForClose(main, Key.ESCAPE);
+
+    // The first calendar, through the form the Calendars page uses, hides the window.
+    const input = await openAddForm();
+    await input.sendKeys(`http://127.0.0.1:${port}/calendar/first-run/basic.ics`);
+    await (await find('#add-calendar button[type="submit"]')).click();
+    await waitFor("the window to hide", async () => (await visibility()) === "hidden");
+    await waitFor("first run to end", async () => (await driver.findElements(By.css("#first-run-title"))).length === 0);
+
+    // The next launch, with a calendar, opens no window: the tray is the only trace.
+    await driver.quit();
+    await startApp("");
+    await waitFor("the settings pages, loaded hidden", async () => (await driver.findElements(By.css(".tl-shell"))).length === 1);
+    assert.equal(await visibility(), "hidden");
+  } finally {
+    // The window is hidden: the calendar goes by command, not by a click (Windows keeps its data dir).
+    const listed = await invoke("calendars_list");
+    for (const calendar of listed.answer ?? []) {
+      if (calendar.name === "Team fixture") await invoke("calendars_remove", { id: calendar.id });
+    }
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
