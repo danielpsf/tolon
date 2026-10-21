@@ -32,6 +32,8 @@ cargo xtask fixtures    # regenerate expected JSON for fixtures, then read the d
 npm --prefix ui run dev | build | lint | test
 ```
 
+Quit an installed Tolon before `make dev` or `cargo run -p tolon-app`. Both use the same app id (`dev.tolon.desktop`), so the development build hands over to the Tolon that is already running, which only shows its window, and then exits.
+
 ## Where things live
 
 ```

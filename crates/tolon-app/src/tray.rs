@@ -352,16 +352,115 @@ fn place(app: &AppHandle, window: &WebviewWindow, rect: Option<Rect>) {
     }
 }
 
-/// Settings from the panel (AC7.2): the settings window shows and takes focus. With no Dock icon
-/// on macOS the tray is the only way back to it (L-042).
+/// The settings window shows and takes focus: first run at start, the panel's Settings (AC7.2),
+/// and opening Tolon again while it runs (a reopen on macOS, a second launch elsewhere), the way
+/// back when the tray icon is hidden (decision 2026-10-22). Any thread: the steps run on the main
+/// thread, where `Platform` calls belong.
 pub fn show_settings(app: &AppHandle) {
     hide_panel(app);
-    if let Some(window) = app.get_webview_window(MAIN) {
-        for step in [window.unminimize(), window.show(), window.set_focus()] {
-            if let Err(e) = step {
-                tracing::warn!(error = %e, "could not show the settings window");
-            }
-        }
+    let Some(window) = app.get_webview_window(MAIN) else {
+        return;
+    };
+    let shown = app.run_on_main_thread(move || {
+        bring_forward(
+            || window.unminimize(),
+            || window.show(),
+            &NATIVE,
+            || window.set_focus(),
+        );
+    });
+    if let Err(e) = shown {
+        tracing::warn!(error = %e, "could not reach the main thread to show the settings window");
+    }
+}
+
+/// Unminimize, show, then activate Tolon, then focus: an Accessory app's window does not come
+/// forward on `show()` alone (macOS), and focus goes to a window that is already shown. Each step
+/// runs on its own: a failure is logged and the next step still runs.
+fn bring_forward(
+    unminimize: impl FnOnce() -> tauri::Result<()>,
+    show: impl FnOnce() -> tauri::Result<()>,
+    platform: &dyn Platform,
+    focus: impl FnOnce() -> tauri::Result<()>,
+) {
+    if let Err(e) = unminimize() {
+        tracing::warn!(error = %e, "could not unminimize the settings window");
+    }
+    if let Err(e) = show() {
+        tracing::warn!(error = %e, "could not show the settings window");
+    }
+    if let Err(e) = platform.activate_app() {
+        tracing::warn!(error = %e, "could not bring Tolon to the front");
+    }
+    if let Err(e) = focus() {
+        tracing::warn!(error = %e, "could not focus the settings window");
+    }
+}
+
+/// The inner size and minimum size to give Tauri for the settings window, logical pixels, so the
+/// page gets `size` (and at least `min`) where the screen's work area allows (`area`, without the
+/// menu bar, Dock or taskbar). `frame` is what the window adds around Tauri's inner size (title
+/// bar and borders on Windows), `covered` how much of the inner size the title bar hides (macOS,
+/// `Platform::title_bar_overlap`). The page sizes from `tauri.conf.json` only shrink, never grow,
+/// so the whole window stays on a small screen such as 1366x768.
+pub fn fit_settings_size(
+    size: (f64, f64),
+    min: (f64, f64),
+    area: (f64, f64),
+    frame: (f64, f64),
+    covered: f64,
+) -> ((f64, f64), (f64, f64)) {
+    let room = ((area.0 - frame.0).max(1.0), (area.1 - frame.1).max(1.0));
+    let size = (size.0.min(room.0), (size.1 + covered).min(room.1));
+    (size, (min.0.min(size.0), (min.1 + covered).min(size.1)))
+}
+
+/// Fits the settings window, created hidden from `tauri.conf.json`, to the work area of its
+/// screen (else the primary one) and centres it there. Once at start, before it may show; a
+/// failure keeps the configured size.
+pub fn fit_settings(app: &AppHandle) {
+    let (Some(window), Some(conf)) = (
+        app.get_webview_window(MAIN),
+        app.config().app.windows.iter().find(|w| w.label == MAIN),
+    ) else {
+        return;
+    };
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let (Some(monitor), Ok(outer), Ok(inner)) = (monitor, window.outer_size(), window.inner_size())
+    else {
+        return;
+    };
+    let scale = monitor.scale_factor().max(f64::MIN_POSITIVE);
+    let area = monitor.work_area().size.to_logical::<f64>(scale);
+    let frame = (
+        f64::from(outer.width.saturating_sub(inner.width)) / scale,
+        f64::from(outer.height.saturating_sub(inner.height)) / scale,
+    );
+    // Runs in `setup`, on the main thread, where `Platform` calls belong.
+    let covered = NATIVE.title_bar_overlap(&window).unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "could not read the title bar height");
+        0.0
+    });
+    let (size, min) = fit_settings_size(
+        (conf.width, conf.height),
+        (
+            conf.min_width.unwrap_or(conf.width),
+            conf.min_height.unwrap_or(conf.height),
+        ),
+        (area.width, area.height),
+        frame,
+        covered,
+    );
+    let fitted = window
+        .set_min_size(Some(tauri::LogicalSize::new(min.0, min.1)))
+        .and_then(|()| window.set_size(tauri::LogicalSize::new(size.0, size.1)))
+        .and_then(|()| window.center());
+    if let Err(e) = fitted {
+        tracing::warn!(error = %e, "could not fit the settings window to the screen");
     }
 }
 
@@ -646,9 +745,154 @@ mod tests {
         let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
         let start = shipped.find("start(app.handle())").unwrap_or(usize::MAX);
         let decide = shipped.find("tray::shows_at_start(").unwrap_or(usize::MAX);
-        let show = shipped.find("tray::show_settings(").unwrap_or(0);
+        let show = shipped
+            .find("tray::show_settings(app.handle())")
+            .unwrap_or(0);
         assert!(start < decide && decide < show, "start, decide, then show");
         Ok(())
+    }
+
+    /// Decision 2026-10-22: show, then activate Tolon, then focus. The stub counts activations.
+    /// The only test in this crate that activates, so the count is not raced.
+    #[test]
+    fn showing_settings_unminimizes_shows_then_activates_then_focuses() {
+        use std::cell::RefCell;
+        use tolon_platform::StubPlatform;
+        let before = StubPlatform.activations();
+        let steps = RefCell::new(Vec::new());
+        let step = |name: &'static str| {
+            steps
+                .borrow_mut()
+                .push((name, StubPlatform.activations() - before));
+            Ok(())
+        };
+        bring_forward(
+            || step("unminimize"),
+            || step("show"),
+            &StubPlatform,
+            || step("focus"),
+        );
+        assert_eq!(steps.take(), [("unminimize", 0), ("show", 0), ("focus", 1)]);
+        // Each step is independent: a failed unminimize still shows, a failed show still
+        // activates and focuses.
+        bring_forward(
+            || Err(tauri::Error::WindowNotFound),
+            || step("show"),
+            &StubPlatform,
+            || step("focus"),
+        );
+        bring_forward(
+            || Err(tauri::Error::WindowNotFound),
+            || Err(tauri::Error::WindowNotFound),
+            &StubPlatform,
+            || step("focus"),
+        );
+        assert_eq!(steps.take(), [("show", 1), ("focus", 2), ("focus", 3)]);
+    }
+
+    /// AC10.2: only `bring_forward` activates, and only `show_settings` calls it, so a start with
+    /// the window hidden takes no focus.
+    #[test]
+    fn ac10_2_only_showing_the_settings_window_activates_tolon() {
+        for source in [
+            include_str!("main.rs"),
+            include_str!("commands.rs"),
+            include_str!("interrupt.rs"),
+            include_str!("scheduler.rs"),
+        ] {
+            assert!(!source.contains("activate_app"));
+        }
+        let shipped = include_str!("tray.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default();
+        assert_eq!(shipped.matches(".activate_app()").count(), 1);
+        assert_eq!(
+            shipped.matches("bring_forward(").count(),
+            2,
+            "defined and called once"
+        );
+        let show = shipped
+            .split("pub fn show_settings(")
+            .nth(1)
+            .unwrap_or_default();
+        let show = show.split("\nfn bring_forward(").next().unwrap_or_default();
+        assert!(show.contains("bring_forward("));
+    }
+
+    /// The window sizes in `tauri.conf.json`: first run fits on a 1728x1117 MacBook without
+    /// scrolling, and the minimum keeps the settings layout usable.
+    #[test]
+    fn the_settings_window_defaults_to_1040_by_760_with_an_880_by_620_minimum() -> anyhow::Result<()>
+    {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))?;
+        let main = &conf["app"]["windows"][0];
+        assert_eq!(main["label"], serde_json::json!(MAIN));
+        for (key, value) in [
+            ("width", 1040),
+            ("height", 760),
+            ("minWidth", 880),
+            ("minHeight", 620),
+        ] {
+            assert_eq!(main[key], serde_json::json!(value), "{key}");
+        }
+        let source = include_str!("main.rs");
+        let fit = source
+            .find("tray::fit_settings(app.handle())")
+            .unwrap_or(usize::MAX);
+        let show = source
+            .find("tray::show_settings(app.handle())")
+            .unwrap_or(0);
+        assert!(
+            fit < show,
+            "the window is fitted before it may show at start"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_settings_window_keeps_its_size_where_it_fits() {
+        // 1728x1117 MacBook (measured): a 1083-point work area; Tauri's inner size is the whole
+        // frame and the title bar covers 32 points of it, so the page gets 760 in a 792 frame.
+        let fitted = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (1728.0, 1080.0),
+            (0.0, 0.0),
+            32.0,
+        );
+        assert_eq!(fitted, ((1040.0, 792.0), (880.0, 652.0)));
+    }
+
+    #[test]
+    fn the_settings_window_shrinks_to_a_1366_by_768_work_area() {
+        // Windows at 100 %: a 40 px taskbar; the frame takes 16 by 39 px.
+        let fitted = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (1366.0, 728.0),
+            (16.0, 39.0),
+            0.0,
+        );
+        assert_eq!(fitted, ((1040.0, 689.0), (880.0, 620.0)));
+        // Smaller than the minimum: the minimum gives way, so the window still fits.
+        let tiny = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (800.0, 560.0),
+            (0.0, 0.0),
+            0.0,
+        );
+        assert_eq!(tiny, ((800.0, 560.0), (800.0, 560.0)));
+        // A frame larger than the area never gives a size below one pixel.
+        let none = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (10.0, 10.0),
+            (40.0, 40.0),
+            0.0,
+        );
+        assert_eq!(none, ((1.0, 1.0), (1.0, 1.0)));
     }
 
     #[test]

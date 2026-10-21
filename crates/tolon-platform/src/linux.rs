@@ -57,6 +57,16 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing: Tauri's `set_focus` brings the window forward here.
+    fn activate_app(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
+    /// Tauri's inner size is already below the title bar here.
+    fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
+        Ok(0.0)
+    }
+
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         Err(PlatformError::Unsupported)
     }

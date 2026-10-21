@@ -62,6 +62,29 @@ impl Platform for MacPlatform {
         }
     }
 
+    fn activate_app(&self) -> Result<(), PlatformError> {
+        let mtm = main_thread()?;
+        // As in `raise_above_everything`: the call checked on screen (L-042, L-044).
+        #[allow(deprecated)]
+        NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+        Ok(())
+    }
+
+    /// The content view's height minus `contentLayoutRect`, the part the title bar leaves free.
+    /// Measured on macOS 27: a 760-point content view had a 1040x760 frame and 32 points under the
+    /// title bar (L-044).
+    fn title_bar_overlap(&self, window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
+        main_thread()?;
+        let view = ns_view_of(window)?;
+        // SAFETY: as in `raise_above_everything`: a live NSView, borrowed on the main thread.
+        let view: &NSView = unsafe { view.cast::<NSView>().as_ref() };
+        let ns_window: Retained<NSWindow> = view.window().ok_or(PlatformError::NoWindow)?;
+        let content = ns_window
+            .contentView()
+            .map_or(0.0, |v| v.frame().size.height);
+        Ok((content - ns_window.contentLayoutRect().size.height).max(0.0))
+    }
+
     fn screens(&self) -> Result<Vec<Screen>, PlatformError> {
         let mtm = main_thread()?;
         // screens[0] is the screen with the menu bar; NSScreen.main is the focused one instead.
@@ -243,5 +266,9 @@ mod tests {
         // libtest runs this on a worker thread, so the activation policy is never changed here.
         assert_eq!(MacPlatform.screens(), Err(PlatformError::NotMainThread));
         assert_eq!(MacPlatform.prepare_app(), Err(PlatformError::NotMainThread));
+        assert_eq!(
+            MacPlatform.activate_app(),
+            Err(PlatformError::NotMainThread)
+        );
     }
 }
