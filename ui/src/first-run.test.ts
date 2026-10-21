@@ -3,8 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CalendarDto } from "./api-types";
 import { createCopy, initCopy, LOCALES } from "./copy";
-import { asksForPage, finishFirstRun, startFirstRunWatch, useFirstRun } from "./first-run";
+import {
+  asksForPage,
+  firstCalendarAdded,
+  hideAndEndFirstRun,
+  listenForHide,
+  startFirstRunWatch,
+  useFirstRun,
+} from "./first-run";
 import { FirstRunPage, trayTitle } from "./pages/FirstRunPage";
+import local from "./styles/local.css?raw";
 import { useCalendars } from "./store";
 
 const hidden: (() => void)[] = [];
@@ -16,6 +24,7 @@ vi.mock("./api", () => ({
     hidden.push(handler);
     return () => undefined;
   }),
+  onAlarmHide: vi.fn(async () => () => undefined),
   asCommandError: () => ({ code: "internal" }),
 }));
 
@@ -34,7 +43,12 @@ function openWindow(): () => void {
   hidden.length = 0;
   useFirstRun.setState({ shows: null });
   useCalendars.setState({ calendars: [], loaded: false, loadError: null });
-  return startFirstRunWatch();
+  const stopHide = listenForHide();
+  const stopWatch = startFirstRunWatch();
+  return () => {
+    stopHide();
+    stopWatch();
+  };
 }
 
 const listed = (calendars: CalendarDto[]) => useCalendars.setState({ calendars, loaded: true });
@@ -60,29 +74,59 @@ describe("first run (F10)", () => {
     stop();
   });
 
-  it("AC10.2 the first calendar hides the window, then first run ends, also when the hide fails", async () => {
+  it("a calendar list that failed opens the Calendars page with its error, not first run", () => {
+    const stop = openWindow();
+    useCalendars.setState({ calendars: [], loaded: true, loadError: { code: "db_error" } });
+    expect(useFirstRun.getState().shows).toBe(false);
+    stop();
+  });
+
+  it("AC10.2 a first calendar that syncs hides the window, then first run ends, also when the hide fails", async () => {
     const stop = openWindow();
     listed([]);
     // The list answering with the new calendar does not end it: the window must hide first, with no flash of the settings pages.
     listed([calendar]);
     expect(useFirstRun.getState().shows).toBe(true);
-    await finishFirstRun();
+    await firstCalendarAdded(calendar);
     expect(appHideSettings).toHaveBeenCalledTimes(1);
     expect(useFirstRun.getState().shows).toBe(false);
 
     useFirstRun.setState({ shows: true });
     appHideSettings.mockRejectedValueOnce({ code: "not_found" });
-    await finishFirstRun();
+    await firstCalendarAdded(calendar);
     expect(useFirstRun.getState().shows).toBe(false);
     stop();
   });
 
-  it("skip: closing the window ends first run for the session; the tray's Settings then shows the settings pages", async () => {
+  it("B1 a first calendar whose sync failed keeps the window and moves to the Calendars page with its error row", async () => {
     const stop = openWindow();
     listed([]);
+    await firstCalendarAdded({ ...calendar, last_error: { kind: "http", status: 404 } });
+    expect(appHideSettings).not.toHaveBeenCalled();
+    expect(useFirstRun.getState().shows).toBe(false);
+    stop();
+  });
+
+  it("skip: Skip for now hides the window and ends first run; so does the close button (settings:hidden)", async () => {
+    const stop = openWindow();
+    listed([]);
+    await hideAndEndFirstRun();
+    expect(appHideSettings).toHaveBeenCalledTimes(1);
+    expect(useFirstRun.getState().shows).toBe(false);
+
+    useFirstRun.setState({ shows: true });
     await Promise.resolve();
     expect(hidden).toHaveLength(1);
     hidden[0]();
+    expect(useFirstRun.getState().shows).toBe(false);
+    stop();
+  });
+
+  it("the hide listener works before the list is in, so a close before the first render is not lost", async () => {
+    const stop = openWindow();
+    await Promise.resolve();
+    hidden[0]();
+    listed([]);
     expect(useFirstRun.getState().shows).toBe(false);
     stop();
   });
@@ -99,23 +143,31 @@ describe("first run (F10)", () => {
     const t = createCopy("en-US").t.firstRun;
     expect(trayTitle(t, "menu_bar")).toBe("Tolon is in the menu bar");
     expect(trayTitle(t, "tray")).toBe("Tolon is in the system tray");
-    expect(trayTitle(t, null)).toBe(" ");
+    expect(trayTitle(t, null)).toBeNull();
   });
 
-  it("AC10.1 shows mockup 05: three steps, Paste an iCal link, Try a test alarm and the alarm preview", () => {
+  it("AC10.1 shows mockup 05: three steps, Paste an iCal link, Try a test alarm, Skip for now and the alarm preview", () => {
     initCopy("en-US");
     const html = renderToStaticMarkup(createElement(FirstRunPage));
     expect(html).toContain("Never miss a meeting again.");
-    expect(html.match(/<ol class="sm-steps[^"]*">/g)).toHaveLength(1);
+    expect(html.match(/<ol class="sm-steps[^"]*" role="list">/g)).toHaveLength(1);
     expect(html.match(/<li[ >]/g)).toHaveLength(3);
+    // Step headings sit in block wrappers; step 3's waits for Rust, holding its line without an empty heading.
+    expect(html.match(/<h2 /g)).toHaveLength(2);
+    expect(html).toMatch(/<li><div><h2 class="sm-heading">Add a calendar<\/h2><div class="sm-body">/);
+    expect(html).toMatch(/<div class="sm-heading" aria-hidden="true">\u00a0<\/div>/);
     for (const text of ["Add a calendar", "Try it", "Paste an iCal link", "Try a test alarm", "Preview of the alarm"]) {
       expect(html).toContain(text);
     }
-    // The iCal button opens the shared add form, the one the Calendars page uses.
-    expect(html).toContain('aria-controls="add-calendar"');
-    // The preview is a picture: its sample buttons are not buttons and screen readers skip it.
+    // The iCal button opens the shared add form, the one the Calendars page uses, and has focus.
+    expect(html).toMatch(/<button[^>]*class="sm-btn primary"[^>]*aria-controls="add-calendar"[^>]*>Paste an iCal link/);
+    // Skip is quiet and carries its consequence.
+    expect(html).toMatch(/<button[^>]*class="sm-btn quiet"[^>]*aria-describedby="skip-consequence"[^>]*>Skip for now<\/button>/);
+    expect(html).toContain('id="skip-consequence">Tolon does nothing until you add a calendar.</p>');
+    // The preview is a picture: its sample buttons are not buttons, screen readers skip it and it takes no pointer.
     expect(html).toMatch(/<div class="tl-preview" aria-hidden="true">/);
-    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(local).toMatch(/\.tl-preview \{[^}]*pointer-events: none;/);
+    expect(html.match(/<button/g)).toHaveLength(3);
     expect(html).toContain("Platform weekly sync");
     expect(html).toContain("Join the call");
     expect(html).toContain("Snooze 5 min");
@@ -125,11 +177,18 @@ describe("first run (F10)", () => {
   it.each(LOCALES)("%s renders first run from its own catalogue", (locale) => {
     const c = initCopy(locale);
     const html = renderToStaticMarkup(createElement(FirstRunPage));
-    for (const text of [c.t.firstRun.title, c.t.firstRun.pasteIcal, c.t.firstRun.tryAlarm, c.t.firstRun.footer]) {
+    const t = c.t.firstRun;
+    for (const text of [t.title, t.pasteIcal, t.tryAlarm, t.skip, t.skipConsequence, t.footer]) {
       expect(html).toContain(text.replace(/'/g, "&#x27;"));
     }
-    expect(c.t.firstRun.trayMenuBar).toContain("Tolon");
-    expect(c.t.firstRun.traySystemTray).toContain("Tolon");
-    expect(c.t.firstRun.trayMenuBar).not.toBe(c.t.firstRun.traySystemTray);
+    expect(t.trayMenuBar).toContain("Tolon");
+    expect(t.traySystemTray).toContain("Tolon");
+    expect(t.skipConsequence).toContain("Tolon");
+    expect(t.trayMenuBar).not.toBe(t.traySystemTray);
+  });
+
+  it("uses the review's words for he and ar", () => {
+    expect(createCopy("he").t.firstRun.tryTitle).toBe("לנסות");
+    expect(createCopy("ar").t.firstRun.traySystemTray).toBe("يوجد Tolon في منطقة الإعلام");
   });
 });

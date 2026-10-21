@@ -156,6 +156,8 @@ export const ptPT: Messages = {
     previewLabel: "Pré-visualização do alarme",
     sampleTitle: "Reunião semanal da plataforma",
     footer: "O Tolon é de código aberto sob a licença Apache 2.0. Sem conta, sem telemetria.",
+    skip: "Saltar por agora",
+    skipConsequence: "O Tolon não faz nada até adicionar um calendário.",
   },
   notification: {
     body: (time) => `Hora de início: ${time}. O Tolon não conseguiu cobrir o ecrã.`,

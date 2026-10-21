@@ -156,6 +156,8 @@ export const enGB: Messages = {
     previewLabel: "Preview of the alarm",
     sampleTitle: "Platform weekly sync",
     footer: "Tolon is open source under Apache 2.0. No account, no telemetry.",
+    skip: "Skip for now",
+    skipConsequence: "Tolon does nothing until you add a calendar.",
   },
   notification: {
     body: (time) => `Starts at ${time}. Tolon could not cover the screen.`,

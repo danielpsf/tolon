@@ -116,7 +116,14 @@ function ConfirmRemove({
 }
 
 /** The iCal form (`#add-calendar`), shared by the Calendars page and first run (F10). */
-export function AddCalendarForm({ onAdded, onCancel }: { onAdded: () => void; onCancel: () => void }) {
+export function AddCalendarForm({
+  onAdded,
+  onCancel,
+}: {
+  /** The calendar as added; its `last_error` says whether the first sync failed (AC1.2). */
+  onAdded: (calendar: CalendarDto) => void;
+  onCancel: () => void;
+}) {
   const c = copy();
   const { calendars: t } = c.t;
   const [url, setUrl] = useState("");
@@ -132,9 +139,9 @@ export function AddCalendarForm({ onAdded, onCancel }: { onAdded: () => void; on
     setAddError(null);
     try {
       // A feed that fails to sync is still added: its row carries the status (AC1.2).
-      await api.calendarsAddIcs(value);
+      const added = await api.calendarsAddIcs(value);
       setPending(false);
-      onAdded();
+      onAdded(added);
     } catch (err) {
       setAddError(errorText(err, c));
       setPending(false);

@@ -153,6 +153,8 @@ export const tr: Messages = {
     previewLabel: "Alarm önizlemesi",
     sampleTitle: "Platform haftalık toplantısı",
     footer: "Tolon, Apache 2.0 lisanslı açık kaynaklı bir yazılımdır. Hesap yok, telemetri yok.",
+    skip: "Şimdilik atla",
+    skipConsequence: "Bir takvim ekleyene kadar Tolon hiçbir şey yapmaz.",
   },
   notification: {
     body: (time) => `Başlangıç: ${time}. Tolon ekranı kaplayamadı.`,

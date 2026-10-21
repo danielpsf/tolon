@@ -153,6 +153,8 @@ export const ja: Messages = {
     previewLabel: "アラームのプレビュー",
     sampleTitle: "プラットフォーム週次定例",
     footer: "Tolon は Apache 2.0 ライセンスのオープンソースです。アカウント不要、テレメトリなし。",
+    skip: "今はスキップ",
+    skipConsequence: "カレンダーを追加するまで、Tolon は何もしません。",
   },
   notification: {
     body: (time) => `開始時刻は${time}です。Tolon は画面を覆えませんでした。`,

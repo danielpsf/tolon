@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { api } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, onAlarmHide } from "../api";
 import type { TrayPlace } from "../api-types";
 import { Bell } from "../Bell";
 import { copy, type Messages } from "../copy";
-import { finishFirstRun } from "../first-run";
+import { firstCalendarAdded, hideAndEndFirstRun } from "../first-run";
 import { SNOOZE_MINUTES } from "../interrupt";
 import { errorText } from "../view";
 import { AddCalendarForm } from "./CalendarsPage";
@@ -38,9 +38,9 @@ function Preview() {
   );
 }
 
-/** The tray step's title for where the icon lives; a blank line while Rust has not answered, so nothing jumps. */
-export function trayTitle(t: Messages["firstRun"], place: TrayPlace | null): string {
-  if (place === null) return " ";
+/** The tray step's title for where the icon lives, or null while Rust has not answered. */
+export function trayTitle(t: Messages["firstRun"], place: TrayPlace | null): string | null {
+  if (place === null) return null;
   return place === "menu_bar" ? t.trayMenuBar : t.traySystemTray;
 }
 
@@ -60,23 +60,51 @@ function useTrayPlace(): TrayPlace | null {
   return place;
 }
 
+/** True from a "Try a test alarm" click until its interrupt closes (`alarm:hide`), so a second click does nothing. */
+function useTestAlarmOpen(): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let stopped = false;
+    let unlisten: (() => void) | undefined;
+    onAlarmHide(() => setOpen(false)).then(
+      (off) => {
+        if (stopped) off();
+        else unlisten = off;
+      },
+      () => undefined,
+    );
+    return () => {
+      stopped = true;
+      unlisten?.();
+    };
+  }, []);
+  return [open, setOpen];
+}
+
 /**
- * First run (F10, mockup 05): add a calendar, try a test alarm, and where Tolon lives from now on.
- * The first calendar hides the window (AC10.2); closing it before that is the skip.
+ * First run (F10, mockup 05; decision "First run (L-018)"): add a calendar, try a test alarm, and where
+ * Tolon lives from now on. A first calendar that syncs hides the window (AC10.2); one that fails moves to
+ * the Calendars page with its error. The close button and "Skip for now" hide it before that.
  */
 export function FirstRunPage() {
   const c = copy();
   const { firstRun: t } = c.t;
   const place = useTrayPlace();
+  const title = trayTitle(t, place);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useTestAlarmOpen();
+  const paste = useRef<HTMLButtonElement>(null);
 
   async function testAlarm() {
+    if (testing) return;
+    setTesting(true);
     setError(null);
     try {
       // A real interrupt with a sample meeting, from this window (AC10.1).
       await api.alarmsTest();
     } catch (e) {
+      setTesting(false);
       setError(errorText(e, c));
     }
   }
@@ -93,24 +121,32 @@ export function FirstRunPage() {
           </h1>
           <p className="sm-lead sm-muted">{t.lead}</p>
         </header>
-        <ol className="sm-steps tl-first-steps">
+        {/* role="list": WebKit drops the list role of an <ol> whose markers are styled away. */}
+        <ol className="sm-steps tl-first-steps" role="list">
           <li>
-            <span>
+            <div>
               <h2 className="sm-heading">{t.addTitle}</h2>
-              <span className="sm-body">{t.addBody}</span>
-            </span>
+              <div className="sm-body">{t.addBody}</div>
+            </div>
           </li>
           <li>
-            <span>
+            <div>
               <h2 className="sm-heading">{t.tryTitle}</h2>
-              <span className="sm-body">{t.tryBody}</span>
-            </span>
+              <div className="sm-body">{t.tryBody}</div>
+            </div>
           </li>
           <li>
-            <span>
-              <h2 className="sm-heading">{trayTitle(t, place)}</h2>
-              <span className="sm-body">{t.trayBody}</span>
-            </span>
+            <div>
+              {title ? (
+                <h2 className="sm-heading">{title}</h2>
+              ) : (
+                // Holds the heading's line until Rust answers, so nothing jumps; no empty heading meanwhile.
+                <div className="sm-heading" aria-hidden="true">
+                  {"\u00a0"}
+                </div>
+              )}
+              <div className="sm-body">{t.trayBody}</div>
+            </div>
           </li>
         </ol>
         {error && (
@@ -120,19 +156,47 @@ export function FirstRunPage() {
         )}
         <div className="sm-cluster">
           <button
+            ref={paste}
             type="button"
             className="sm-btn primary"
+            autoFocus
             aria-expanded={adding}
             aria-controls="add-calendar"
             onClick={() => setAdding(true)}
           >
             {t.pasteIcal}
           </button>
-          <button type="button" className="sm-btn quiet" data-action="test-alarm" onClick={() => void testAlarm()}>
+          <button
+            type="button"
+            className="sm-btn quiet"
+            data-action="test-alarm"
+            aria-disabled={testing}
+            onClick={() => void testAlarm()}
+          >
             {t.tryAlarm}
           </button>
+          <button
+            type="button"
+            className="sm-btn quiet"
+            data-action="skip"
+            aria-describedby="skip-consequence"
+            onClick={() => void hideAndEndFirstRun()}
+          >
+            {t.skip}
+          </button>
         </div>
-        {adding && <AddCalendarForm onAdded={() => void finishFirstRun()} onCancel={() => setAdding(false)} />}
+        <p className="sm-caption" id="skip-consequence">
+          {t.skipConsequence}
+        </p>
+        {adding && (
+          <AddCalendarForm
+            onAdded={(calendar) => void firstCalendarAdded(calendar)}
+            onCancel={() => {
+              setAdding(false);
+              paste.current?.focus();
+            }}
+          />
+        )}
         <p className="sm-caption">{t.footer}</p>
       </div>
       <Preview />

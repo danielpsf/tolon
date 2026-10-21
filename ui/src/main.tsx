@@ -8,8 +8,11 @@ import "./styles/local.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { listenForHide } from "./first-run";
 import { startSettingsFeed } from "./store";
 
+// Before the first load: Rust may show the window, and the person close it, before the page renders.
+listenForHide();
 // `?lang=pt-PT` stands in for the system language (dev, tests) while the language setting follows the system.
 // The settings window is the one that hands Rust the notification's wording (L-038); the other windows may not call it.
 const settingsLoaded = startSettingsFeed(new URLSearchParams(window.location.search).get("lang"), true);

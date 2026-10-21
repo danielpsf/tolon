@@ -157,6 +157,8 @@ export const enUS = {
     previewLabel: "Preview of the alarm",
     sampleTitle: "Platform weekly sync",
     footer: "Tolon is open source under Apache 2.0. No account, no telemetry.",
+    skip: "Skip for now",
+    skipConsequence: "Tolon does nothing until you add a calendar.",
   },
   notification: {
     body: (time: string) => `Starts at ${time}. Tolon could not cover the screen.`,

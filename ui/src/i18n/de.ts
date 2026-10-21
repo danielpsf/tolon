@@ -156,6 +156,8 @@ export const de: Messages = {
     previewLabel: "Vorschau des Alarms",
     sampleTitle: "Wöchentlicher Plattform-Sync",
     footer: "Tolon ist Open Source unter Apache 2.0. Kein Konto, keine Telemetrie.",
+    skip: "Vorerst überspringen",
+    skipConsequence: "Tolon tut nichts, bis du einen Kalender hinzufügst.",
   },
   notification: {
     body: (time) => `Beginnt um ${time} Uhr. Tolon konnte den Bildschirm nicht abdecken.`,

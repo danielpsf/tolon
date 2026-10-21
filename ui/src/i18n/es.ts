@@ -156,6 +156,8 @@ export const es: Messages = {
     previewLabel: "Vista previa de la alarma",
     sampleTitle: "Sincronización semanal de plataforma",
     footer: "Tolon es de código abierto con licencia Apache 2.0. Sin cuenta, sin telemetría.",
+    skip: "Omitir por ahora",
+    skipConsequence: "Tolon no hace nada hasta que agregues un calendario.",
   },
   notification: {
     body: (time) => `Hora de inicio: ${time}. Tolon no pudo cubrir la pantalla.`,

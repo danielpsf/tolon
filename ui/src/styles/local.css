@@ -454,6 +454,8 @@
   color: var(--sm-on-moss);
   cursor: default;
   user-select: none;
+  /* A picture: its sample buttons take no pointer (and the markup hides it from screen readers). */
+  pointer-events: none;
 }
 .tl-preview > p {
   margin: 0;

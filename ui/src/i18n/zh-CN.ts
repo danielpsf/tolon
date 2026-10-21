@@ -153,6 +153,8 @@ export const zhCN: Messages = {
     previewLabel: "提醒预览",
     sampleTitle: "平台每周同步会",
     footer: "Tolon 是基于 Apache 2.0 许可的开源软件。无需账户，没有遥测。",
+    skip: "暂时跳过",
+    skipConsequence: "在你添加日历之前，Tolon 不会做任何事。",
   },
   notification: {
     body: (time) => `开始时间：${time}。Tolon 无法覆盖屏幕。`,

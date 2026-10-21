@@ -176,7 +176,7 @@ export const he: Messages = {
     lead: "Tolon עוקב אחרי היומנים שלך ומשתלט על המסך לפני שפגישה מתחילה. שום דבר לא נשלח לשום מקום.",
     addTitle: "הוספת יומן",
     addBody: "אפשר להדביק את קישור ה-iCal הפרטי מכל יומן. Tolon רק קורא אותו.",
-    tryTitle: "ניסיון",
+    tryTitle: "לנסות",
     tryBody: "התראת בדיקה מראה בדיוק מה יקרה. Esc לדחייה, Enter להצטרפות.",
     trayMenuBar: "Tolon נמצא בשורת התפריטים",
     traySystemTray: "Tolon נמצא במגש המערכת",
@@ -186,6 +186,8 @@ export const he: Messages = {
     previewLabel: "תצוגה מקדימה של ההתראה",
     sampleTitle: "סנכרון שבועי של צוות הפלטפורמה",
     footer: "Tolon הוא קוד פתוח ברישיון Apache 2.0. בלי חשבון, בלי טלמטריה.",
+    skip: "דילוג בינתיים",
+    skipConsequence: "Tolon לא עושה דבר עד שמוסיפים יומן.",
   },
   notification: {
     body: (time) => `התחלה ב-${time}. Tolon לא הצליח לכסות את המסך.`,
