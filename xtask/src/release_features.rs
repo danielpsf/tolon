@@ -36,9 +36,9 @@ const DEFINITIONS: &[(&str, &str)] = &[
 ];
 
 /// The only line that may name the feature in the three tolon-app sources that gate the WebDriver
-/// suite's commands (the alarm-state read and the updater's loopback endpoint: their definitions,
-/// their registration in the handler list, and the endpoint setter). Exact lines, like
-/// `DEFINITIONS`: any other mention in those files is a violation.
+/// suite's commands (the alarm-state read, the settings window's visibility and the updater's
+/// loopback endpoint: their definitions, their registration in the handler list, and the endpoint
+/// setter). Exact lines, like `DEFINITIONS`: any other mention in those files is a violation.
 const CFG_GATES: &[(&str, &str)] = &[
     (
         "crates/tolon-app/src/commands.rs",
