@@ -393,4 +393,23 @@ The first-run copy of L-018 (14 new strings in a `firstRun` section: headline, l
 | zh-CN | 2 | `firstRun.lead` | "关注" reads as a social "follow"; the second sentence is a literal translation. | Accepted without a third round (two rounds at most): "Tolon 会监测你的日历，在会议开始前接管屏幕。数据不会发送至任何地方。" Not re-checked by the judge. |
 | ja | 2 | `firstRun.lead` | "画面を表示します" again; suggests "画面を占有します". | Rejected, as in round 1: the catalogue's term for the takeover. Native review to decide for every ja string at once. |
 
-Choices recorded with this review: the tray step names the menu bar (macOS) or the system tray (Windows, Linux); pt-PT says "área de notificação", German "Infobereich". The sample meeting title in the preview is translated, as a person would name such a meeting. "Apache 2.0" keeps its dot in zh-CN and ja; the full-width punctuation test now ignores a dot between digits. Native review is still required before release.
+Choices recorded with this review: the tray step names the menu bar (macOS) or the system tray (Windows, Linux); pt-PT says "área de notificação", German "Infobereich" (ar follows in the review fixes below). The sample meeting title in the preview is translated, as a person would name such a meeting. "Apache 2.0" keeps its dot in zh-CN and ja; the full-width punctuation test now ignores a dot between digits. Native review is still required before release.
+
+### L-018 review fixes
+
+Two new strings for the "Skip for now" button of decision "First run (L-018)", `firstRun.skip` and `firstRun.skipConsequence` ("Tolon does nothing until you add a calendar."), in all 12 catalogues, plus two words the review asked for: he `firstRun.tryTitle` "ניסיון" to "לנסות" (an infinitive, like a step title), ar `firstRun.traySystemTray` "علبة النظام" to "منطقة الإعلام" (the Windows term for the notification area). Drafted by Claude Opus 5.5 and checked with the same judge and method; each prompt held the locale's whole `firstRun` section for context and only the changed keys for review. One round: no issues, so no second round.
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 590 | 225 (216) | 815 | 3.0 | 0 | ok |
+| pt-BR | 1 | 633 | 401 (383) | 1034 | 4.1 | 0 | ok |
+| pt-PT | 1 | 641 | 367 (349) | 1008 | 4.5 | 0 | ok |
+| de | 1 | 645 | 356 (338) | 1001 | 3.5 | 0 | ok |
+| es | 1 | 641 | 298 (289) | 939 | 3.1 | 0 | ok |
+| ar | 1 | 708 | 1244 (1235) | 1952 | 8.8 | 0 | ok |
+| tr | 1 | 642 | 385 (367) | 1027 | 3.3 | 0 | ok |
+| hi | 1 | 650 | 287 (269) | 937 | 3.3 | 0 | ok |
+| zh-CN | 1 | 608 | 612 (604) | 1220 | 5.4 | 0 | ok |
+| ja | 1 | 633 | 369 (351) | 1002 | 3.8 | 0 | ok |
+| he | 1 | 759 | 694 (676) | 1453 | 5.7 | 0 | ok |
+| All (11 calls) | | 7150 | 5238 | 12388 | | 0 | |
