@@ -201,6 +201,17 @@ describe("preview tokens (AC4.3, L-043)", () => {
     }
   });
 
+  it("carries colours, shadows and color-scheme only, so the :lang() font stacks hold inside a pinned element", () => {
+    for (const other of ["--sm-font", "--sm-space", "--sm-radius", "--sm-measure", "--sm-fast", "--sm-base", "--sm-ease"]) {
+      expect(PREVIEW_TOKENS, other).not.toContain(other);
+    }
+    for (const theme of APPEARANCES) {
+      const block = new RegExp(`\\[data-tokens=${theme}\\]\\{([^}]*)\\}`).exec(PREVIEW_TOKENS)?.[1] ?? "";
+      expect(block).toContain(`color-scheme: ${theme}`);
+      expect(block).toMatch(/--sm-shadow-rest:[^;]*rgba\(/);
+    }
+  });
+
   it("scopes Swiss Moss's own light and dark values to data-tokens, so a preview shows either appearance", () => {
     for (const [theme, values] of Object.entries(THEMES)) {
       const block = new RegExp(`\\[data-tokens=${theme}\\]\\{([^}]*)\\}`).exec(PREVIEW_TOKENS)?.[1] ?? "";

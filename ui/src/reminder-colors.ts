@@ -48,13 +48,25 @@ export function tokensFor(color: InterruptColor, appearance?: "light" | "dark"):
   return color === "theme" ? appearance : "light";
 }
 
-const body = (start: number) => tokens.slice(tokens.indexOf("{", start) + 1, tokens.indexOf("}", start));
+/**
+ * The colour and shadow declarations of one Swiss Moss block, and its `color-scheme`. Fonts, spacing,
+ * radii, the measure and motion are left out, so the page's own values (the :lang() font stacks in
+ * local.css among them) still apply inside a pinned element.
+ */
+function colours(start: number): string {
+  const block = tokens.slice(tokens.indexOf("{", start) + 1, tokens.indexOf("}", start));
+  return block
+    .split(";")
+    .map((d) => d.trim())
+    .filter((d) => /^--sm-[\w-]+:.*(#[0-9A-Fa-f]{6}|rgba\()/.test(d) || d.startsWith("color-scheme:"))
+    .join(";");
+}
 
 /**
- * The Swiss Moss tokens of one appearance on any element with `data-tokens="light"` or `"dark"`, so a
- * preview can show the other appearance without changing the window's (L-043). The values are Swiss
- * Moss's own, read from the vendored tokens.css at build time; none is written here.
+ * Swiss Moss's colours of one appearance on any element with `data-tokens="light"` or `"dark"`, so a
+ * preview can show the other appearance and a pinned colour keeps its light values (L-043). The values
+ * are Swiss Moss's own, read from the vendored tokens.css at build time; none is written here.
  */
-export const PREVIEW_TOKENS = `[data-tokens=light]{${body(tokens.indexOf(":root {"))}}[data-tokens=dark]{${body(
+export const PREVIEW_TOKENS = `[data-tokens=light]{${colours(tokens.indexOf(":root {"))}}[data-tokens=dark]{${colours(
   tokens.indexOf(':root[data-theme="dark"] {'),
 )}}`;

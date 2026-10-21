@@ -653,6 +653,54 @@ test("the reminder colour reaches the interrupt: data-color info on a --sm-info 
   }
 });
 
+test("a pinned colour in a dark window keeps the light moss and the Arabic font stack (L-043)", async () => {
+  const main = await driver.getWindowHandle();
+  const saved = await invoke("settings_set", { patch: { appearance: "dark", interrupt_color: "moss", locale: "ar" } });
+  assert.equal(saved.answer?.interrupt_color, "moss", JSON.stringify(saved));
+  try {
+    await openTestInterrupt(main);
+    const seen = await waitFor("the pinned interrupt in a dark, Arabic window", () =>
+      driver.executeScript(() => {
+        const root = document.querySelector("main.tl-int");
+        const html = document.documentElement;
+        if (root?.dataset.color !== "moss" || html.dataset.theme !== "dark" || html.lang !== "ar") return null;
+        // --sm-moss as Swiss Moss's light block draws it, and as the dark window around the page does.
+        const fill = (tokens) => {
+          const probe = document.createElement("i");
+          if (tokens) probe.dataset.tokens = tokens;
+          probe.style.background = "var(--sm-moss)";
+          (tokens ? root : document.body).append(probe);
+          const value = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return value;
+        };
+        return {
+          tokens: root.dataset.tokens,
+          background: getComputedStyle(root).backgroundColor,
+          lightMoss: fill("light"),
+          darkMoss: fill(null),
+          font: getComputedStyle(root).getPropertyValue("--sm-font-sans"),
+          titleFont: getComputedStyle(document.querySelector(".tl-int-title") ?? root).fontFamily,
+        };
+      }),
+    );
+    assert.equal(seen.tokens, "light");
+    assert.equal(seen.background, seen.lightMoss, "the light moss, not the dark one");
+    assert.notEqual(seen.background, seen.darkMoss, "the window itself is dark, the pin is not");
+    assert.match(seen.font, /Noto Sans Arabic/, "the pin leaves the :lang(ar) font stack alone");
+    assert.match(seen.titleFont, /Noto Sans Arabic/);
+    try {
+      await (await driver.switchTo().activeElement()).sendKeys(Key.ESCAPE);
+    } catch (e) {
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
+    await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+  } finally {
+    await driver.switchTo().window(main);
+    await invoke("settings_set", { patch: { appearance: "auto", interrupt_color: "theme", locale: null } });
+  }
+});
+
 test("Preview in dark or light recolours the Appearance preview under the app's CSP (L-043)", async () => {
   await openPage("appearance");
   /** The preview's fill and token block, and the fill Swiss Moss's moss has in that block. */
