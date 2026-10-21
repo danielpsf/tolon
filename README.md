@@ -111,7 +111,7 @@ The full design is in [docs/architecture.md](docs/architecture.md).
 | M0 Skeleton | The app boots on all three systems, CI green | Done |
 | M1 Calendars | Add an iCal calendar, sync it, see today's meetings | Done |
 | M2 Alarms | The full-screen reminder, snooze, dismiss, join, keyboard | In progress |
-| M3 Daily use | Tray panel, pause, quiet hours, ignore rules, sound, start at login | In progress |
+| M3 Daily use | Tray panel, pause, quiet hours, ignore rules, sound, start at login | Done |
 | M4 Release | Signed updates, installers, `v0.1.0-beta.1` | In progress |
 | M5 Google | Google Calendar sign-in, `v0.1.0-beta.2` | Planned |
 

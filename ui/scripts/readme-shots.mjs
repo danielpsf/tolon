@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { extname, join, sep } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -157,7 +157,7 @@ const dist = join(ui, "dist");
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".woff": "font/woff", ".svg": "image/svg+xml", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   const path = join(dist, decodeURIComponent(new URL(req.url, "http://x").pathname));
-  if (!path.startsWith(dist) || !existsSync(path) || !statSync(path).isFile()) return res.writeHead(404).end();
+  if (!path.startsWith(dist + sep) || !existsSync(path) || !statSync(path).isFile()) return res.writeHead(404).end();
   res.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream" }).end(readFileSync(path));
 });
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
