@@ -6,6 +6,7 @@ import type {
   CalendarDto,
   CommandError,
   ListedDto,
+  NotifyCopyDto,
   PauseDto,
   SettingsDto,
   SnoozeDto,
@@ -42,6 +43,8 @@ export const api = {
   appHidePanel: () => invoke<void>("app_hide_panel"),
   appQuit: () => invoke<void>("app_quit"),
   trayTooltip: (text: string) => invoke<void>("tray_tooltip", { text }),
+  /** The fallback notification's wording in the active language (L-038). Settings window only. */
+  notifyCopySet: (copy: NotifyCopyDto) => invoke<void>("notify_copy_set", { copy }),
 };
 
 export const onSettingsChanged = (handler: () => void): Promise<UnlistenFn> => listen("settings:changed", handler);

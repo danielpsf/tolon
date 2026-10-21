@@ -34,6 +34,25 @@ export interface CommandError {
   code: CommandErrorCode | `invalid:${string}`;
 }
 
+/**
+ * The fallback notification's wording, from the active catalogue, for `notify_copy_set`
+ * (`NotifyCopy` in crates/tolon-app/src/notify_copy.rs). Finished sentences with `{title}` in
+ * `one_title` and `{time}` in `body`; Rust validates every field.
+ */
+export interface NotifyCopyDto {
+  locale: string;
+  test_title: string;
+  one_title: string;
+  /** For 2 to `NOTIFY_MANY_MAX` meetings, index 0 is 2. */
+  many_titles: string[];
+  many_over: string;
+  body: string;
+  snooze: string;
+  join: string;
+  /** The 1440 minutes of a day as the locale writes them, 00:00 first. */
+  times: string[];
+}
+
 export interface CalendarDto {
   id: string;
   name: string;

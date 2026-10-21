@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api, asCommandError, onCalendarsChanged, onSettingsChanged } from "./api";
 import type { CalendarDto, CommandError, SettingsDto, SettingsPatch } from "./api-types";
 import { initCopy } from "./copy";
+import { syncNotifyCopy } from "./notify-copy";
 import { applyAppearance } from "./theme";
 
 interface CalendarsState {
@@ -129,17 +130,29 @@ export function resetSettings(): void {
  * Loads the settings, reloads them on every `settings:changed`, and applies the appearance and the
  * language to this window whenever they change. `lang` (the query parameter) stands in when the
  * setting follows the system. Resolves once the first load is done, so the first render is right.
+ * `notification` (the settings window only) also hands Rust the notification's wording for the language shown.
  */
-export function startSettingsFeed(lang: string | null): Promise<void> {
+export function startSettingsFeed(lang: string | null, notification = false): Promise<void> {
   const { load } = useSettings.getState();
   initCopy(lang);
   applyAppearance("auto");
+  let sent = false;
   useSettings.subscribe(({ settings }, previous) => {
     if (!settings) return;
     if (settings.appearance !== previous.settings?.appearance) applyAppearance(settings.appearance);
-    if (settings.locale !== previous.settings?.locale) initCopy(settings.locale ?? lang);
+    if (settings.locale !== previous.settings?.locale) {
+      const c = initCopy(settings.locale ?? lang);
+      if (notification) {
+        syncNotifyCopy(c);
+        sent = true;
+      }
+    }
   });
   // No IPC (plain browser, tests): the window keeps the system language and theme.
   onSettingsChanged(() => void load()).catch(() => undefined);
-  return load();
+  // The notification (shown by Rust) speaks the language this window shows: sent when the first load
+  // fixes it (the subscription above, which also covers every later change), or after a failed load.
+  return load().finally(() => {
+    if (notification && !sent) syncNotifyCopy();
+  });
 }

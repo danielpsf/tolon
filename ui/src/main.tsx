@@ -11,7 +11,8 @@ import { App } from "./App";
 import { startSettingsFeed } from "./store";
 
 // `?lang=pt-PT` stands in for the system language (dev, tests) while the language setting follows the system.
-const settingsLoaded = startSettingsFeed(new URLSearchParams(window.location.search).get("lang"));
+// The settings window is the one that hands Rust the notification's wording (L-038); the other windows may not call it.
+const settingsLoaded = startSettingsFeed(new URLSearchParams(window.location.search).get("lang"), true);
 
 const root = document.getElementById("root");
 if (root) {

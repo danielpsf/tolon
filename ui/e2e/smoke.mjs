@@ -571,4 +571,6 @@ test("window rights: the settings window reads the pause and the current alarm, 
   // Still running, still not paused, and the tooltip command answers the settings window.
   assert.deepEqual(await invoke("app_status"), { answer: { paused_until: null } });
   assert.deepEqual(await invoke("tray_tooltip", { text: "Tolon" }), { answer: null });
+  // The notification's wording (L-038) answers the settings window, which refuses a bundle that is not valid.
+  assert.deepEqual(await invoke("notify_copy_set", { copy: {} }), { code: "invalid:notify_copy" });
 });

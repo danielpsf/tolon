@@ -11,8 +11,14 @@ const MINUTE = 60_000;
  * Every 12-hour locale (en-US, ar, hi) drops the leading zero as en-US does. Digits follow Intl.
  */
 export function formatTime(locale: Locale, at: Instant): string {
+  return timeFormatter(locale)(at);
+}
+
+/** `formatTime` for many instants: the formatters are built once. `timeZone` fixes the zone (UTC for a table of the day's minutes). */
+export function timeFormatter(locale: Locale, timeZone?: string): (at: Instant) => string {
   const hour = new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hour12 ? "numeric" : "2-digit";
-  return new Intl.DateTimeFormat(locale, { hour, minute: "2-digit" }).format(at);
+  const format = new Intl.DateTimeFormat(locale, { hour, minute: "2-digit", timeZone });
+  return (at) => format.format(at);
 }
 
 /**
