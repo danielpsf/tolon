@@ -213,7 +213,12 @@ describe("first run (F10)", () => {
     expect(scrollTo).toHaveBeenCalledTimes(2);
   });
 
-  it("D7, D9 the first-run text wraps without widows and Skip for now keeps a 40 px hit area", () => {
+  it("D7, D9, B3 local.css sets text-wrap on first run and the consequence line, the preview's button pair and Skip's 40 px minimum", () => {
+    expect(local).toMatch(/\.tl-int-consequence \{[^}]*text-wrap: balance;/);
+    expect(local).toMatch(/\.tl-preview-pair \{[^}]*display: inline-flex;/);
+    expect(renderToStaticMarkup(createElement(FirstRunPage))).toMatch(
+      /<span class="tl-preview-pair"><span class="sm-btn sm">[^<]+<\/span><span class="sm-btn sm">[^<]+<\/span><\/span>/,
+    );
     expect(local).toMatch(/\.tl-first :is\(h1, p, \.sm-body\) \{[^}]*text-wrap: pretty;/);
     expect(local).toMatch(/\.tl-first \.sm-btn\.quiet \{[^}]*min-block-size: 40px;[^}]*min-inline-size: 40px;/);
   });

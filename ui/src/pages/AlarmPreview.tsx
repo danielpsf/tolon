@@ -31,8 +31,11 @@ export function AlarmPreview({ color, tokens }: { color: InterruptColor; tokens?
         <p className="tl-preview-details">{i.details(range, "Google Meet", 0)}</p>
         <div className="tl-preview-actions">
           <span className="sm-btn sm tl-primary">{t.previewJoin}</span>
-          <span className="sm-btn sm">{i.snooze(SNOOZE_MINUTES)}</span>
-          <span className="sm-btn sm">{i.dismiss}</span>
+          {/* Snooze and Dismiss wrap as a pair, so a long locale never leaves Dismiss alone on a row (B3). */}
+          <span className="tl-preview-pair">
+            <span className="sm-btn sm">{i.snooze(SNOOZE_MINUTES)}</span>
+            <span className="sm-btn sm">{i.dismiss}</span>
+          </span>
         </div>
       </div>
       <figcaption className="sm-caption">{t.previewLabel}</figcaption>

@@ -359,7 +359,9 @@
   background: var(--tl-fg);
   color: var(--tl-primary-fg);
 }
+/* Balanced lines, so the sentence never ends with "computer." alone (B3). */
 .tl-int-consequence {
+  text-wrap: balance;
   flex: 1 1 calc(280 * var(--tl-u));
   max-width: calc(460 * var(--tl-u));
   margin: 0;
@@ -552,6 +554,10 @@
   flex-wrap: wrap;
   gap: var(--sm-space-2);
   margin-top: var(--sm-space-7);
+}
+.tl-preview-pair {
+  display: inline-flex;
+  gap: var(--sm-space-2);
 }
 .tl-preview .sm-btn {
   border-color: var(--tl-fg);
