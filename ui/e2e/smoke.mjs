@@ -630,11 +630,23 @@ async function updateServer(state) {
 }
 
 const byText = (text) => driver.findElements(By.xpath(`//*[normalize-space()=${JSON.stringify(text)}]`));
-/** Clicks the button once it is there and enabled (the page disables them while a command runs). */
+/**
+ * Clicks the button once it is there and enabled (the page disables them while a command runs). The page
+ * re-renders on `update:changed` too, so a button found a moment ago can be gone: look it up again.
+ */
 async function clickButton(text) {
-  const found = await driver.wait(until.elementLocated(By.xpath(`//button[normalize-space()=${JSON.stringify(text)}]`)), WAIT);
-  await driver.wait(until.elementIsEnabled(found), WAIT);
-  await found.click();
+  const xpath = By.xpath(`//button[normalize-space()=${JSON.stringify(text)}]`);
+  await waitFor(`the ${text} button`, async () => {
+    try {
+      const [found] = await driver.findElements(xpath);
+      if (!found || !(await found.isEnabled())) return false;
+      await found.click();
+      return true;
+    } catch (e) {
+      if (e instanceof error.StaleElementReferenceError) return false;
+      throw e;
+    }
+  });
 }
 const shows = (step, text) => waitFor(step, async () => (await byText(text)).length > 0);
 
