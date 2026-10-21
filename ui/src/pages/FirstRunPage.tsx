@@ -45,6 +45,11 @@ export function trayTitle(t: Messages["firstRun"], place: TrayPlace | null): str
   return place === "menu_bar" ? t.trayMenuBar : t.traySystemTray;
 }
 
+/** How to bring this window back when the tray icon is hidden: Finder or Spotlight on macOS, the app list elsewhere. */
+export function trayHidden(t: Messages["firstRun"], place: TrayPlace): string {
+  return place === "menu_bar" ? t.trayHiddenMenuBar : t.trayHiddenSystemTray;
+}
+
 /** Where the tray icon lives on this OS, from Rust; "tray" when it cannot say. Null while asking. */
 function useTrayPlace(): TrayPlace | null {
   const [place, setPlace] = useState<TrayPlace | null>(null);
@@ -151,6 +156,8 @@ export function FirstRunPage() {
                 </div>
               )}
               <div className="sm-body">{t.trayBody}</div>
+              {/* The way back when the icon is hidden (decision "Reaching Tolon without the tray"). */}
+              {place && <div className="sm-body">{trayHidden(t, place)}</div>}
             </div>
           </li>
         </ol>

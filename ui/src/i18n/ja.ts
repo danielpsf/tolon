@@ -162,6 +162,8 @@ export const ja: Messages = {
     trayMenuBar: "Tolon はメニューバーにあります",
     traySystemTray: "Tolon はシステムトレイにあります",
     trayBody: "カレンダーを追加すると、このウィンドウは閉じます。Tolon のアイコンをクリックすると、今日の会議を確認したり、アラームを一時停止したり、設定を開いたりできます。",
+    trayHiddenMenuBar: "メニューバーでアイコンが隠れている場合は、Finder か Spotlight から Tolon をもう一度開くと、このウィンドウが再び表示されます。",
+    trayHiddenSystemTray: "アイコンが隠れている場合は、アプリの一覧から Tolon をもう一度開くと、このウィンドウが再び表示されます。",
     pasteIcal: "iCal リンクを貼り付け",
     tryAlarm: "テストアラームを鳴らす",
     previewLabel: "アラームのプレビュー",

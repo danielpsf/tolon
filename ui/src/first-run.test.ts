@@ -12,7 +12,7 @@ import {
   startFirstRunWatch,
   useFirstRun,
 } from "./first-run";
-import { FirstRunPage, trayTitle } from "./pages/FirstRunPage";
+import { FirstRunPage, trayHidden, trayTitle } from "./pages/FirstRunPage";
 import local from "./styles/local.css?raw";
 import { useCalendars } from "./store";
 
@@ -189,6 +189,16 @@ describe("first run (F10)", () => {
     expect(t.traySystemTray).toContain("Tolon");
     expect(t.skipConsequence).toContain("Tolon");
     expect(t.trayMenuBar).not.toBe(t.traySystemTray);
+  });
+
+  it.each(LOCALES)("%s step 3 says how to bring the window back when the tray icon is hidden", (locale) => {
+    const t = createCopy(locale).t.firstRun;
+    expect(trayHidden(t, "menu_bar")).toBe(t.trayHiddenMenuBar);
+    expect(trayHidden(t, "tray")).toBe(t.trayHiddenSystemTray);
+    // macOS names Finder and Spotlight; Windows and Linux do not have them.
+    expect(t.trayHiddenMenuBar).toMatch(/Finder|访达/);
+    expect(t.trayHiddenSystemTray).not.toMatch(/Finder|Spotlight|访达/);
+    for (const s of [t.trayHiddenMenuBar, t.trayHiddenSystemTray]) expect(s).toContain("Tolon");
   });
 
   it("D6, D8 focus starts on Paste an iCal link without scrolling, and the page opens at its top", () => {

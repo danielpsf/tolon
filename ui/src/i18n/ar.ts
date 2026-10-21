@@ -208,6 +208,8 @@ export const ar: Messages = {
     trayMenuBar: "يوجد Tolon في شريط القوائم",
     traySystemTray: "يوجد Tolon في منطقة الإعلام",
     trayBody: "تُغلق هذه النافذة بعد إضافة تقويم. انقر على أيقونة Tolon لعرض اجتماعات اليوم أو إيقاف التنبيهات مؤقتًا أو فتح الإعدادات.",
+    trayHiddenMenuBar: "إذا أخفى شريط القوائم الأيقونة، فافتح Tolon مرة أخرى من Finder أو Spotlight لتعود هذه النافذة.",
+    trayHiddenSystemTray: "إذا كانت الأيقونة مخفية، فافتح Tolon مرة أخرى من قائمة التطبيقات لتعود هذه النافذة.",
     pasteIcal: "لصق رابط iCal",
     tryAlarm: "تشغيل تنبيه تجريبي",
     previewLabel: "معاينة التنبيه",

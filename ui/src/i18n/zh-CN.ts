@@ -162,6 +162,8 @@ export const zhCN: Messages = {
     trayMenuBar: "Tolon 在菜单栏中",
     traySystemTray: "Tolon 在系统托盘中",
     trayBody: "添加日历后，此窗口会关闭。点击 Tolon 图标即可查看今天的会议、暂停提醒或打开设置。",
+    trayHiddenMenuBar: "如果菜单栏遮住了图标，从访达或聚焦搜索再次打开 Tolon，即可重新显示此窗口。",
+    trayHiddenSystemTray: "如果图标被隐藏，从应用列表再次打开 Tolon，即可重新显示此窗口。",
     pasteIcal: "粘贴 iCal 链接",
     tryAlarm: "体验测试提醒",
     previewLabel: "提醒预览",

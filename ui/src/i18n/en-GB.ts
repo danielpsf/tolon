@@ -165,6 +165,8 @@ export const enGB: Messages = {
     trayMenuBar: "Tolon is in the menu bar",
     traySystemTray: "Tolon is in the system tray",
     trayBody: "This window closes once you add a calendar. Click the Tolon icon to see today's meetings, pause alarms or open the settings.",
+    trayHiddenMenuBar: "If the menu bar hides the icon, open Tolon again from Finder or Spotlight to bring this window back.",
+    trayHiddenSystemTray: "If the icon is hidden, open Tolon again from your list of apps to bring this window back.",
     pasteIcal: "Paste an iCal link",
     tryAlarm: "Try a test alarm",
     previewLabel: "Preview of the alarm",

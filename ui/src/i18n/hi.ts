@@ -165,6 +165,8 @@ export const hi: Messages = {
     trayMenuBar: "Tolon मेन्यू बार में है",
     traySystemTray: "Tolon सिस्टम ट्रे में है",
     trayBody: "कैलेंडर जोड़ते ही यह विंडो बंद हो जाती है। आज की मीटिंग देखने, अलार्म रोकने या सेटिंग्स खोलने के लिए Tolon आइकन पर क्लिक करें।",
+    trayHiddenMenuBar: "अगर मेन्यू बार आइकन को छिपा दे, तो यह विंडो वापस लाने के लिए Finder या Spotlight से Tolon को फिर से खोलें।",
+    trayHiddenSystemTray: "अगर आइकन छिपा हो, तो यह विंडो वापस लाने के लिए ऐप की सूची से Tolon को फिर से खोलें।",
     pasteIcal: "iCal लिंक चिपकाएं",
     tryAlarm: "टेस्ट अलार्म चलाएं",
     previewLabel: "अलार्म का प्रीव्यू",

@@ -195,6 +195,8 @@ export const he: Messages = {
     trayMenuBar: "Tolon נמצא בשורת התפריטים",
     traySystemTray: "Tolon נמצא במגש המערכת",
     trayBody: "החלון הזה ייסגר אחרי הוספת יומן. אפשר ללחוץ על הסמל של Tolon כדי לראות את הפגישות של היום, להשהות התראות או לפתוח את ההגדרות.",
+    trayHiddenMenuBar: "אם שורת התפריטים מסתירה את הסמל, אפשר לפתוח שוב את Tolon מ-Finder או מ-Spotlight כדי להחזיר את החלון הזה.",
+    trayHiddenSystemTray: "אם הסמל מוסתר, אפשר לפתוח שוב את Tolon מרשימת האפליקציות כדי להחזיר את החלון הזה.",
     pasteIcal: "הדבקת קישור iCal",
     tryAlarm: "הפעלת התראת בדיקה",
     previewLabel: "תצוגה מקדימה של ההתראה",
