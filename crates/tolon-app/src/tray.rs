@@ -1,8 +1,9 @@
 //! The tray icon and its panel (F7, mockup 02).
 //!
-//! - The icon is a template image on macOS (black and alpha, tinted by the menu bar) and the moss
-//!   colour elsewhere; a paused variant shows two bars (AC7.3). Placeholder until the logo is
-//!   chosen: `icons/tray/draw.py` draws all four.
+//! - The icon is Peek's mark in colour on every platform (decision "The poll picks Peek"; never a
+//!   template image, a thin cream edge keeps it readable on a dark bar); a paused variant has a
+//!   badge with two bars (AC7.3). 44 px for the macOS menu bar, 32 px elsewhere:
+//!   `icons/tray/draw.py` builds all four.
 //! - A click on the icon shows the panel under it (above it when the icon sits low on its screen,
 //!   as on the Windows taskbar) or hides it; the panel hides when it loses focus. Linux trays
 //!   (AppIndicator) report no clicks, only menus, so there the icon carries a one-item menu,
@@ -36,17 +37,17 @@ const BLUR_GRACE: Duration = Duration::from_millis(300);
 /// Windows keeps at most 127 UTF-16 units of a tray tooltip (`NOTIFYICONDATAW.szTip`).
 const MAX_TOOLTIP_UNITS: usize = 127;
 
-/// The macOS menu bar takes template images; other trays get the colour icon.
-fn template() -> bool {
+/// The macOS menu bar, which takes 22 pt icons (44 px at 2x); other trays take the 32 px one.
+fn menu_bar() -> bool {
     NATIVE.tray_style().template_icon
 }
 
 fn icon(paused: bool) -> Image<'static> {
-    match (template(), paused) {
-        (true, false) => tauri::include_image!("icons/tray/template.png"),
-        (true, true) => tauri::include_image!("icons/tray/template-paused.png"),
-        (false, false) => tauri::include_image!("icons/tray/color.png"),
-        (false, true) => tauri::include_image!("icons/tray/color-paused.png"),
+    match (menu_bar(), paused) {
+        (true, false) => tauri::include_image!("icons/tray/peek-44.png"),
+        (true, true) => tauri::include_image!("icons/tray/peek-44-paused.png"),
+        (false, false) => tauri::include_image!("icons/tray/peek-32.png"),
+        (false, true) => tauri::include_image!("icons/tray/peek-32-paused.png"),
     }
 }
 
@@ -62,7 +63,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     app.manage(PanelState::default());
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon(false))
-        .icon_as_template(template())
+        .icon_as_template(false)
         .tooltip("Tolon")
         .show_menu_on_left_click(false)
         .on_tray_icon_event(on_icon_event);
@@ -102,7 +103,7 @@ fn on_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
 /// The paused icon, or the normal one (AC7.3).
 pub fn set_paused(app: &AppHandle, paused: bool) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        if let Err(e) = tray.set_icon_with_as_template(Some(icon(paused)), template()) {
+        if let Err(e) = tray.set_icon_with_as_template(Some(icon(paused)), false) {
             tracing::warn!(error = %e, "could not change the tray icon");
         }
     }
