@@ -345,3 +345,52 @@ One more string, `notification.untitled` (the title of a meeting that has none),
 | ja | 1 | 160 | 267 (258) | 427 | 3.3 | 0 | ok |
 | he | 1 | 188 | 188 (179) | 376 | 2.2 | 0 | ok |
 | All (11 calls) | | 1818 | 2152 | 3970 | | 0 | |
+
+## L-018
+
+The first-run copy of L-018 (14 new strings in a `firstRun` section: headline, lead, three step titles and bodies with two variants of the tray step, the two buttons, the preview caption, the sample meeting title and the footer; the preview's buttons, time range and details reuse `interrupt.*`) was drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues and checked by the same judge. en-US is the source and was not judged; en-GB is the same text.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, JSON response format.
+- One locale per call. Each prompt held the en-US and the locale's `firstRun` section, the neighbouring strings of the locale for consistent terms (`testTitle`, `joinCall`, `dismiss`, `hintJoin`, `pasteIcalUrl`, `addCalendar`, `urlHint`), where the strings show (the first-run window, and that `trayMenuBar` is macOS and `traySystemTray` Windows and Linux), the copy rules and the language rules of the L-039 method.
+- Round 2 ran only on the locales with an accepted round 1 fix (pt-BR, pt-PT, es, zh-CN, ja). Two rounds at most.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 911 | 888 (870) | 1799 | 7.7 | 0 | ok |
+| pt-BR | 1 | 955 | 3309 (3197) | 4264 | 33.3 | 1 | fix |
+| pt-PT | 1 | 974 | 2674 (2555) | 3648 | 13.4 | 1 | fix |
+| de | 1 | 965 | 936 (927) | 1901 | 7.5 | 0 | ok |
+| es | 1 | 957 | 1403 (1316) | 2360 | 13.7 | 1 | fix |
+| ar | 1 | 1000 | 1251 (1242) | 2251 | 9.7 | 0 | ok |
+| tr | 1 | 961 | 2267 (2249) | 3228 | 18.6 | 0 | ok |
+| hi | 1 | 978 | 1482 (1473) | 2460 | 8.8 | 0 | ok |
+| zh-CN | 1 | 939 | 4814 (4707) | 5753 | 42.4 | 1 | fix |
+| ja | 1 | 968 | 3705 (3464) | 4673 | 32.9 | 2 | fix |
+| he | 1 | 1076 | 2226 (2208) | 3302 | 24.0 | 0 | ok |
+| pt-BR | 2 | 956 | 1813 (1795) | 2769 | 9.6 | 0 | ok |
+| pt-PT | 2 | 975 | 1513 (1495) | 2488 | 12.2 | 0 | ok |
+| es | 2 | 956 | 1572 (1563) | 2528 | 14.8 | 0 | ok |
+| zh-CN | 2 | 938 | 2925 (2798) | 3863 | 15.3 | 1 | fix |
+| ja | 2 | 969 | 2484 (2367) | 3453 | 19.9 | 1 | fix |
+| All (16 calls) | | 15478 | 35262 | 50740 | | 8 | |
+
+### Issues and decisions
+
+8 issues: 6 accepted (1 in part), 2 rejected (the same point twice).
+
+| Locale | Round | Key | Judge's point | Decision |
+|---|---|---|---|---|
+| pt-BR | 1 | `firstRun.footer` | "é código aberto" is a calque; Portuguese says "é de código aberto". | Accepted. Round 2 ok. |
+| pt-PT | 1 | `firstRun.footer` | Same point as pt-BR. | Accepted. Round 2 ok. |
+| es | 1 | `firstRun.addTitle` | "Añade" clashes with the catalogue's "Agregar calendario"; neutral Spanish prefers "agregar". | Accepted: "Agrega un calendario". The implementer also changed `trayBody` to "cuando agregues" for the same reason. Round 2 ok. The older `keywordPlaceholder` and `keywordsHint` still say "añadir"; left for the native review. |
+| zh-CN | 1 | `firstRun.tryAlarm` | "试用测试提醒" doubles "试" and reads like a product trial. | Accepted: "体验测试提醒". |
+| ja | 1 | `firstRun.lead` | "見守り" suggests caring for a person; and "画面を表示します" loses "takes over the screen". | In part: "見守り" became "チェックし". "画面を表示します" stays, because every ja string for the takeover uses it (`takeOver` "全画面表示", `atLoginHint`, the Rules and Quiet hours subtitles); changing one string would split the term. Left for the native review. |
+| ja | 1 | `firstRun.trayBody` | Two nouns and a verb phrase in one list read as "確認を開く". | Accepted: "今日の会議を確認したり、アラームを一時停止したり、設定を開いたりできます。" |
+| zh-CN | 2 | `firstRun.lead` | "关注" reads as a social "follow"; the second sentence is a literal translation. | Accepted without a third round (two rounds at most): "Tolon 会监测你的日历，在会议开始前接管屏幕。数据不会发送至任何地方。" Not re-checked by the judge. |
+| ja | 2 | `firstRun.lead` | "画面を表示します" again; suggests "画面を占有します". | Rejected, as in round 1: the catalogue's term for the takeover. Native review to decide for every ja string at once. |
+
+Choices recorded with this review: the tray step names the menu bar (macOS) or the system tray (Windows, Linux); pt-PT says "área de notificação", German "Infobereich". The sample meeting title in the preview is translated, as a person would name such a meeting. "Apache 2.0" keeps its dot in zh-CN and ja; the full-width punctuation test now ignores a dot between digits. Native review is still required before release.
