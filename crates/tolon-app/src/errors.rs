@@ -19,6 +19,9 @@ impl AppError {
     pub const NOT_READY: Self = Self("not_ready");
     pub const DB_ERROR: Self = Self("db_error");
     pub const INTERNAL: Self = Self("internal");
+    /// The OS refused to add or remove the login item (AC9.4), such as macOS for a build that
+    /// is not an installed app bundle.
+    pub const LOGIN_ITEM: Self = Self("login_item");
 }
 
 impl fmt::Display for AppError {

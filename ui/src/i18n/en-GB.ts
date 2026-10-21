@@ -96,7 +96,8 @@ export const enGB: Messages = {
       subtitle: "Tolon can start on its own, so no meeting slips by after a restart.",
       atLogin: "Start Tolon when I log in",
       atLoginHint: "Tolon waits in the background and takes over the screen only before a meeting.",
-      notAvailable: "Start at login is not available yet.",
+      requiresApproval: "Allow Tolon in System Settings, Login Items, so it starts when you log in.",
+      unavailable: "Tolon could not read this setting from the system.",
     },
   },
   interrupt: {
@@ -165,6 +166,7 @@ export const enGB: Messages = {
       not_ready: "Tolon is still starting. Try again in a moment.",
       db_error: "Tolon could not save that change. Try again.",
       internal: "Something went wrong inside Tolon. Try again.",
+      login_item: "The system did not let Tolon change this. Start at login works only for an installed copy of Tolon.",
     },
   },
 };

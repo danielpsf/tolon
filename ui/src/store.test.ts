@@ -22,6 +22,7 @@ const stored: SettingsDto = {
   appearance: "auto",
   locale: null,
   start_at_login: false,
+  start_at_login_status: null,
 };
 
 /** A promise the test settles by hand, to look at the page while a save is on its way. */

@@ -96,7 +96,8 @@ export const ptBR: Messages = {
       subtitle: "O Tolon pode abrir sozinho, para nenhuma reunião passar despercebida depois de reiniciar.",
       atLogin: "Abrir o Tolon ao fazer login",
       atLoginHint: "O Tolon espera em segundo plano e só toma conta da tela antes de uma reunião.",
-      notAvailable: "Abrir ao fazer login ainda não está disponível.",
+      requiresApproval: "Permita o Tolon em Ajustes do Sistema, em Itens de Início, para ele abrir ao fazer login.",
+      unavailable: "O Tolon não conseguiu ler essa opção do sistema.",
     },
   },
   interrupt: {
@@ -165,6 +166,7 @@ export const ptBR: Messages = {
       not_ready: "O Tolon ainda está iniciando. Tente de novo em instantes.",
       db_error: "O Tolon não conseguiu salvar a alteração. Tente de novo.",
       internal: "Algo deu errado dentro do Tolon. Tente de novo.",
+      login_item: "O sistema não deixou o Tolon mudar isso. Abrir ao fazer login só funciona com o Tolon instalado.",
     },
   },
 };

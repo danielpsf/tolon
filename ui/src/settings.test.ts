@@ -66,6 +66,16 @@ describe("settings pages", () => {
     expect(en.commandError({ code: "invalid:start_at_login" })).toBe("Tolon could not save that value. Try another one.");
     expect(createCopy("de").commandError({ code: "invalid:lead_minutes" })).toBe("Wähle eine Vorlaufzeit von 1 bis 60 Minuten.");
   });
+
+  it("AC9.4 explains a refused login item and one that waits for approval", () => {
+    const en = createCopy("en-US");
+    expect(en.commandError({ code: "login_item" })).toBe(
+      "The system did not let Tolon change this. Start at login works only for an installed copy of Tolon.",
+    );
+    expect(en.t.settings.startup.requiresApproval).toBe(
+      "Allow Tolon in System Settings, Login Items, so it starts when you log in.",
+    );
+  });
 });
 
 describe("ignore keywords (AC8.2)", () => {

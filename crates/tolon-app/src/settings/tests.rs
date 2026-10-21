@@ -40,6 +40,7 @@ fn defaults() -> SettingsDto {
         appearance: Appearance::Auto,
         locale: None,
         start_at_login: false,
+        start_at_login_status: None,
     }
 }
 
@@ -59,7 +60,8 @@ fn the_dto_serialises_with_the_contract_field_names() -> TestResult {
             "quiet": { "enabled": false, "start": "18:00", "end": "09:00", "weekends": true },
             "ignore": { "all_day": true, "declined": true, "cancelled": true, "no_attendees": false,
                         "keywords": ["Focus", "Lunch", "OOO"] },
-            "appearance": "auto", "locale": null, "start_at_login": false
+            "appearance": "auto", "locale": null, "start_at_login": false,
+            "start_at_login_status": null
         })
     );
     Ok(())
@@ -97,6 +99,7 @@ fn everything_dto() -> SettingsDto {
         appearance: Appearance::Dark,
         locale: Some("pt-BR".into()),
         start_at_login: true,
+        start_at_login_status: None,
     }
 }
 
@@ -401,5 +404,39 @@ fn nested_patches_may_be_complete_or_partial() -> TestResult {
     );
     // An empty nested object changes nothing.
     assert_eq!(apply(&db, &json!({ "quiet": {}, "ignore": {} }))?, s);
+    Ok(())
+}
+
+/// AC9.4: the settings window sees the login item as the OS reports it, never the stored flag.
+#[test]
+fn ac9_4_the_switch_shows_what_the_os_reports() -> TestResult {
+    let stored = apply(&db()?, &json!({ "start_at_login": true }))?;
+    assert!(stored.start_at_login, "the preference is saved");
+    for (os, on, status) in [
+        (Ok(StartAtLogin::Enabled), true, "enabled"),
+        (Ok(StartAtLogin::Disabled), false, "disabled"),
+        (
+            Ok(StartAtLogin::RequiresApproval),
+            false,
+            "requires_approval",
+        ),
+        (Err(PlatformError::Unsupported), false, "unavailable"),
+    ] {
+        let dto = with_login(stored.clone(), os);
+        assert_eq!(
+            (dto.start_at_login, dto.start_at_login_status),
+            (on, Some(status))
+        );
+    }
+    Ok(())
+}
+
+/// AC9.4: a change reaches the login item and the answer is read back from it. The stub keeps
+/// one flag in memory, so no real login item is registered on the machine running the tests.
+#[test]
+fn ac9_4_set_login_registers_and_reads_back() -> TestResult {
+    let stub = tolon_platform::StubPlatform;
+    assert_eq!(set_login(&stub, true)?, StartAtLogin::Enabled);
+    assert_eq!(set_login(&stub, false)?, StartAtLogin::Disabled);
     Ok(())
 }

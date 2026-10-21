@@ -96,7 +96,8 @@ export const ptPT: Messages = {
       subtitle: "O Tolon pode iniciar sozinho, para que nenhuma reunião passe despercebida depois de reiniciar.",
       atLogin: "Iniciar o Tolon ao iniciar sessão",
       atLoginHint: "O Tolon fica à espera em segundo plano e só ocupa o ecrã antes de uma reunião.",
-      notAvailable: "O início ao iniciar sessão ainda não está disponível.",
+      requiresApproval: "Permita o Tolon nas Definições do Sistema, em Elementos de início de sessão, para que arranque ao iniciar sessão.",
+      unavailable: "O Tolon não conseguiu ler esta definição do sistema.",
     },
   },
   interrupt: {
@@ -165,6 +166,7 @@ export const ptPT: Messages = {
       not_ready: "O Tolon ainda está a iniciar. Tente novamente dentro de instantes.",
       db_error: "O Tolon não conseguiu guardar a alteração. Tente novamente.",
       internal: "Ocorreu um erro interno no Tolon. Tente novamente.",
+      login_item: "O sistema não deixou o Tolon alterar isto. O início ao iniciar sessão só funciona com o Tolon instalado.",
     },
   },
 };

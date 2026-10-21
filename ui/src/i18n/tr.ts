@@ -95,7 +95,8 @@ export const tr: Messages = {
       subtitle: "Tolon kendiliğinden açılabilir, böylece yeniden başlatmadan sonra hiçbir toplantı kaçmaz.",
       atLogin: "Oturum açınca Tolon'u başlat",
       atLoginHint: "Tolon arka planda bekler ve ekranı yalnızca toplantıdan önce kaplar.",
-      notAvailable: "Oturum açınca başlatma henüz kullanılamıyor.",
+      requiresApproval: "Oturum açtığında başlaması için Sistem Ayarları'nda, Giriş Öğeleri altında Tolon'a izin ver.",
+      unavailable: "Tolon bu ayarı sistemden okuyamadı.",
     },
   },
   interrupt: {
@@ -161,6 +162,7 @@ export const tr: Messages = {
       not_ready: "Tolon hâlâ açılıyor. Birazdan yeniden dene.",
       db_error: "Tolon bu değişikliği kaydedemedi. Yeniden dene.",
       internal: "Tolon'da bir sorun oluştu. Yeniden dene.",
+      login_item: "Sistem, Tolon'un bunu değiştirmesine izin vermedi. Oturum açınca başlatma yalnızca yüklü bir Tolon ile çalışır.",
     },
   },
 };

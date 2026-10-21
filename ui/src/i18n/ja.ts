@@ -95,7 +95,8 @@ export const ja: Messages = {
       subtitle: "Tolon を自動で起動すれば、再起動のあとも会議を逃しません。",
       atLogin: "ログイン時に Tolon を起動",
       atLoginHint: "Tolon はバックグラウンドで待機し、会議の前だけ画面を表示します。",
-      notAvailable: "ログイン時の起動はまだ利用できません。",
+      requiresApproval: "ログイン時に起動できるよう、「システム設定」の「ログイン項目」で Tolon を許可してください。",
+      unavailable: "Tolon はこの設定をシステムから読み取れませんでした。",
     },
   },
   interrupt: {
@@ -161,6 +162,7 @@ export const ja: Messages = {
       not_ready: "Tolon はまだ起動中です。少し待ってからもう一度お試しください。",
       db_error: "Tolon は変更を保存できませんでした。もう一度お試しください。",
       internal: "Tolon の内部でエラーが発生しました。もう一度お試しください。",
+      login_item: "システムが Tolon によるこの変更を許可しませんでした。ログイン時の起動は、インストールした Tolon でのみ使えます。",
     },
   },
 };

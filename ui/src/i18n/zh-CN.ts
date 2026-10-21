@@ -95,7 +95,8 @@ export const zhCN: Messages = {
       subtitle: "Tolon 可以自动启动，重启后也不会错过会议。",
       atLogin: "登录时启动 Tolon",
       atLoginHint: "Tolon 在后台等待，只在会议开始前接管屏幕。",
-      notAvailable: "登录时启动功能尚不可用。",
+      requiresApproval: "请在“系统设置”的“登录项”中允许 Tolon，以便在登录时启动。",
+      unavailable: "Tolon 无法从系统读取此设置。",
     },
   },
   interrupt: {
@@ -161,6 +162,7 @@ export const zhCN: Messages = {
       not_ready: "Tolon 仍在启动中，请稍后再试。",
       db_error: "Tolon 无法保存此更改，请重试。",
       internal: "Tolon 内部出错，请重试。",
+      login_item: "系统不允许 Tolon 更改此设置。登录时启动仅适用于已安装的 Tolon。",
     },
   },
 };

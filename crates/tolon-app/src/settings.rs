@@ -16,7 +16,7 @@ use tolon_core::{
     AlarmSettings, ExpandOptions, IgnoreRules, QuietHours, ALL_DAY_AT, MAX_LEAD_MINUTES,
     MIN_LEAD_MINUTES,
 };
-use tolon_platform::Sound;
+use tolon_platform::{Platform, PlatformError, Sound, StartAtLogin};
 use tolon_store::Store;
 
 use crate::errors::AppError;
@@ -106,7 +106,13 @@ pub struct SettingsDto {
     pub appearance: Appearance,
     /// `None`: follow the system.
     pub locale: Option<String>,
+    /// On only when the OS will start Tolon (AC9.4). The settings window reads it from the OS
+    /// (`with_login`); other windows and `settings:changed` get the stored preference.
     pub start_at_login: bool,
+    /// What the OS said, for the settings window: `enabled`, `disabled`, `requires_approval`
+    /// (macOS: allowed in System Settings, Login Items, not yet) or `unavailable` (the OS could
+    /// not be asked). `None` when not read.
+    pub start_at_login_status: Option<&'static str>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -254,9 +260,35 @@ pub fn read(store: &Store) -> anyhow::Result<SettingsDto> {
             .and_then(|v| serde_json::from_value(v).ok())
             .unwrap_or(Appearance::Auto),
         locale: text(LOCALE)?.filter(|l| LOCALES.contains(&l.as_str())),
-        // shortcut: the stored preference only, the OS login item is not read back yet (AC9.4); wired by L-041 follow-up.
         start_at_login: flag(store, START_AT_LOGIN, false)?,
+        start_at_login_status: None,
     })
+}
+
+/// `dto` with the login item as the OS reports it (AC9.4): the switch shows on only for
+/// `Enabled`; an OS that cannot be asked reads as off with status `unavailable`.
+pub fn with_login(mut dto: SettingsDto, os: Result<StartAtLogin, PlatformError>) -> SettingsDto {
+    match os {
+        Ok(state) => {
+            dto.start_at_login = state.is_enabled();
+            dto.start_at_login_status = Some(state.code());
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "could not read the login item");
+            dto.start_at_login = false;
+            dto.start_at_login_status = Some("unavailable");
+        }
+    }
+    dto
+}
+
+/// Adds or removes the login item, then reads it back: macOS may register and still wait for
+/// approval (L-041). Call it on the main thread.
+pub fn set_login(platform: &dyn Platform, enabled: bool) -> Result<StartAtLogin, PlatformError> {
+    platform
+        .set_start_at_login(enabled)
+        .inspect_err(|e| tracing::warn!(error = %e, enabled, "could not change the login item"))?;
+    platform.start_at_login()
 }
 
 pub fn get(db: &Db) -> anyhow::Result<SettingsDto> {

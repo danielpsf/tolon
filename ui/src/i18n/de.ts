@@ -96,7 +96,8 @@ export const de: Messages = {
       subtitle: "Tolon kann von selbst starten, damit nach einem Neustart kein Termin durchrutscht.",
       atLogin: "Tolon bei der Anmeldung starten",
       atLoginHint: "Tolon wartet im Hintergrund und übernimmt den Bildschirm nur vor einem Termin.",
-      notAvailable: "Der Start bei der Anmeldung ist noch nicht verfügbar.",
+      requiresApproval: "Erlaube Tolon in den Systemeinstellungen unter Anmeldeobjekte, damit es beim Anmelden startet.",
+      unavailable: "Tolon konnte diese Einstellung nicht vom System lesen.",
     },
   },
   interrupt: {
@@ -165,6 +166,7 @@ export const de: Messages = {
       not_ready: "Tolon startet noch. Versuch es gleich noch einmal.",
       db_error: "Tolon konnte die Änderung nicht speichern. Versuch es noch einmal.",
       internal: "In Tolon ist etwas schiefgelaufen. Versuch es noch einmal.",
+      login_item: "Das System hat Tolon diese Änderung nicht erlaubt. Der Start bei der Anmeldung funktioniert nur mit einer installierten Version von Tolon.",
     },
   },
 };

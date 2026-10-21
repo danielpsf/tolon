@@ -6,6 +6,7 @@
 
 use chrono::Utc;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tolon_platform::PlatformError;
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
@@ -38,6 +39,33 @@ fn main_or_interrupt(label: &str) -> Result<(), CommandError> {
     } else {
         main_only(label)
     }
+}
+
+/// Runs `f` on the main thread, where every `Platform` call belongs, and waits for it. `None`
+/// when the main thread cannot be reached.
+async fn on_main<T: Send + 'static>(
+    app: &AppHandle,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let sent = app.run_on_main_thread(move || {
+        // The receiver only goes away when the caller does.
+        let _ = tx.send(f());
+    });
+    match sent {
+        Ok(()) => rx.await.ok(),
+        Err(e) => {
+            tracing::warn!(error = %e, "could not reach the main thread");
+            None
+        }
+    }
+}
+
+/// The login item as the OS reports it now (AC9.4).
+async fn login_state(app: &AppHandle) -> Result<tolon_platform::StartAtLogin, PlatformError> {
+    on_main(app, || crate::interrupt::native().start_at_login())
+        .await
+        .unwrap_or(Err(PlatformError::Unsupported))
 }
 
 pub struct AppState {
@@ -238,9 +266,14 @@ pub async fn settings_get(
     window: tauri::WebviewWindow,
 ) -> Result<SettingsDto, CommandError> {
     main_or_interrupt(window.label())?;
-    state(&app)
+    let dto = state(&app)
         .and_then(|s| settings::get(&s.db))
-        .map_err(|e| command_error(&e))
+        .map_err(|e| command_error(&e))?;
+    // Only the settings window shows the login item; the others need no trip to the OS.
+    if window.label() == MAIN_WINDOW {
+        return Ok(settings::with_login(dto, login_state(&app).await));
+    }
+    Ok(dto)
 }
 
 /// Saves the patch at once (AC9.1), tells the windows (`settings:changed`, the full new
@@ -259,9 +292,25 @@ pub async fn settings_set(
             tracing::warn!(error = %e, "could not emit settings:changed");
         }
     };
-    state(&app)
+    let dto = state(&app)
         .and_then(|s| settings::change(&s.db, &patch, announce, || notify(&app)))
-        .map_err(|e| command_error(&e))
+        .map_err(|e| command_error(&e))?;
+    // Start at login (AC9.4, L-041): the OS login item follows the switch, and the answer is what
+    // the OS reports afterwards. A refusal (on macOS, a build outside an app bundle) is
+    // `login_item`; the preference stays saved, the switch shows the real state.
+    if let Some(enabled) = patch
+        .get("start_at_login")
+        .and_then(serde_json::Value::as_bool)
+    {
+        let set = on_main(&app, move || {
+            settings::set_login(crate::interrupt::native(), enabled)
+        })
+        .await;
+        if !matches!(set, Some(Ok(_))) {
+            return Err(command_error(&AppError::LOGIN_ITEM.into()));
+        }
+    }
+    Ok(settings::with_login(dto, login_state(&app).await))
 }
 
 /// One shot of `sound` (`bell`, `chime` or `none`) for the Play button (AC6.3), unless

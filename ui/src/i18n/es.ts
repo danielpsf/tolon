@@ -96,7 +96,8 @@ export const es: Messages = {
       subtitle: "Tolon puede iniciarse solo, para que no se te pase ninguna reunión tras reiniciar.",
       atLogin: "Iniciar Tolon al iniciar sesión",
       atLoginHint: "Tolon espera en segundo plano y solo ocupa la pantalla antes de una reunión.",
-      notAvailable: "El inicio al iniciar sesión aún no está disponible.",
+      requiresApproval: "Permite Tolon en Ajustes del Sistema, en Ítems de inicio, para que se abra al iniciar sesión.",
+      unavailable: "Tolon no pudo leer este ajuste del sistema.",
     },
   },
   interrupt: {
@@ -165,6 +166,7 @@ export const es: Messages = {
       not_ready: "Tolon aún se está iniciando. Inténtalo de nuevo en un momento.",
       db_error: "Tolon no pudo guardar ese cambio. Inténtalo de nuevo.",
       internal: "Algo salió mal dentro de Tolon. Inténtalo de nuevo.",
+      login_item: "El sistema no dejó que Tolon cambiara esto. Esta opción solo funciona con una copia instalada de Tolon.",
     },
   },
 };

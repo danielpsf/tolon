@@ -439,8 +439,13 @@ export function StartupPage() {
             checked={s.start_at_login}
             onChange={(start_at_login) => save({ start_at_login })}
           />
-          {/* shortcut: the backend only stores this preference until L-041 wires start at login; drop the note then. */}
-          <p className="sm-caption">{p.notAvailable}</p>
+          {/* The switch shows what the OS reports (AC9.4); these say why it is off when it was asked to be on. */}
+          {s.start_at_login_status === "requires_approval" && (
+            <p className="sm-alert" role="status">
+              {p.requiresApproval}
+            </p>
+          )}
+          {s.start_at_login_status === "unavailable" && <p className="sm-caption">{p.unavailable}</p>}
         </div>
       )}
     </SettingsPage>

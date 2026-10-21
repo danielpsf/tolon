@@ -17,6 +17,7 @@ const settings: SettingsDto = {
   appearance: "auto",
   locale: null,
   start_at_login: false,
+  start_at_login_status: null,
 };
 
 beforeEach(() => vi.clearAllMocks());

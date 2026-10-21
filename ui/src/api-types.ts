@@ -24,6 +24,7 @@ export const COMMAND_ERROR_CODES = [
   "not_ready",
   "db_error",
   "internal",
+  "login_item",
 ] as const;
 
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
@@ -109,11 +110,14 @@ export interface SettingsDto {
   appearance: Appearance;
   /** A shipped catalogue, or null to follow the system. */
   locale: string | null;
+  /** On only when the OS will start Tolon (AC9.4); the settings window reads it from the OS. */
   start_at_login: boolean;
+  /** What the OS said, settings window only; null in other windows and in `settings:changed`. */
+  start_at_login_status: "enabled" | "disabled" | "requires_approval" | "unavailable" | null;
 }
 
 /** Every field optional, `quiet` and `ignore` field by field too: send only what changed. */
-export type SettingsPatch = Partial<Omit<SettingsDto, "quiet" | "ignore">> & {
+export type SettingsPatch = Partial<Omit<SettingsDto, "quiet" | "ignore" | "start_at_login_status">> & {
   quiet?: Partial<QuietHoursDto>;
   ignore?: Partial<IgnoreDto>;
 };
