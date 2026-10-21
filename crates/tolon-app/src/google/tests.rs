@@ -341,7 +341,9 @@ async fn ac13_3_token_and_address_absent_from_logs_sync_log_and_errors() -> Test
     remove(&db, Some(&google), &BrokenKeychain, &ids[1]).await?;
 
     let out = logs.text();
-    assert!(out.contains("calendar sync failed"), "{out}");
+    // Only this test reaches this callsite; "calendar sync failed" is shared with parallel tests
+    // without a subscriber, whose cached interest can drop it from a per-thread capture.
+    assert!(out.contains("token is still in the keychain"), "{out}");
     let rows = lock(&db).sync_log().list_recent(100)?;
     let text = format!(
         "{out} {:?} {:?}",
