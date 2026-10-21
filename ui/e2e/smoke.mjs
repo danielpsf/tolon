@@ -631,19 +631,16 @@ async function updateServer(state) {
 
 const byText = (text) => driver.findElements(By.xpath(`//*[normalize-space()=${JSON.stringify(text)}]`));
 /**
- * Clicks the button once it is there and enabled (the page disables them while a command runs). The page
- * re-renders on `update:changed`, which made WebDriver element references go stale between the lookup
- * and the click (and a click that had landed still report stale). So the lookup, the check and the click
- * run as one script in the page: it clicks exactly once, or not at all and is tried again.
+ * Clicks the button once it is there and enabled, then waits for its command to answer: the page disables
+ * the update buttons while a command runs. Without that wait a status line already on screen could pass the
+ * next check while the command was still running, and its late answer replaced the next button to click.
  */
 async function clickButton(text) {
-  await waitFor(`the ${text} button`, () =>
-    driver.executeScript((label) => {
-      const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === label);
-      if (!button || button.disabled) return false;
-      button.click();
-      return true;
-    }, text),
+  const found = await driver.wait(until.elementLocated(By.xpath(`//button[normalize-space()=${JSON.stringify(text)}]`)), WAIT);
+  await driver.wait(until.elementIsEnabled(found), WAIT);
+  await found.click();
+  await waitFor(`the ${text} command to answer`, () =>
+    driver.executeScript(() => document.querySelectorAll("button:disabled").length === 0),
   );
 }
 const shows = (step, text) => waitFor(step, async () => (await byText(text)).length > 0);
