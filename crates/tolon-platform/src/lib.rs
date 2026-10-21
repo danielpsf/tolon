@@ -17,7 +17,8 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 use std::num::NonZeroIsize;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 #[cfg(target_os = "linux")]
 pub use linux::LinuxPlatform;
@@ -291,6 +292,25 @@ pub trait Platform: Send + Sync {
     /// window forward there.
     fn activate_app(&self) -> Result<(), PlatformError>;
 
+    /// Note which app is in front, before an interrupt opens and before [`Platform::activate_app`],
+    /// so [`Platform::restore_previous`] can hand the front back (decision 2026-10-22, "Closing a
+    /// reminder gives focus back"). An app that is not Tolon replaces what was noted. When Tolon
+    /// itself is in front the call changes nothing: that is the settings window, or a reminder that
+    /// opens right after another, and the app noted for the first one carries over. Every reminder
+    /// ends in [`Platform::restore_previous`] or [`Platform::forget_frontmost`], so nothing stale
+    /// is left. macOS: `NSWorkspace.frontmostApplication`, kept as a pid. Windows: the foreground
+    /// window. Linux: nothing.
+    fn remember_frontmost(&self) -> Result<(), PlatformError>;
+
+    /// Make the app noted by [`Platform::remember_frontmost`] the front one again, once no
+    /// interrupt window is left on screen, and forget it. Does nothing when no app was noted or it
+    /// has quit. The OS may refuse (Windows' foreground lock); that is not an error.
+    fn restore_previous(&self) -> Result<(), PlatformError>;
+
+    /// Forget the app noted by [`Platform::remember_frontmost`] without bringing it forward: after
+    /// Join (the browser has focus), or when the interrupt could not open.
+    fn forget_frontmost(&self) -> Result<(), PlatformError>;
+
     /// How much of the inner size Tauri reports for `window` the title bar covers, in logical
     /// points. macOS lays the content view under the title bar, so Tauri's inner size there is
     /// the whole frame: a 760-point inner size shows 728 points of page below a 32-point title
@@ -336,6 +356,33 @@ pub trait Platform: Send + Sync {
     fn pointer(&self) -> Result<(f64, f64), PlatformError>;
 }
 
+/// The app [`Platform::remember_frontmost`] noted, until [`Platform::restore_previous`] takes it or
+/// [`Platform::forget_frontmost`] drops it. `T` is whatever names an app on the OS (macOS pid,
+/// Windows window handle and process id).
+pub(crate) struct Previous<T>(Mutex<Option<T>>);
+
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+impl<T> Previous<T> {
+    pub(crate) const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    /// Replaces what was noted. Not called while Tolon is in front: what was noted then stays.
+    pub(crate) fn remember(&self, app: T) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(app);
+    }
+
+    /// Drops what was noted.
+    pub(crate) fn forget(&self) {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).take();
+    }
+
+    /// The noted app, once: a second call gets `None`.
+    pub(crate) fn take(&self) -> Option<T> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).take()
+    }
+}
+
 /// Implementation for CI and tests: one fixed 1440x900 primary screen at 2x; raising does
 /// nothing and reports no focus; the login item is one flag in memory, shared by the process
 /// like the one login item of a real machine, so tests that set it must not run in parallel. It
@@ -345,12 +392,29 @@ pub struct StubPlatform;
 
 static STUB_START_AT_LOGIN: AtomicBool = AtomicBool::new(false);
 static STUB_ACTIVATIONS: AtomicUsize = AtomicUsize::new(0);
+/// The id of the app a test puts in front; 0 is Tolon itself or none.
+static STUB_FRONT: AtomicU32 = AtomicU32::new(0);
+static STUB_PREVIOUS: Previous<u32> = Previous::new();
+static STUB_RESTORES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 impl StubPlatform {
     /// How many times [`Platform::activate_app`] was called in this process, so tests can check
     /// it ran, and in which order against other steps. Shared by the process like the login flag.
     pub fn activations(&self) -> usize {
         STUB_ACTIVATIONS.load(Ordering::SeqCst)
+    }
+
+    /// Puts app `id` in front for the next [`Platform::remember_frontmost`]; 0 is Tolon itself.
+    pub fn set_frontmost(&self, id: u32) {
+        STUB_FRONT.store(id, Ordering::SeqCst);
+    }
+
+    /// The apps [`Platform::restore_previous`] brought back, oldest first.
+    pub fn restored(&self) -> Vec<u32> {
+        STUB_RESTORES
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -365,6 +429,29 @@ impl Platform for StubPlatform {
 
     fn activate_app(&self) -> Result<(), PlatformError> {
         STUB_ACTIVATIONS.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn remember_frontmost(&self) -> Result<(), PlatformError> {
+        let front = STUB_FRONT.load(Ordering::SeqCst);
+        if front != 0 {
+            STUB_PREVIOUS.remember(front);
+        }
+        Ok(())
+    }
+
+    fn forget_frontmost(&self) -> Result<(), PlatformError> {
+        STUB_PREVIOUS.forget();
+        Ok(())
+    }
+
+    fn restore_previous(&self) -> Result<(), PlatformError> {
+        if let Some(id) = STUB_PREVIOUS.take() {
+            STUB_RESTORES
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(id);
+        }
         Ok(())
     }
 
@@ -712,6 +799,63 @@ mod tests {
         let before = StubPlatform.activations();
         assert_eq!(StubPlatform.activate_app(), Ok(()));
         assert_eq!(StubPlatform.activations(), before + 1);
+    }
+
+    #[test]
+    fn previous_gives_the_app_once_and_forget_drops_it() {
+        let previous = Previous::new();
+        assert_eq!(previous.take(), None::<u32>);
+        previous.remember(7);
+        assert_eq!(previous.take(), Some(7));
+        assert_eq!(previous.take(), None);
+        previous.remember(7);
+        previous.remember(8);
+        previous.forget();
+        assert_eq!(previous.take(), None);
+    }
+
+    /// The stub's front app, noted app and restore log are process-wide; these tests share them.
+    static FOCUS_TESTS: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn stub_restores_the_app_that_was_in_front_once() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = StubPlatform.restored().len();
+        StubPlatform.set_frontmost(42);
+        assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
+        assert_eq!(StubPlatform.restore_previous(), Ok(()));
+        assert_eq!(StubPlatform.restore_previous(), Ok(()));
+        assert_eq!(StubPlatform.restored()[before..], [42]);
+    }
+
+    #[test]
+    fn stub_restores_nothing_when_nothing_was_remembered() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = StubPlatform.restored().len();
+        assert_eq!(StubPlatform.restore_previous(), Ok(()));
+        // Tolon itself in front (the settings window) and nothing noted: nothing to restore.
+        StubPlatform.set_frontmost(0);
+        assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
+        assert_eq!(StubPlatform.restore_previous(), Ok(()));
+        // An app noted and then forgotten (after Join, or a failed open) is not restored either.
+        StubPlatform.set_frontmost(42);
+        assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
+        assert_eq!(StubPlatform.forget_frontmost(), Ok(()));
+        assert_eq!(StubPlatform.restore_previous(), Ok(()));
+        assert_eq!(StubPlatform.restored().len(), before);
+    }
+
+    #[test]
+    fn stub_keeps_the_noted_app_when_tolon_is_in_front_at_the_next_reminder() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = StubPlatform.restored().len();
+        StubPlatform.set_frontmost(42);
+        assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
+        // The first reminder hands the screen to a waiting one: Tolon is in front.
+        StubPlatform.set_frontmost(0);
+        assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
+        assert_eq!(StubPlatform.restore_previous(), Ok(()));
+        assert_eq!(StubPlatform.restored()[before..], [42]);
     }
 
     #[test]

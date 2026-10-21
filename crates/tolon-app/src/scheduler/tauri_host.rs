@@ -149,6 +149,10 @@ impl Host for TauriHost {
         interrupt::close_all(&self.app);
     }
 
+    fn settle_focus(&self, restore: bool) {
+        interrupt::settle_focus(&self.app, restore);
+    }
+
     fn play(&self, sound: Sound) {
         let Some(player) = self.sound.clone() else {
             return;

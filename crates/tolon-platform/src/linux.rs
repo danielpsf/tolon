@@ -62,6 +62,21 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing: the window manager decides what is in front when the interrupt hides.
+    fn remember_frontmost(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
+    /// Nothing, as for `remember_frontmost`.
+    fn restore_previous(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
+    /// Nothing, as for `remember_frontmost`.
+    fn forget_frontmost(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Tauri's inner size is already below the title bar here.
     fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
         Ok(0.0)
@@ -126,6 +141,13 @@ mod tests {
     use crate::fake::{Closed, Fake};
     use raw_window_handle::{AppKitWindowHandle, RawWindowHandle, XlibWindowHandle};
     use std::ptr::NonNull;
+
+    #[test]
+    fn l056_focus_calls_do_nothing() {
+        assert_eq!(LinuxPlatform.remember_frontmost(), Ok(()));
+        assert_eq!(LinuxPlatform.restore_previous(), Ok(()));
+        assert_eq!(LinuxPlatform.forget_frontmost(), Ok(()));
+    }
 
     #[test]
     fn screens_are_left_to_tauri() {

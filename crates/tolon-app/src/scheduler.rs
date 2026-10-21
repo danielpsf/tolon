@@ -85,8 +85,14 @@ pub trait Host: Send + Sync {
     fn open(&self, show: &AlarmShow) -> impl Future<Output = anyhow::Result<Opened>> + Send;
     /// False when the interrupt has no keyboard focus, or the platform said it refused it.
     fn focused(&self) -> impl Future<Output = bool> + Send;
-    /// Closes every interrupt window and tells the pages.
+    /// Closes every interrupt window and tells the pages. The front stays as it is: see
+    /// [`Host::settle_focus`].
     fn close(&self);
+    /// Ends the interrupt's claim on the front, once it is known that no waiting reminder took the
+    /// screen (decision 2026-10-22, "Closing a reminder gives focus back"). `restore`: give the
+    /// front back to the app that was in front when the interrupt opened. Otherwise (after a Join,
+    /// where the browser has focus) forget that app.
+    fn settle_focus(&self, restore: bool);
     /// One shot of the alarm sound; failures are logged and ignored.
     fn play(&self, sound: Sound);
     fn stop_sound(&self);
@@ -467,6 +473,8 @@ struct Open {
     /// Meeting key to link. The URLs stay here; the page never sees them.
     links: HashMap<String, String>,
     test: bool,
+    /// A meeting of this group was joined: the call has focus, so a later close restores nothing.
+    joined: bool,
     last_sound: DateTime<Utc>,
     recheck_at: Option<DateTime<Utc>>,
     /// The F4.5 notification went out for the interrupt as it is now.
@@ -489,6 +497,7 @@ fn new_open(
         minute,
         links,
         test,
+        joined: false,
         last_sound: now,
         recheck_at: Some(now + FOCUS_RECHECK),
         notified: false,
@@ -635,11 +644,15 @@ impl<H: Host> Scheduler<H> {
                         .iter()
                         .filter(|t| t.to == AlarmState::Expired)
                         .count();
-                    self.drop_stale_meetings(&mut inner, &ticked.firing, now)
+                    let closed = self
+                        .drop_stale_meetings(&mut inner, &ticked.firing, now)
                         .await;
                     let paused = inputs.pause.is_some();
                     self.present(&mut inner, &ticked.firing, &occs, now, paused)
                         .await;
+                    if let Some(joined) = closed {
+                        self.settle_focus(&mut inner, joined);
+                    }
                 }
                 // The next tick tries again; nothing fires from a half-read store.
                 Err(e) => tracing::warn!(error = %e, "scheduler tick failed"),
@@ -749,20 +762,29 @@ impl<H: Host> Scheduler<H> {
     }
 
     /// A meeting in the open interrupt whose alarm is no longer Firing (expired, or the meeting
-    /// was deleted or ignored) leaves it; an interrupt with no meeting left closes.
-    async fn drop_stale_meetings(&self, inner: &mut Inner, firing: &[Alarm], now: DateTime<Utc>) {
+    /// was deleted or ignored) leaves it; an interrupt with no meeting left closes. Then the answer
+    /// is whether the group had been joined, and the caller settles focus once it has presented
+    /// whatever waits (`settle_focus`).
+    async fn drop_stale_meetings(
+        &self,
+        inner: &mut Inner,
+        firing: &[Alarm],
+        now: DateTime<Utc>,
+    ) -> Option<bool> {
         let live: HashSet<String> = firing.iter().map(|a| a.occurrence.to_string()).collect();
-        let Some(open) = inner.open.as_mut().filter(|o| !o.test) else {
-            return;
-        };
+        let open = inner.open.as_mut().filter(|o| !o.test)?;
         let before = open.show.meetings.len();
         open.show.meetings.retain(|m| live.contains(&m.key));
         open.links.retain(|key, _| live.contains(key));
         if open.show.meetings.is_empty() {
+            let joined = open.joined;
             self.close(inner);
-        } else if open.show.meetings.len() != before {
+            return Some(joined);
+        }
+        if open.show.meetings.len() != before {
             self.show_open(inner, now).await;
         }
+        None
     }
 
     /// The focus re-check and the sound repeat.
@@ -798,6 +820,17 @@ impl<H: Host> Scheduler<H> {
         inner.open = None;
         self.host.close();
         self.host.stop_sound();
+    }
+
+    /// After a close and after whatever was waiting has been presented: when a reminder is on
+    /// screen again the screen was handed over, and the app to give the front back to, and a join,
+    /// carry over to it. Otherwise nobody is left on screen: the front goes back, unless a meeting
+    /// of the closed group was `joined` (the call has focus).
+    fn settle_focus(&self, inner: &mut Inner, joined: bool) {
+        match inner.open.as_mut() {
+            Some(next) => next.joined |= joined,
+            None => self.host.settle_focus(!joined),
+        }
     }
 
     /// The panel's Join (`occurrences_join`): opens the link or event page of one of today's
@@ -972,6 +1005,7 @@ impl<H: Host> Scheduler<H> {
             Act::Snooze(_) | Act::Dismiss => Vec::new(),
         };
         let test = open.test;
+        let joined = open.joined || act == Act::Join;
         if let Some(url) = &link {
             self.host.open_url(url).map_err(|_| AppError::INTERNAL)?;
         }
@@ -983,11 +1017,13 @@ impl<H: Host> Scheduler<H> {
         if rest.is_empty() {
             self.close(inner);
             self.present_waiting(inner, db, now).await;
+            self.settle_focus(inner, joined);
             return Ok(());
         }
         let Some(open) = inner.open.as_mut() else {
             return Ok(());
         };
+        open.joined = joined;
         open.show.meetings = rest;
         open.links.remove(key);
         self.show_open(inner, now).await;

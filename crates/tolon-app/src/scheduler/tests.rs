@@ -1,6 +1,6 @@
 //! The scheduler against a fake clock and a fake host: no Tauri, no window, no sound.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex as StdMutex, PoisonError};
 
 use anyhow::anyhow;
@@ -31,6 +31,10 @@ struct Fake {
     notices: StdMutex<Vec<i32>>,
     /// Every `Host::paused` call, oldest first; kept out of `calls`.
     pauses: StdMutex<Vec<Option<DateTime<Utc>>>>,
+    /// How many times the front was given back, and how many times the note of it was dropped
+    /// instead; kept out of `calls`.
+    restores: AtomicUsize,
+    forgets: AtomicUsize,
     focused: AtomicBool,
     degraded: Option<&'static str>,
     fail_open: AtomicBool,
@@ -46,6 +50,8 @@ impl Fake {
             urls: StdMutex::default(),
             notices: StdMutex::default(),
             pauses: StdMutex::default(),
+            restores: AtomicUsize::new(0),
+            forgets: AtomicUsize::new(0),
             focused: AtomicBool::new(true),
             degraded: None,
             fail_open: AtomicBool::new(false),
@@ -65,6 +71,16 @@ impl Fake {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    /// Times the previous app was asked to come back.
+    fn restores(&self) -> usize {
+        self.restores.load(Ordering::SeqCst)
+    }
+
+    /// Times the note of the previous app was dropped without bringing it back.
+    fn forgets(&self) -> usize {
+        self.forgets.load(Ordering::SeqCst)
     }
 
     fn count(&self, call: &str) -> usize {
@@ -138,6 +154,15 @@ impl Host for Fake {
 
     fn close(&self) {
         self.log("close");
+    }
+
+    fn settle_focus(&self, restore: bool) {
+        let counter = if restore {
+            &self.restores
+        } else {
+            &self.forgets
+        };
+        counter.fetch_add(1, Ordering::SeqCst);
     }
 
     fn play(&self, _sound: Sound) {
@@ -649,6 +674,144 @@ async fn s4_3_join_opens_the_validated_url_and_already_there_opens_nothing() -> 
     assert!(rig.host().urls().is_empty());
     assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("joined"));
     assert_eq!(rig.host().count("close"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_esc_d_and_space_close_and_give_the_front_back() -> TestResult {
+    // Esc is Snooze(5), D is Dismiss, Space is AlreadyThere.
+    for act in [Act::Snooze(5), Act::Dismiss, Act::AlreadyThere] {
+        let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+        rig.tick_at(at(13, 58, 5)).await;
+        let key = rig.key(0)?;
+        assert_eq!(
+            rig.host().restores(),
+            0,
+            "nothing to give back while it is up"
+        );
+        rig.act(at(13, 58, 10), &key, act).await?;
+        assert_eq!(rig.host().count("close"), 1, "{act:?}");
+        assert_eq!(rig.host().restores(), 1, "{act:?}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_join_closes_without_giving_the_front_back() -> TestResult {
+    let rig = Rig::new(&[with_link("call", "140000", MEET_LOCATION)], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().restores(), 0, "the browser takes focus itself");
+    assert_eq!(rig.host().forgets(), 1, "and the note of the old app goes");
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_esc_with_a_waiting_alarm_restores_only_when_the_last_one_closes() -> TestResult {
+    // Alpha is up, Beta waits for another minute.
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140500", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let alpha = rig.key(0)?;
+    rig.tick_at(at(14, 3, 5)).await;
+    rig.act(at(14, 3, 10), &alpha, Act::Snooze(5)).await?;
+    assert_eq!(rig.host().count("open"), 2, "the screen went to Beta");
+    assert_eq!(rig.host().restores(), 0, "no restore while Beta is up");
+    assert_eq!(rig.host().forgets(), 0);
+    let beta = rig.key(0)?;
+    rig.act(at(14, 3, 20), &beta, Act::Dismiss).await?;
+    assert_eq!(rig.host().restores(), 1, "exactly one, when Beta closes");
+    assert_eq!(rig.host().forgets(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_a_joined_group_restores_nothing_on_its_later_close() -> TestResult {
+    // Two meetings in the same minute: joining the first leaves the interrupt up for the second.
+    let rig = Rig::new(
+        &[
+            with_link("call", "140000", MEET_LOCATION),
+            ("b", "Beta", "140000", ""),
+        ],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let first = rig
+        .last_show()?
+        .meetings
+        .iter()
+        .find(|m| m.title == "call")
+        .map(|m| m.key.clone());
+    let second = rig
+        .last_show()?
+        .meetings
+        .iter()
+        .find(|m| m.title == "Beta")
+        .map(|m| m.key.clone());
+    let (Some(first), Some(second)) = (first, second) else {
+        anyhow::bail!("both meetings are in the interrupt");
+    };
+    rig.act(at(13, 58, 10), &first, Act::Join).await?;
+    assert_eq!(rig.host().count("close"), 0, "Beta is still on screen");
+    assert_eq!(rig.host().restores() + rig.host().forgets(), 0);
+    rig.act(at(13, 58, 20), &second, Act::Dismiss).await?;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().restores(), 0, "the joined call has the focus");
+    assert_eq!(rig.host().forgets(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_a_close_because_the_meeting_is_gone_gives_the_front_back() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.tick_at(at(14, 10, 5)).await;
+    assert_eq!(rig.host().count("close"), 1, "the meeting expired");
+    assert_eq!(rig.host().restores(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_an_expiry_that_hands_the_screen_to_a_waiting_alarm_restores_nothing() -> TestResult {
+    // Alpha's alarm expires (no action) while Beta, another minute, is already Firing.
+    let rig = Rig::new(
+        &[("a", "Alpha", "140000", ""), ("b", "Beta", "140400", "")],
+        at(13, 50, 0),
+    )?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.tick_at(at(14, 2, 5)).await;
+    rig.tick_at(at(14, 10, 5)).await;
+    assert_eq!(rig.host().count("open"), 2, "Beta took the screen");
+    assert_eq!(rig.host().restores(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_the_panel_snooze_and_dismiss_of_the_meeting_on_screen_give_the_front_back(
+) -> TestResult {
+    for act in [Act::Snooze(5), Act::Dismiss] {
+        let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+        rig.tick_at(at(13, 58, 5)).await;
+        let key = listed_key(&rig, "standup")?;
+        rig.host().set_now(at(13, 58, 10));
+        rig.sched.act_listed(&rig.db, &key, act).await?;
+        assert_eq!(rig.host().count("close"), 1, "{act:?}");
+        assert_eq!(rig.host().restores(), 1, "{act:?}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_quitting_closes_without_giving_the_front_back() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.sched.shutdown(&rig.db).await;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().restores(), 0);
     Ok(())
 }
 
