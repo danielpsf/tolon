@@ -11,15 +11,19 @@ The screenshots show a test account. Your own names and addresses appear in thei
 1. Open [outlook.live.com/calendar](https://outlook.live.com/calendar) and sign in.
 2. Click the gear icon at the top right. Settings opens.
 3. In the left column, click Calendar. In the middle column, click Shared calendars.
-4. Scroll down to Publish a calendar. Under Select a calendar, choose the calendar you want in Tolon. Under Select permissions, pick the level that shows all details, so Tolon gets the meeting titles and join links.
+4. Scroll down to Publish a calendar. Under Select a calendar, choose the calendar you want in Tolon.
 
    ![Outlook settings, Calendar, Shared calendars: the Publish a calendar section with a calendar picker, a permissions picker and the Publish button.](images/outlook-publish-calendar.png)
 
-5. Click Publish. Outlook shows an HTML link and an ICS link under the pickers. Copy the ICS link.
+5. Under Select permissions, choose Can view all details, so Tolon gets the meeting titles and join links. The other option, Can view when I'm busy, hides the titles.
 
-The ICS link is private. Come back to this section to stop publishing if the link ever leaks, then publish again to get a new one.
+   ![The Select permissions list open under the calendar picker, with the options Can view when I'm busy and Can view all details.](images/outlook-publish-permissions.png)
 
-The guide stops at the Publish button because that click changes what your account shares. No screenshot of the links is shown for that reason.
+6. Click Publish. The calendar appears under the pickers with an HTML link and an ICS link. Copy the ICS link.
+
+   ![The published calendar listed under the pickers with its permission level, an HTML link, an ICS link, and the Unpublish and Reset links buttons.](images/outlook-published-links.png)
+
+The ICS link is private. Anyone who has it can read the calendar. Unpublish stops the link working; Reset links makes new ones and stops the old ones working. Use either if the link ever leaks, then publish again and give Tolon the new link.
 
 ## Google Calendar
 
@@ -39,16 +43,18 @@ Use the secret address, not the public one. The public address only works if the
 ## Yahoo Calendar
 
 1. Open [calendar.yahoo.com](https://calendar.yahoo.com) and sign in.
-2. Click Actions in the toolbar above the calendar.
+2. In the left column, under My calendars, move the pointer over the calendar you want in Tolon and click the three dots that appear next to its name. A menu opens.
 
-   ![Yahoo Calendar with the Actions menu open: Print, Create New Calendar, Create New To Do's List, Share, Hide To Do's, Add Holidays, Add a Friend's Calendar, Follow Other Calendars, Sync Help.](images/yahoo-actions-share.png)
+   ![Yahoo Calendar with a calendar's menu open in the left column: Edit, Import, Export and a row of colours.](images/yahoo-calendar-menu.png)
 
-3. Click Share. A sharing dialog opens.
-4. In the dialog, turn on sharing for the calendar you want in Tolon and copy the link labelled ICS.
+3. Click Edit. The Edit dialog opens with the calendar name, colours and a Sharing section.
+4. Under Sharing, turn on Get shareable link. Two links appear: one to view in a browser (HTML) and one to import into a calendar app (ICS). Copy the ICS link. Leave Enable my public calendar off; it makes the calendar visible to everyone.
 
-The ICS link is private. The same dialog lets you reset the links, which stops the old ones working.
+   ![The Edit dialog for a calendar with Get shareable link turned on, showing the HTML link and the ICS link, each with a reset icon, and the Save and Delete buttons.](images/yahoo-edit-shareable-link.png)
 
-The guide stops at the Share menu item because the steps after it change what your account shares. No screenshot of the dialog is shown for that reason.
+5. Click Save.
+
+The ICS link is private. Anyone who has it can read the calendar. Turning Get shareable link off stops the link working, and the reset icon next to each link makes a new one and stops the old one working. Use either if the link ever leaks, then give Tolon the new link.
 
 ## Paste the link into Tolon
 
