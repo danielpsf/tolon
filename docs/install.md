@@ -93,4 +93,7 @@ If an update fails, Tolon keeps running the version you have. You can always dow
 - Windows: Windows may not let Tolon take the keyboard from the program you are using. Tolon always shows the alarm on top. But Enter, Esc, D and Space may do nothing until you click the alarm or press Alt+Tab to it. The buttons always work. A program in full-screen mode, such as some games, may still draw over the alarm.
 - Linux with Wayland: the system may not let Tolon cover the whole screen. Tolon then shows a notification with Join and Snooze and plays the alarm sound instead. Sessions that use X11 get the full-screen alarm.
 - Linux: Tolon needs a graphical session.
+- macOS: if the menu bar is full, macOS can hide Tolon's icon behind the notch. Open Tolon again from Finder or Spotlight to bring up its window, or make room in the menu bar.
+- Windows: Windows can move Tolon's icon into the hidden icons. Click the small arrow next to the clock to show it, or start Tolon again from the Start menu to bring up its window.
+- Linux: some panels hide tray icons, and GNOME shows none without the AppIndicator extension. Start Tolon again from your applications menu to bring up its window.
 - Windows: if you turn Tolon off in Task Manager, under Startup apps, Windows keeps it off until you turn it on there again. The Start at login switch in Tolon cannot override that.
