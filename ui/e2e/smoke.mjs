@@ -533,3 +533,39 @@ test("ac8_1 a quiet-hours time the backend refuses shows the error and keeps the
   assert.equal((await storedSettings()).quiet.start, "18:00");
   await waitFor("the stored time back in the field", async () => (await start.getAttribute("value")) === "18:00");
 });
+
+// ---- Tray and panel (L-015) ---------------------------------------------------------------------
+// Tray clicks cannot be driven here (xvfb has no tray host, and AppIndicator reports no clicks), and
+// WebDriver cannot close a window the way the window manager does: its close destroys the webview
+// without the CloseRequested event that S7.2 hides on. So S7.2 is proven by the Rust tests and the
+// manual checklist; this checks that Tolon runs with the tray built and that the window checks hold.
+
+/** A command's answer, or its error code, asked from the main window. */
+const invoke = (command, args = {}) =>
+  driver.executeAsyncScript(
+    (name, payload, done) => {
+      window.__TAURI_INTERNALS__.invoke(name, payload).then(
+        (answer) => done({ answer }),
+        (e) => done({ code: e?.code ?? String(e) }),
+      );
+    },
+    command,
+    args,
+  );
+
+test("ac7_3 the settings window reads the pause but only the tray panel may pause, quit or act ahead", async () => {
+  assert.deepEqual(await invoke("app_status"), { answer: { paused_until: null } });
+  for (const [command, args] of [
+    ["app_pause", { minutes: 60 }],
+    ["app_resume", {}],
+    ["app_quit", {}],
+    ["app_show_settings", {}],
+    ["occurrences_snooze", { key: "x", minutes: 5 }],
+    ["occurrences_dismiss", { key: "x" }],
+  ]) {
+    assert.deepEqual(await invoke(command, args), { code: "not_found" }, command);
+  }
+  // Still running, still not paused, and the tooltip command answers the settings window.
+  assert.deepEqual(await invoke("app_status"), { answer: { paused_until: null } });
+  assert.deepEqual(await invoke("tray_tooltip", { text: "Tolon" }), { answer: null });
+});
