@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <command>\n\n\
 commands:\n  ci                   fmt, clippy, tests, layers, scenario ids, ui typecheck, lint and tests\n  \
-layers               check crate dependency direction and target_os confinement\n  \
+layers               check crate dependency direction, target_os and macos_only! confinement\n  \
 check-scenario-ids   check scenario and AC ids against docs/plan.md\n  \
 check-release-features  keep the e2e fetch seam out of release builds\n  \
 fixtures             rewrite fixtures/ics/*.expected.json (review the diff)\n  \

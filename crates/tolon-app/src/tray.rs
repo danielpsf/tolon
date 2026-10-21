@@ -893,6 +893,15 @@ mod tests {
             0.0,
         );
         assert_eq!(none, ((1.0, 1.0), (1.0, 1.0)));
+        // A small Mac: the title bar overlap still never pushes the window past the work area.
+        let small_mac = fit_settings_size(
+            (1040.0, 760.0),
+            (880.0, 620.0),
+            (1366.0, 700.0),
+            (0.0, 0.0),
+            32.0,
+        );
+        assert_eq!(small_mac, ((1040.0, 700.0), (880.0, 652.0)));
     }
 
     #[test]

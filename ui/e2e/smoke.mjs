@@ -72,7 +72,7 @@ async function startApp(route = "#/calendars") {
   try {
     await launch(route);
   } catch (err) {
-    console.log(`launch failed, retrying once: ${err.message}`);
+    console.log(`::warning::launch failed, retrying once: ${err.message}`);
     await driver?.quit().catch(() => {});
     await sleep(HANDOVER_MS);
     await launch(route);
