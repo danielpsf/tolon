@@ -507,26 +507,35 @@
  * start, a still preview of the alarm at the end. The preview takes the interrupt's colours (moss fill,
  * on-moss text, the primary button inverted), which Swiss Moss flips for dark.
  */
-/* D6, D7: sized to fit the 960 x 640 window where the copy allows; the text column gets the width, the preview at most 340 px. */
+/*
+ * D6, D7: the text column gets the width, the preview at most 340 px. The page is a full-height row whose content
+ * (the text and the preview) is centred in it, so the space above and below balances (never less than space-5);
+ * in a window too short for it (960 x 640) the row grows with the content, so the page opens at its top.
+ */
 .tl-first {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
-  align-items: start;
+  align-items: center;
   gap: var(--sm-space-6);
   max-width: 1280px;
   min-height: 100vh;
-  padding: var(--sm-space-5) var(--sm-space-7) var(--sm-space-6);
+  padding: var(--sm-space-5) var(--sm-space-7);
 }
+/* The rhythm: mark to title space-5, title to lead space-4, lead to steps space-6, steps space-5 apart, steps to buttons space-6, buttons to notes space-4. */
 .tl-first-text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sm-space-2);
+  gap: var(--sm-space-4);
+}
+.tl-first-mark {
+  margin-block-end: var(--sm-space-1);
 }
 /* Arabic and Devanagari glyphs reach past display-l's line-height of 1: keep them off the lead. */
 .tl-first .tl-head {
-  gap: var(--sm-space-1);
+  gap: var(--sm-space-4);
+  margin-bottom: var(--sm-space-3);
 }
 /* D1 for the first-run title too: display-l's -0.035em makes its letters touch. */
 .tl-first h1 {
@@ -550,7 +559,19 @@
 }
 .tl-first .sm-steps {
   flex-direction: column;
-  gap: var(--sm-space-2);
+  gap: var(--sm-space-5);
+  margin-bottom: var(--sm-space-3);
+}
+/* A step's lines break evenly, so step 3 does not leave "Click the Tolon icon" hanging; its second paragraph is set apart. */
+.tl-first .sm-steps .sm-body {
+  text-wrap: balance;
+}
+.tl-first .sm-steps .sm-body + .sm-body {
+  margin-top: var(--sm-space-2);
+}
+/* The two notes under the buttons read as one block. */
+.tl-first-text > #skip-consequence + .sm-caption {
+  margin-top: calc(-1 * var(--sm-space-2));
 }
 .tl-first .sm-steps .sm-heading {
   color: var(--sm-ink);
@@ -562,11 +583,31 @@
   background: var(--sm-moss);
   color: var(--sm-on-moss);
 }
+/* A short window (960 x 640) gets the tighter rhythm back, so the buttons stay in view where the copy allows (D6). */
+@media (max-height: 720px) {
+  .tl-first-text {
+    gap: var(--sm-space-2);
+  }
+  .tl-first-mark {
+    margin-block-end: 0;
+  }
+  .tl-first .tl-head {
+    gap: var(--sm-space-1);
+    margin-bottom: 0;
+  }
+  .tl-first .sm-steps {
+    gap: var(--sm-space-2);
+    margin-bottom: 0;
+  }
+  .tl-first-text > #skip-consequence + .sm-caption {
+    margin-top: 0;
+  }
+}
 .tl-first-preview {
   display: flex;
   flex-direction: column;
   gap: var(--sm-space-3);
-  margin: var(--sm-space-8) 0 0;
+  margin: 0;
   /*
    * The card's edge (L-046, WCAG 1.4.11) is read against the PAGE, so it is resolved here, on the figure, where
    * the window's own tokens apply. On the card itself `data-tokens` would swap it for the pinned block's value.
