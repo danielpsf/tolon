@@ -8,6 +8,7 @@ import {
   handlesKey,
   hintText,
   joinHost,
+  primaryParts,
   keyAction,
   nextFocusIndex,
   perform,
@@ -119,7 +120,7 @@ describe("primary button (AC5.2)", () => {
   });
 
   it("AC4.4 the hint names Space only while Space means 'I am already there'", () => {
-    expect(hintText(en, "join", true)).toBe("Esc snoozes. Enter joins. D dismisses. Space: I am already there.");
+    expect(hintText(en, "join", true)).toBe("Esc snoozes. Enter joins. D dismisses. Space marks you as already there.");
     expect(hintText(en, "join", false)).toBe("Esc snoozes. Enter joins. D dismisses.");
     for (const locale of LOCALES) {
       const c = createCopy(locale);
@@ -129,12 +130,12 @@ describe("primary button (AC5.2)", () => {
   });
 
   it("joins the hint sentences per locale: a space, but nothing after 。 in zh-CN and ja", () => {
-    expect(hintText(createCopy("zh-CN"), "join")).toBe("Esc：稍后提醒。Enter：加入。D：关闭。空格键：我已经在会上了。");
+    expect(hintText(createCopy("zh-CN"), "join")).toBe("Esc：稍后提醒。Enter：加入。D：关闭。按空格键标记你已在会上。");
     expect(hintText(createCopy("ja"), "open_event")).toBe(
-      "Esc：再通知。Enter：予定を開く。D：閉じる。スペースキー：すでに参加しています。",
+      "Esc：再通知。Enter：予定を開く。D：閉じる。スペースキーで参加済みにします。",
     );
     expect(hintText(createCopy("de"), "join")).toBe(
-      "Esc: schlummern. Enter: teilnehmen. D: verwerfen. Leertaste: Ich bin schon dabei.",
+      "Esc: schlummern. Enter: teilnehmen. D: verwerfen. Leertaste markiert dich als schon dabei.",
     );
     for (const locale of LOCALES) {
       for (const primary of ["join", "open_event", "already_there"] as const) {
@@ -163,6 +164,16 @@ describe("join host (decisions.md, join links are untrusted)", () => {
   it.each(LOCALES)("%s names the host in the button label", (locale) => {
     expect(primaryLabel(createCopy(locale), meeting(link("example.com", false)))).toContain("example.com");
   });
+
+  // D3: the page shortens a long host with an ellipsis at its start, so the end that names the site stays.
+  it.each(LOCALES)("%s splits the label around the host and nothing else (D3)", (locale) => {
+    const c = createCopy(locale);
+    const m = meeting(link("video.conferencing.example.com", false));
+    const [before, host, after] = primaryParts(c, m);
+    expect(host).toBe("video.conferencing.example.com");
+    expect(before + host + after).toBe(primaryLabel(c, m));
+    expect(primaryParts(c, meeting(link("meet.google.com", true)))).toEqual([c.t.interrupt.joinCall, "", ""]);
+  });
 });
 
 describe("details line", () => {
@@ -175,10 +186,11 @@ describe("details line", () => {
     expect(text).toMatch(/^\d{2}:\d{2} to \d{2}:\d{2} on Google Meet with 8 people\.$/);
   });
 
-  it("leaves the unrecognised host to the button and drops 'with 0 people'", () => {
-    const text = detailsText(createCopy("en-GB"), meeting(link("example.com", false), { people: 0 }));
-    expect(text).toMatch(/^\d{2}:\d{2} to \d{2}:\d{2}\.$/);
-    expect(text).not.toContain("example.com");
+  it("names an unrecognised host in full, as the button may cut it, and drops 'with 0 people'", () => {
+    const host = "video.conferencing.example.com";
+    const text = detailsText(createCopy("en-GB"), meeting(link(host, false), { people: 0 }));
+    expect(text).toMatch(/^\d{2}:\d{2} to \d{2}:\d{2} on video\.conferencing\.example\.com\.$/);
+    for (const locale of LOCALES) expect(detailsText(createCopy(locale), meeting(link(host, false))), locale).toContain(host);
   });
 
   it("uses the singular for one person", () => {

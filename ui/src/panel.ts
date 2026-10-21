@@ -67,7 +67,8 @@ export function hidesPanel(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" 
 /** Puts the focus on the panel's first action, the way the interrupt opens on its primary button. */
 export function focusFirstAction(root: Pick<ParentNode, "querySelector"> | null): boolean {
   const first = root?.querySelector<HTMLElement>(".tl-panel-actions button");
-  first?.focus();
+  // The panel's list can be taller than its window: focusing the actions must not scroll the next meeting away.
+  first?.focus({ preventScroll: true });
   return Boolean(first);
 }
 

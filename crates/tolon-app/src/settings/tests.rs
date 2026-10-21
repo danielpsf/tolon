@@ -38,6 +38,7 @@ fn defaults() -> SettingsDto {
             keywords: vec!["Focus".into(), "Lunch".into(), "OOO".into()],
         },
         appearance: Appearance::Auto,
+        interrupt_color: InterruptColor::Theme,
         locale: None,
         start_at_login: false,
         start_at_login_status: None,
@@ -60,7 +61,8 @@ fn the_dto_serialises_with_the_contract_field_names() -> TestResult {
             "quiet": { "enabled": false, "start": "18:00", "end": "09:00", "weekends": true },
             "ignore": { "all_day": true, "declined": true, "cancelled": true, "no_attendees": false,
                         "keywords": ["Focus", "Lunch", "OOO"] },
-            "appearance": "auto", "locale": null, "start_at_login": false,
+            "appearance": "auto", "interrupt_color": "theme", "locale": null,
+            "start_at_login": false,
             "start_at_login_status": null
         })
     );
@@ -73,7 +75,8 @@ fn everything() -> Value {
         "quiet": { "enabled": true, "start": "22:30", "end": "07:15", "weekends": false },
         "ignore": { "all_day": false, "declined": false, "cancelled": false, "no_attendees": true,
                     "keywords": [" Standup ", "", "1:1"] },
-        "appearance": "dark", "locale": "pt-BR", "start_at_login": true
+        "appearance": "dark", "interrupt_color": "moss-deep", "locale": "pt-BR",
+        "start_at_login": true
     })
 }
 
@@ -97,6 +100,7 @@ fn everything_dto() -> SettingsDto {
             keywords: vec!["Standup".into(), "1:1".into()],
         },
         appearance: Appearance::Dark,
+        interrupt_color: InterruptColor::MossDeep,
         locale: Some("pt-BR".into()),
         start_at_login: true,
         start_at_login_status: None,
@@ -140,6 +144,7 @@ fn storage_keeps_the_existing_keys_and_values() -> TestResult {
     assert_eq!(all[IGNORE_ALL_DAY], json!(false));
     assert_eq!(all[QUIET_START], json!("22:30"));
     assert_eq!(all[LOCALE], json!("pt-BR"));
+    assert_eq!(all[INTERRUPT_COLOR], json!("moss-deep"));
     apply(&db, &json!({ "sound": "bell", "locale": null }))?;
     let all = pipeline::lock(&db).settings().all()?;
     assert_eq!(
@@ -330,6 +335,7 @@ fn stored_values_that_do_not_read_fall_back_to_the_defaults() -> TestResult {
         s.set(QUIET_START, &json!("25:00"))?;
         s.set(QUIET_END, &json!(9))?;
         s.set(APPEARANCE, &json!("blue"))?;
+        s.set(INTERRUPT_COLOR, &json!("blue"))?;
         s.set(LOCALE, &json!("fr"))?;
         s.set(LEAD_MINUTES, &json!(500))?;
         s.set(QUIET_ENABLED, &json!("yes"))?;
@@ -473,5 +479,53 @@ fn s7_1_pause_is_saved_and_ends_on_time() -> TestResult {
         refused(&db, json!({ "paused_until": "2099-01-01T00:00:00Z" })),
         Some("invalid:patch")
     );
+    Ok(())
+}
+
+/// L-043: the eight reminder colours of the decision, stored under `interrupt_color`; anything else
+/// is refused by name and saves nothing.
+#[test]
+fn interrupt_color_is_one_of_the_eight_pairs() -> TestResult {
+    let db = db()?;
+    for name in [
+        "theme",
+        "moss",
+        "moss-deep",
+        "ink",
+        "paper",
+        "info",
+        "signal",
+        "danger",
+    ] {
+        let s = apply(&db, &json!({ "interrupt_color": name }))?;
+        assert_eq!(serde_json::to_value(s.interrupt_color)?, json!(name));
+        let stored = pipeline::lock(&db).settings().get(INTERRUPT_COLOR)?;
+        assert_eq!(stored, Some(json!(name)));
+    }
+    for bad in [
+        json!("Moss"),
+        json!("moss_deep"),
+        json!("#4A7A52"),
+        json!("red"),
+        json!(""),
+        json!(3),
+        json!({ "bg": "moss" }),
+    ] {
+        let patch = json!({ "lead_minutes": 9, "interrupt_color": bad });
+        assert_eq!(
+            refused(&db, patch),
+            Some("invalid:interrupt_color"),
+            "{bad}"
+        );
+    }
+    let s = get(&db)?;
+    assert_eq!(
+        (s.interrupt_color, s.lead_minutes),
+        (InterruptColor::Danger, 2),
+        "a refused colour saves nothing"
+    );
+    // A null plain field means "unchanged" (decision "Quiet hours and settings details").
+    let s = apply(&db, &json!({ "interrupt_color": null }))?;
+    assert_eq!(s.interrupt_color, InterruptColor::Danger);
     Ok(())
 }

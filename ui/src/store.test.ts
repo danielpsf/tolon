@@ -20,6 +20,7 @@ const stored: SettingsDto = {
   quiet: { enabled: false, start: "18:00", end: "09:00", weekends: true },
   ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, keywords: ["Focus", "Lunch", "OOO"] },
   appearance: "auto",
+  interrupt_color: "theme",
   locale: null,
   start_at_login: false,
   start_at_login_status: null,

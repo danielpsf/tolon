@@ -55,15 +55,26 @@ export function primaryLabel(c: Copy, meeting: MeetingDto): string {
   }
 }
 
+/** The primary label split around the host, so the page can shorten a long host (D3): [before, host, after]. */
+export function primaryParts(c: Copy, meeting: MeetingDto): [string, string, string] {
+  const label = primaryLabel(c, meeting);
+  const host = joinHost(meeting.join);
+  const at = host ? label.lastIndexOf(host) : -1;
+  return host && at >= 0 ? [label.slice(0, at), host, label.slice(at + host.length)] : [label, "", ""];
+}
+
 /** The display-xl title is 112 design pixels: fine to about 36 characters, then it steps down so a long title still fits. */
 export function titleSize(title: string): "xl" | "long" | "longer" {
   const length = [...title].length;
   return length > 90 ? "longer" : length > 36 ? "long" : "xl";
 }
 
-/** "14:00 to 14:45 on Google Meet with 8 people." An unrecognised host is on the button, not here. */
+/**
+ * "14:00 to 14:45 on Google Meet with 8 people." An unrecognised host is named in full here, since the
+ * button may cut its start (decision "Reminder colour (L-043)").
+ */
 export function detailsText(c: Copy, meeting: MeetingDto): string {
-  const provider = meeting.join.kind === "link" ? providerOf(meeting.join.host) : null;
+  const provider = meeting.join.kind === "link" ? (providerOf(meeting.join.host) ?? joinHost(meeting.join)) : null;
   const range = c.t.interrupt.timeRange(c.formatTime(Date.parse(meeting.start)), c.formatTime(Date.parse(meeting.end)));
   return c.t.interrupt.details(range, provider, meeting.people);
 }

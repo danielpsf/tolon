@@ -60,6 +60,7 @@ const settings = (over: Partial<SettingsDto["quiet"]> = {}): SettingsDto => ({
   quiet: { enabled: false, start: "18:00", end: "09:00", weekends: true, ...over },
   ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, keywords: [] },
   appearance: "auto",
+  interrupt_color: "theme",
   locale: null,
   start_at_login: false,
   start_at_login_status: null,
@@ -170,7 +171,7 @@ describe("tray panel (F7)", () => {
     const select = vi.fn(() => ({ focus }));
     expect(focusFirstAction({ querySelector: select } as unknown as ParentNode)).toBe(true);
     expect(select).toHaveBeenCalledWith(".tl-panel-actions button");
-    expect(focus).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
     expect(focusFirstAction({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
     expect(focusFirstAction(null)).toBe(false);
   });

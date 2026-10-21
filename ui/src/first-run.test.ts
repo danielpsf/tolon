@@ -6,12 +6,13 @@ import { createCopy, initCopy, LOCALES } from "./copy";
 import {
   asksForPage,
   firstCalendarAdded,
+  focusAtTop,
   hideAndEndFirstRun,
   listenForHide,
   startFirstRunWatch,
   useFirstRun,
 } from "./first-run";
-import { FirstRunPage, trayTitle } from "./pages/FirstRunPage";
+import { FirstRunPage, trayHidden, trayTitle } from "./pages/FirstRunPage";
 import local from "./styles/local.css?raw";
 import { useCalendars } from "./store";
 
@@ -165,11 +166,15 @@ describe("first run (F10)", () => {
     expect(html).toMatch(/<button[^>]*class="sm-btn quiet"[^>]*aria-describedby="skip-consequence"[^>]*>Skip for now<\/button>/);
     expect(html).toContain('id="skip-consequence">Tolon does nothing until you add a calendar.</p>');
     // The preview is a picture: its sample buttons are not buttons, screen readers skip it and it takes no pointer.
-    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true">/);
+    // It takes the reminder colour; with no settings yet, the default.
+    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="theme">/);
     expect(local).toMatch(/\.tl-preview \{[^}]*pointer-events: none;/);
     expect(html.match(/<button/g)).toHaveLength(3);
     expect(html).toContain("Platform weekly sync");
-    expect(html).toContain("Join the call");
+    // The preview's Join is the short label, so its three buttons fit on one row (D7).
+    expect(html).toContain('<span class="sm-btn sm tl-primary">Join</span>');
+    expect(html).not.toContain("Join the call");
+    expect(html).not.toContain("autofocus");
     expect(html).toContain("Snooze 5 min");
     expect(html).toContain("Tolon is open source under Apache 2.0. No account, no telemetry.");
   });
@@ -185,6 +190,37 @@ describe("first run (F10)", () => {
     expect(t.traySystemTray).toContain("Tolon");
     expect(t.skipConsequence).toContain("Tolon");
     expect(t.trayMenuBar).not.toBe(t.traySystemTray);
+  });
+
+  it.each(LOCALES)("%s step 3 says how to bring the window back when the tray icon is hidden", (locale) => {
+    const t = createCopy(locale).t.firstRun;
+    expect(trayHidden(t, "menu_bar")).toBe(t.trayHiddenMenuBar);
+    expect(trayHidden(t, "tray")).toBe(t.trayHiddenSystemTray);
+    // macOS names Finder and Spotlight; Windows and Linux do not have them.
+    expect(t.trayHiddenMenuBar).toMatch(/Finder|访达/);
+    expect(t.trayHiddenSystemTray).not.toMatch(/Finder|Spotlight|访达/);
+    for (const s of [t.trayHiddenMenuBar, t.trayHiddenSystemTray]) expect(s).toContain("Tolon");
+  });
+
+  it("D6, D8 focus starts on Paste an iCal link without scrolling, and the page opens at its top", () => {
+    const focus = vi.fn();
+    const scrollTo = vi.fn();
+    focusAtTop({ focus }, { scrollTo });
+    expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    // No element yet: still at the top.
+    focusAtTop(null, { scrollTo });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
+
+  it("D7, D9, B3 local.css sets text-wrap on first run and the consequence line, the preview's button pair and Skip's 40 px minimum", () => {
+    expect(local).toMatch(/\.tl-int-consequence \{[^}]*text-wrap: balance;/);
+    expect(local).toMatch(/\.tl-preview-pair \{[^}]*display: inline-flex;/);
+    expect(renderToStaticMarkup(createElement(FirstRunPage))).toMatch(
+      /<span class="tl-preview-pair"><span class="sm-btn sm">[^<]+<\/span><span class="sm-btn sm">[^<]+<\/span><\/span>/,
+    );
+    expect(local).toMatch(/\.tl-first :is\(h1, p, \.sm-body\) \{[^}]*text-wrap: pretty;/);
+    expect(local).toMatch(/\.tl-first \.sm-btn\.quiet \{[^}]*min-block-size: 40px;[^}]*min-inline-size: 40px;/);
   });
 
   it("uses the review's words for he and ar", () => {

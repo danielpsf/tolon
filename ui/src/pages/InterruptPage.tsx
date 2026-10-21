@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { api, onAlarmHide, onAlarmShow } from "../api";
-import type { AlarmShowDto, MeetingDto } from "../api-types";
+import type { AlarmShowDto, InterruptColor, MeetingDto } from "../api-types";
 import { Bell } from "../Bell";
 import { copy } from "../copy";
 import {
@@ -12,12 +12,14 @@ import {
   nextFocusIndex,
   perform,
   primaryAction,
-  primaryLabel,
+  primaryParts,
   SNOOZE_MINUTES,
   startClock,
   titleSize,
   type Action,
 } from "../interrupt";
+import { colorAttr, PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
+import { useSettings } from "../store";
 import { errorText } from "../view";
 
 /** The current time, ticking every second (AC4.7). */
@@ -61,13 +63,30 @@ const actionOf = (el: Element | null): Action | null =>
 export function InterruptPage() {
   const alarm = useAlarm();
   const screen = new URLSearchParams(window.location.search).get("screen");
+  // The reminder colour (L-043) from `settings_get`, and live from `settings:changed` while it is open.
+  const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
   const { interrupt: t } = copy().t;
   const first = alarm?.meetings[0];
-  if (!alarm || !first) return <main className="tl-int" aria-label={t.region} data-screen={screen} />;
-  return <InterruptView key={first.key} alarm={alarm} first={first} screen={screen} />;
+  if (!alarm || !first)
+    return (
+      <main className="tl-int" aria-label={t.region} data-screen={screen} data-color={color} data-tokens={tokensFor(color)}>
+        <style>{PREVIEW_TOKENS}</style>
+      </main>
+    );
+  return <InterruptView key={first.key} alarm={alarm} first={first} screen={screen} color={color} />;
 }
 
-function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: MeetingDto; screen: string | null }) {
+function InterruptView({
+  alarm,
+  first,
+  screen,
+  color,
+}: {
+  alarm: AlarmShowDto;
+  first: MeetingDto;
+  screen: string | null;
+  color: InterruptColor;
+}) {
   const c = copy();
   const { interrupt: t } = c.t;
   const now = useNow();
@@ -152,16 +171,29 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
   const titleOf = (m: MeetingDto) => (alarm.test ? t.testTitle : m.title);
   const start = Date.parse(first.start);
 
-  const joinButton = (m: MeetingDto, size: "xl" | "lg") => (
-    <button
-      type="button"
-      className={`sm-btn tl-primary ${size}`}
-      data-action={primaryAction(m.join)}
-      onClick={() => void run(primaryAction(m.join), m)}
-    >
-      {primaryLabel(c, m)}
-    </button>
-  );
+  const joinButton = (m: MeetingDto, size: "xl" | "lg") => {
+    const [before, host, after] = primaryParts(c, m);
+    return (
+      <button
+        type="button"
+        className={`sm-btn tl-primary ${size}`}
+        data-action={primaryAction(m.join)}
+        onClick={() => void run(primaryAction(m.join), m)}
+      >
+        {/* One flex item: sm-btn's 8 px gap must not open between the words and the host. */}
+        <span>
+          {before}
+          {host && (
+            // D3: a long host loses its start to an ellipsis; its end, the site, stays readable.
+            <span className="tl-host">
+              <bdi dir="ltr">{host}</bdi>
+            </span>
+          )}
+          {after}
+        </span>
+      </button>
+    );
+  };
 
   return (
     <main
@@ -174,9 +206,13 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
       aria-labelledby={single ? "tl-int-title" : undefined}
       aria-describedby={single ? "tl-int-details" : undefined}
       data-screen={screen}
+      data-color={color}
+      // Every choice but Default is pinned to Swiss Moss's light values, in a dark window too (L-043).
+      data-tokens={tokensFor(color)}
       onFocus={(e) => setFocused(actionOf(e.target))}
       onBlur={keepFocus}
     >
+      <style>{PREVIEW_TOKENS}</style>
       <header className="tl-int-top">
         <span>{c.formatTime(now)}</span>
         <span className="tl-int-count">

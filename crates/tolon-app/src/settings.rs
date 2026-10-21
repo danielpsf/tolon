@@ -30,6 +30,7 @@ pub const QUIET_START: &str = "quiet_start";
 pub const QUIET_END: &str = "quiet_end";
 pub const QUIET_WEEKENDS: &str = "quiet_weekends";
 pub const APPEARANCE: &str = "appearance";
+pub const INTERRUPT_COLOR: &str = "interrupt_color";
 pub const LOCALE: &str = "locale";
 pub const START_AT_LOGIN: &str = "start_at_login";
 /// Pause for 1 hour (AC7.3): when the pause ends, RFC 3339 UTC. App state, not a setting, so
@@ -82,6 +83,21 @@ pub enum Appearance {
     Dark,
 }
 
+/// The interrupt's background (decision "Reminder colour (L-043)"): a Swiss Moss token pair the UI
+/// maps from this name. `Theme` is the default moss look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InterruptColor {
+    Theme,
+    Moss,
+    MossDeep,
+    Ink,
+    Paper,
+    Info,
+    Signal,
+    Danger,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QuietDto {
     pub enabled: bool,
@@ -109,6 +125,7 @@ pub struct SettingsDto {
     pub quiet: QuietDto,
     pub ignore: IgnoreDto,
     pub appearance: Appearance,
+    pub interrupt_color: InterruptColor,
     /// `None`: follow the system.
     pub locale: Option<String>,
     /// On only when the OS will start Tolon (AC9.4). The settings window reads it from the OS
@@ -151,6 +168,7 @@ pub struct SettingsPatch {
     pub quiet: Option<QuietPatch>,
     pub ignore: Option<IgnorePatch>,
     pub appearance: Option<Appearance>,
+    pub interrupt_color: Option<InterruptColor>,
     #[serde(default, deserialize_with = "present")]
     pub locale: Option<Option<String>>,
     pub start_at_login: Option<bool>,
@@ -264,6 +282,10 @@ pub fn read(store: &Store) -> anyhow::Result<SettingsDto> {
             .get(APPEARANCE)?
             .and_then(|v| serde_json::from_value(v).ok())
             .unwrap_or(Appearance::Auto),
+        interrupt_color: s
+            .get(INTERRUPT_COLOR)?
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or(InterruptColor::Theme),
         locale: text(LOCALE)?.filter(|l| LOCALES.contains(&l.as_str())),
         start_at_login: flag(store, START_AT_LOGIN, false)?,
         start_at_login_status: None,
@@ -369,7 +391,7 @@ pub fn change(
 }
 
 /// Every `invalid:` code a patch can get; the UI localises them.
-const CODES: [&str; 19] = [
+const CODES: [&str; 20] = [
     "invalid:patch",
     "invalid:lead_minutes",
     "invalid:again_at_start",
@@ -387,6 +409,7 @@ const CODES: [&str; 19] = [
     "invalid:ignore.no_attendees",
     "invalid:ignore.keywords",
     "invalid:appearance",
+    "invalid:interrupt_color",
     "invalid:locale",
     "invalid:start_at_login",
 ];
@@ -489,6 +512,9 @@ fn pairs(p: SettingsPatch) -> anyhow::Result<Vec<(&'static str, Value)>> {
     }
     if let Some(a) = p.appearance {
         out.push((APPEARANCE, serde_json::to_value(a)?));
+    }
+    if let Some(c) = p.interrupt_color {
+        out.push((INTERRUPT_COLOR, serde_json::to_value(c)?));
     }
     if let Some(locale) = p.locale {
         if locale.as_deref().is_some_and(|l| !LOCALES.contains(&l)) {

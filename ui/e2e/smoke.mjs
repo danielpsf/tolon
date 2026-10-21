@@ -613,6 +613,120 @@ test("window rights: the settings window reads the pause and the current alarm, 
   assert.deepEqual(await invoke("notify_copy_set", { copy: {} }), { code: "invalid:notify_copy" });
 });
 
+// ---- Reminder colour (L-043) ---------------------------------------------------------------------
+// The interrupt reads `interrupt_color` from `settings_get` and draws its fill from the Swiss Moss token
+// of that pair. The expected colour is the token itself, resolved by the same webview.
+
+test("the reminder colour reaches the interrupt: data-color info on a --sm-info fill (L-043)", async () => {
+  const main = await driver.getWindowHandle();
+  const saved = await invoke("settings_set", { patch: { interrupt_color: "info" } });
+  assert.equal(saved.answer?.interrupt_color, "info", JSON.stringify(saved));
+  try {
+    await openTestInterrupt(main);
+    const seen = await waitFor("data-color on the interrupt root", () =>
+      driver.executeScript(() => {
+        const root = document.querySelector("main.tl-int");
+        if (root?.dataset.color !== "info") return null;
+        // Pinned to Swiss Moss's light block (decision "Reminder colour (L-043)"), so the probe uses it too.
+        const probe = document.createElement("i");
+        probe.dataset.tokens = "light";
+        probe.style.background = "var(--sm-info)";
+        document.body.append(probe);
+        const want = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return { color: root.dataset.color, tokens: root.dataset.tokens, background: getComputedStyle(root).backgroundColor, want };
+      }),
+    );
+    assert.equal(seen.color, "info");
+    assert.equal(seen.tokens, "light");
+    assert.notEqual(seen.want, "rgba(0, 0, 0, 0)", "the token resolves");
+    assert.equal(seen.background, seen.want);
+    try {
+      await (await driver.switchTo().activeElement()).sendKeys(Key.ESCAPE);
+    } catch (e) {
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
+    await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+  } finally {
+    await driver.switchTo().window(main);
+    await invoke("settings_set", { patch: { interrupt_color: "theme" } });
+  }
+});
+
+test("a pinned colour in a dark window keeps the light moss and the Arabic font stack (L-043)", async () => {
+  const main = await driver.getWindowHandle();
+  const saved = await invoke("settings_set", { patch: { appearance: "dark", interrupt_color: "moss", locale: "ar" } });
+  assert.equal(saved.answer?.interrupt_color, "moss", JSON.stringify(saved));
+  try {
+    await openTestInterrupt(main);
+    const seen = await waitFor("the pinned interrupt in a dark, Arabic window", () =>
+      driver.executeScript(() => {
+        const root = document.querySelector("main.tl-int");
+        const html = document.documentElement;
+        if (root?.dataset.color !== "moss" || html.dataset.theme !== "dark" || html.lang !== "ar") return null;
+        // --sm-moss as Swiss Moss's light block draws it, and as the dark window around the page does.
+        const fill = (tokens) => {
+          const probe = document.createElement("i");
+          if (tokens) probe.dataset.tokens = tokens;
+          probe.style.background = "var(--sm-moss)";
+          (tokens ? root : document.body).append(probe);
+          const value = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return value;
+        };
+        return {
+          tokens: root.dataset.tokens,
+          background: getComputedStyle(root).backgroundColor,
+          lightMoss: fill("light"),
+          darkMoss: fill(null),
+          font: getComputedStyle(root).getPropertyValue("--sm-font-sans"),
+          titleFont: getComputedStyle(document.querySelector(".tl-int-title") ?? root).fontFamily,
+        };
+      }),
+    );
+    assert.equal(seen.tokens, "light");
+    assert.equal(seen.background, seen.lightMoss, "the light moss, not the dark one");
+    assert.notEqual(seen.background, seen.darkMoss, "the window itself is dark, the pin is not");
+    assert.match(seen.font, /Noto Sans Arabic/, "the pin leaves the :lang(ar) font stack alone");
+    assert.match(seen.titleFont, /Noto Sans Arabic/);
+    try {
+      await (await driver.switchTo().activeElement()).sendKeys(Key.ESCAPE);
+    } catch (e) {
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
+    await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+  } finally {
+    await driver.switchTo().window(main);
+    await invoke("settings_set", { patch: { appearance: "auto", interrupt_color: "theme", locale: null } });
+  }
+});
+
+test("Preview in dark or light recolours the Appearance preview under the app's CSP (L-043)", async () => {
+  await openPage("appearance");
+  /** The preview's fill and token block, and the fill Swiss Moss's moss has in that block. */
+  const preview = () =>
+    driver.executeScript(() => {
+      const el = document.querySelector(".tl-preview");
+      if (!el) return null;
+      const probe = document.createElement("i");
+      probe.dataset.tokens = el.dataset.tokens ?? "";
+      probe.style.background = "var(--sm-moss)";
+      document.body.append(probe);
+      const moss = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { tokens: el.dataset.tokens ?? null, background: getComputedStyle(el).backgroundColor, moss };
+    });
+  const before = await waitFor("the Default preview", preview);
+  await (await find('[data-action="preview-theme"]')).click();
+  const after = await waitFor("the preview in the other appearance", async () => {
+    const now = await preview();
+    return now?.tokens && now.tokens !== before.tokens && now;
+  });
+  // The injected token block applies (a CSP that refused it would leave the fill as before).
+  assert.notEqual(after.background, before.background);
+  assert.equal(after.background, after.moss);
+});
+
 // ---- Updates (L-019) ----------------------------------------------------------------------------
 // A debug build never checks for updates. The e2e build may point the updater at a `latest.json` on
 // 127.0.0.1 (`update_e2e_endpoint`, compiled only with the fetch seam). The package is signed with a

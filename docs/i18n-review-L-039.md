@@ -454,3 +454,58 @@ The update copy of L-019 (12 strings in a new `settings.about` section: subtitle
 | he | 1 | `settings.about.subtitle` | "העדכונים שלה" points the updates at the version (feminine); the source means Tolon's updates. | Accepted: "שלו". Round 2 ok. |
 
 Native review is still required before release.
+
+## L-043
+
+New and changed strings of L-043 and of the QA fixes that ship with it, drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues: the reminder colour on the Appearance page (`settings.appearance.color`, `colorHint`, the eight `colors.*` names, `previewDark`, `previewLight`, `testAlarm`), the short preview label `firstRun.previewJoin`, the step 3 sentences `firstRun.trayHiddenMenuBar` (macOS: Finder or Spotlight) and `firstRun.trayHiddenSystemTray` (Windows and Linux: the list of apps), and `interrupt.hintSpace` reworded as "Space marks you as already there." (D4). en-US is the source.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, at most 2 rounds.
+- Round 1 first ran partly on a local model while the proxy could not be reached: judge: local qwen3.6-35b (LiteLLM unreachable without VPN), through `~/.claude/bin/local-llm reason` (`qwen3.6:35b-mlx`, temperature 0, prompt on stdin, the same prompt and JSON shape, one call at a time). It covered en-GB, pt-BR, pt-PT, de and es; the run was stopped when the VPN came back, and round 1 was then redone on gemini for all 11 locales, with the local findings already accepted in the drafts.
+- One locale per call. Each prompt holds only the new strings as key, en-US source and translation, where each one shows, the locale's neighbouring strings for consistent terms (`theme`, `light`, `dark`, the Appearance subtitle, `previewLabel`, `tryAlarm`, `hintJoin`, `alreadyThere`, `trayBody`, `trayMenuBar`, `traySystemTray`, `joinCall`, `dismiss`, `testTitle`), the copy rules and the language rules of the L-039 method.
+
+### Calls and tokens
+
+Local model (round 1, stopped after es; no token counts, the local tool does not report them):
+
+| Locale | Round | Prompt chars | Seconds | Exit | Issues | Verdict |
+|---|---|---|---|---|---|---|
+| en-GB | 1 | 5926 | 54.6 | 0 | 0 | ok |
+| pt-BR | 1 | 6030 | 47.6 | 0 | 0 | ok |
+| pt-PT | 1 | 6104 | 77.8 | 0 | 3 | fix |
+| de | 1 | 6090 | 86.7 | 0 | 0 | ok |
+| es | 1 | 6074 | 71.6 | 0 | 0 | ok |
+
+gemini-3.8-flash:
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 1653 | 572 (549) | 2225 | 5.8 | 0 | ok |
+| pt-BR | 1 | 1711 | 1275 (1254) | 2986 | 9.8 | 0 | ok |
+| pt-PT | 1 | 1739 | 1380 (1358) | 3119 | 12.7 | 0 | ok |
+| de | 1 | 1712 | 1091 (1070) | 2803 | 5.9 | 0 | ok |
+| es | 1 | 1697 | 1524 (1503) | 3221 | 9.2 | 0 | ok |
+| ar | 1 | 1754 | 3463 (3442) | 5217 | 21.8 | 0 | ok |
+| tr | 1 | 1723 | 1975 (1952) | 3698 | 17.7 | 0 | ok |
+| hi | 1 | 1738 | 1194 (1173) | 2932 | 13.2 | 0 | ok |
+| zh-CN | 1 | 1676 | 1654 (1548) | 3330 | 23.5 | 1 | fix |
+| ja | 1 | 1692 | 1383 (1362) | 3075 | 7.9 | 0 | ok |
+| he | 1 | 1842 | 1169 (1157) | 3011 | 7.5 | 0 | ok |
+| zh-CN | 2 | 1675 | 1400 (1377) | 3075 | 9.8 | 0 | ok |
+| All (12 calls) | | 20612 | 18080 | 38692 | | 1 | |
+
+A pt-PT round 2 call was also sent by mistake; its prompt was the same as round 1, the proxy answered from its cache in 0.1 s, and it is not counted.
+
+### Issues and decisions
+
+4 issues: 3 from the local model, 1 from gemini. 3 accepted, 1 rejected. Gemini round 1 saw the accepted pt-PT fixes and raised nothing for pt-PT; round 2 raised nothing for zh-CN.
+
+| Locale | Judge | Round | Key | Judge's point | Decision |
+|---|---|---|---|---|---|
+| pt-PT | local | 1 | `interrupt.hintSpace` | "marca que já está lá" is awkward; suggests "Espaço indica presença." | Rejected: the suggestion drops "already", which is the meaning of the key. Kept "Espaço marca que já está lá."; gemini round 1 ok. |
+| pt-PT | local | 1 | `firstRun.trayHiddenMenuBar` | "esconder" is less usual in pt-PT UI than "ocultar", which `trayHiddenSystemTray` already uses ("oculto"). | Accepted: "Se a barra de menus ocultar o ícone, ...". Gemini round 1 ok. |
+| pt-PT | local | 1 | `settings.appearance.colorHint` | "aparece" loses "takes over"; suggests "ocupa". | Accepted: "A cor do alarme que ocupa o ecrã antes de uma reunião. ...". Gemini round 1 ok. |
+| zh-CN | gemini | 1 | `firstRun.trayHiddenMenuBar` | The zh-CN macOS name for Spotlight is "聚焦", not "聚焦搜索". | Accepted: "如果菜单栏遮住了图标，从访达或聚焦再次打开 Tolon，即可重新显示此窗口。" Round 2 ok. |
+
+Native review is still required before release.
