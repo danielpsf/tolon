@@ -49,6 +49,16 @@ class LatestJson(unittest.TestCase):
             ra.latest_json(self.dist(files), "v0.1.0", "o/r")
         self.assertIn("windows-x86_64-msi", str(e.exception))
 
+    def test_older_archives_are_never_offered(self):
+        # The app's updater has no zip support (decision "Updater (L-019)"): a signed archive alone is an error.
+        old = {"Tolon_0.1.0_x64-setup.exe": "Tolon_0.1.0_x64-setup.nsis.zip",
+               "Tolon_0.1.0_x64_en-US.msi": "Tolon_0.1.0_x64_en-US.msi.zip",
+               "Tolon_0.1.0_amd64.AppImage": "Tolon_0.1.0_amd64.AppImage.tar.gz"}
+        for installer, archive in old.items():
+            files = [f.replace(installer, archive) for f in self.FULL]
+            with self.assertRaises(SystemExit, msg=archive):
+                ra.latest_json(self.dist(files), "v0.1.0", "o/r")
+
     def test_written_file_is_valid_json(self):
         d = self.dist(self.FULL)
         ra.latest_json(d, "v0.1.0", "o/r")

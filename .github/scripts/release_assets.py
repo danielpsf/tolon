@@ -20,14 +20,15 @@ ROOT = Path(__file__).resolve().parents[2]
 TAURI_CONF = ROOT / "crates/tolon-app/tauri.conf.json"
 
 # Updater manifest keys and the artifact patterns behind them, best first. The artifact is the file with a
-# `.sig` next to it. Tauri 2 signs the installer itself (the AppImage, `-setup.exe`, `.msi`, `.deb`); the
-# archive names are the older layout, kept as a fallback. The updater plugin looks up
-# `{os}-{arch}-{installer}` (windows-x86_64-nsis, linux-x86_64-deb, ...) before the plain `{os}-{arch}`, so a
-# copy installed from an MSI or a deb gets its own file type back. The plain Windows and Linux keys point at
-# NSIS and the AppImage.
-NSIS = ["*-setup.exe", "*-setup.nsis.zip"]
-MSI = ["*.msi", "*.msi.zip"]
-APPIMAGE = ["*.AppImage", "*.AppImage.tar.gz"]
+# `.sig` next to it. Tauri 2 signs the installer itself (the AppImage, `-setup.exe`, `.msi`, `.deb`) and
+# the macOS `.app.tar.gz`. Only those are offered: Tolon's updater is built without its `zip` feature
+# (decision "Updater (L-019)"), so it cannot read the older `.nsis.zip`, `.msi.zip` or `.AppImage.tar.gz`
+# archives. The updater plugin looks up `{os}-{arch}-{installer}` (windows-x86_64-nsis, linux-x86_64-deb, ...)
+# before the plain `{os}-{arch}`, so a copy installed from an MSI or a deb gets its own file type back. The
+# plain Windows and Linux keys point at NSIS and the AppImage.
+NSIS = ["*-setup.exe"]
+MSI = ["*.msi"]
+APPIMAGE = ["*.AppImage"]
 APP = ["*.app.tar.gz"]
 KEYS = {
     "darwin-aarch64": APP,
