@@ -138,6 +138,20 @@ pub fn snooze(alarm: &mut Alarm, minutes: u32, now: DateTime<Utc>) -> bool {
     }
 }
 
+/// The tray panel's Snooze for a meeting whose interrupt is not on screen (F7): the alarm comes
+/// `minutes` later than it was due, never sooner. A Scheduled alarm counts from `at`, a Snoozed
+/// one from `until`, a Firing one (waiting behind another interrupt) from `now`. `false`, and no
+/// change, for a final state, zero minutes or a time that overflows.
+pub fn snooze_later(alarm: &mut Alarm, minutes: u32, now: DateTime<Utc>) -> bool {
+    let due = match alarm.state {
+        AlarmState::Scheduled => alarm.at,
+        AlarmState::Snoozed { until } => until,
+        AlarmState::Firing { .. } => now,
+        _ => return false,
+    };
+    snooze(alarm, minutes, due.max(now))
+}
+
 fn settle(alarm: &mut Alarm, to: AlarmState) -> bool {
     if alarm.state.is_final() {
         return false;

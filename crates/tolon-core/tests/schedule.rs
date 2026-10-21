@@ -585,6 +585,25 @@ fn ac7_3_pause_suppresses_firing_and_resumes_inside_the_window() -> TestResult {
     Ok(())
 }
 
+/// S7.1: a meeting in 20 minutes, then Pause for 1 hour. Nothing fires while paused, and when
+/// the pause ends the meeting's window (start + 10 min) has closed, so the alarm expires silently.
+#[test]
+fn s7_1_pause_for_an_hour_silences_a_meeting_in_20_minutes() -> TestResult {
+    let now = at(13, 40)?;
+    let meeting = occ("review", at(14, 0)?, 3);
+    let mut alarms = plan(&[meeting], &settings(2, false), &[], now);
+    let until = Some(now + Duration::hours(1));
+    let mut minute = now;
+    while minute <= at(14, 45)? {
+        let transitions = tick(&alarms, minute, until, None);
+        assert!(transitions.iter().all(|t| !t.fires()), "fired at {minute}");
+        apply_transitions(&mut alarms, &transitions);
+        minute += Duration::minutes(1);
+    }
+    assert_eq!(states(&alarms), [AlarmState::Expired]);
+    Ok(())
+}
+
 #[test]
 fn ac8_1_quiet_hours_cover_the_window_across_midnight_and_weekends() -> TestResult {
     let night = quiet((22, 0), (7, 30), false)?;

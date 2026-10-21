@@ -6,8 +6,8 @@ use chrono::Duration;
 use common::{at, occ, TestResult};
 use tolon_core::{
     already_there, apply_rules, dismiss, expand_window, join, judge_window, parse_ics, snooze,
-    Alarm, AlarmKind, AlarmState, EventId, ExpandOptions, IgnoreReason, IgnoreRules, OccurrenceKey,
-    ParseOptions, Verdict,
+    snooze_later, Alarm, AlarmKind, AlarmState, EventId, ExpandOptions, IgnoreReason, IgnoreRules,
+    OccurrenceKey, ParseOptions, Verdict,
 };
 
 fn key(event: &str) -> TestResult<OccurrenceKey> {
@@ -115,6 +115,40 @@ fn actions_move_open_alarms_and_leave_final_ones_alone() -> TestResult {
     let mut zero = alarm(AlarmState::Scheduled)?;
     assert!(!snooze(&mut zero, 0, at(13, 59)?));
     assert_eq!(zero.state, AlarmState::Scheduled);
+    Ok(())
+}
+
+/// AC7.2: the panel's Snooze before the interrupt is up delays the alarm, never brings it forward.
+#[test]
+fn ac7_2_panel_snooze_comes_later_than_the_alarm_was_due() -> TestResult {
+    // Due at 13:58; snoozed at 13:48 it comes at 14:03, not at 13:53.
+    let mut a = alarm(AlarmState::Scheduled)?;
+    assert!(snooze_later(&mut a, 5, at(13, 48)?));
+    assert_eq!(a.state, AlarmState::Snoozed { until: at(14, 3)? });
+    // Snoozed again, it moves on from its own time.
+    assert!(snooze_later(&mut a, 5, at(13, 50)?));
+    assert_eq!(a.state, AlarmState::Snoozed { until: at(14, 8)? });
+    // Overdue or firing: from now.
+    let mut late = alarm(AlarmState::Scheduled)?;
+    assert!(snooze_later(&mut late, 5, at(13, 59)?));
+    assert_eq!(late.state, AlarmState::Snoozed { until: at(14, 4)? });
+    let mut firing = alarm(AlarmState::Firing { since: at(13, 58)? })?;
+    assert!(snooze_later(&mut firing, 5, at(13, 59)?));
+    assert_eq!(firing.state, AlarmState::Snoozed { until: at(14, 4)? });
+    for done in [
+        AlarmState::Dismissed,
+        AlarmState::Joined,
+        AlarmState::Expired,
+    ] {
+        let mut a = alarm(done)?;
+        assert!(!snooze_later(&mut a, 5, at(13, 48)?));
+        assert_eq!(a.state, done);
+    }
+    assert!(!snooze_later(
+        &mut alarm(AlarmState::Scheduled)?,
+        0,
+        at(13, 48)?
+    ));
     Ok(())
 }
 

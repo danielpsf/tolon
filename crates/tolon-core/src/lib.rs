@@ -11,7 +11,8 @@ mod schedule;
 mod tzid;
 
 pub use alarm::{
-    already_there, dismiss, join, snooze, Alarm, AlarmKind, AlarmState, EXPIRY_MINUTES,
+    already_there, dismiss, join, snooze, snooze_later, Alarm, AlarmKind, AlarmState,
+    EXPIRY_MINUTES,
 };
 pub use expand::{expand, expand_window, ExpandOptions, WINDOW_DAYS};
 pub use join::detect_join;
