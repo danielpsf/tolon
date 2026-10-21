@@ -82,6 +82,24 @@ pub fn target_os_violations(path: &str, src: &str) -> Vec<String> {
         .collect()
 }
 
+/// `tolon_platform::macos_only!` carries a macOS cfg into another crate, so it stays where it was
+/// reviewed (the `RunEvent::Reopen` arm, L-044): `crates/tolon-app/src/main.rs` only.
+pub fn macos_only_violations(path: &str, src: &str) -> Vec<String> {
+    if path == "crates/tolon-app/src/main.rs" {
+        return Vec::new();
+    }
+    src.lines()
+        .enumerate()
+        .filter(|(_, line)| line.contains("macos_only!"))
+        .map(|(n, _)| {
+            format!(
+                "{path}:{}: macos_only! outside crates/tolon-app/src/main.rs",
+                n + 1
+            )
+        })
+        .collect()
+}
+
 pub fn run(root: &Path) -> Result<()> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let output = std::process::Command::new(cargo)
@@ -107,6 +125,7 @@ pub fn run(root: &Path) -> Result<()> {
         let src = std::fs::read_to_string(&file)
             .with_context(|| format!("cannot read {}", file.display()))?;
         violations.extend(target_os_violations(&rel_str, &src));
+        violations.extend(macos_only_violations(&rel_str, &src));
     }
 
     if violations.is_empty() {
@@ -195,5 +214,18 @@ mod tests {
             v,
             vec!["crates/x/src/a.rs:2: target_os outside crates/tolon-platform"]
         );
+    }
+
+    #[test]
+    fn macos_only_is_allowed_in_the_app_main_only() {
+        let src = "tolon_platform::macos_only! {\n}\n";
+        assert!(macos_only_violations("crates/tolon-app/src/main.rs", src).is_empty());
+        assert_eq!(
+            macos_only_violations("crates/tolon-app/src/tray.rs", src),
+            vec![
+                "crates/tolon-app/src/tray.rs:1: macos_only! outside crates/tolon-app/src/main.rs"
+            ]
+        );
+        assert!(macos_only_violations("crates/tolon-app/src/tray.rs", "fine\n").is_empty());
     }
 }
