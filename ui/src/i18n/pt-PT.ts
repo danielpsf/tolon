@@ -87,7 +87,7 @@ export const ptPT: Messages = {
       light: "Claro",
       dark: "Escuro",
       color: "Cor do alarme",
-      colorHint: "A cor do ecrã que aparece antes de uma reunião. Os textos e os botões mudam com ela e continuam fáceis de ler.",
+      colorHint: "A cor do alarme que ocupa o ecrã antes de uma reunião. Os textos e os botões mudam com ela e continuam fáceis de ler.",
       colors: {
         theme: "Predefinida",
         moss: "Musgo",
@@ -180,7 +180,7 @@ export const ptPT: Messages = {
     trayMenuBar: "O Tolon fica na barra de menus",
     traySystemTray: "O Tolon fica na área de notificação",
     trayBody: "Esta janela fecha-se quando adicionar um calendário. Clique no ícone do Tolon para ver as reuniões de hoje, pausar os alarmes ou abrir as definições.",
-    trayHiddenMenuBar: "Se a barra de menus esconder o ícone, abra novamente o Tolon a partir do Finder ou do Spotlight para voltar a ver esta janela.",
+    trayHiddenMenuBar: "Se a barra de menus ocultar o ícone, abra novamente o Tolon a partir do Finder ou do Spotlight para voltar a ver esta janela.",
     trayHiddenSystemTray: "Se o ícone estiver oculto, abra novamente o Tolon a partir da lista de aplicações para voltar a ver esta janela.",
     pasteIcal: "Colar uma ligação iCal",
     tryAlarm: "Testar um alarme",
