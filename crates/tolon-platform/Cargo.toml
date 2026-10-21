@@ -15,6 +15,10 @@ thiserror = "2"
 rodio = { version = "0.23", default-features = false, features = ["playback", "wav"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
+# F13 / AC13.3: Google refresh tokens in the OS keychain (named in docs/architecture.md). The v1
+# feature picks Keychain Services on macOS, Credential Manager on Windows and the Secret Service
+# over zbus on Linux (zbus is already in the tree through Tauri).
+keyring = "4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
