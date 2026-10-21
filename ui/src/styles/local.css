@@ -322,7 +322,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: calc(12 * var(--tl-c));
+  /* Scales: the focus ring (3 + 4 units of --tl-u) reaches into the gap, so a capped gap would let it run into the next button on a big screen. */
+  gap: calc(12 * var(--tl-u));
 }
 .tl-int .sm-btn {
   height: auto;

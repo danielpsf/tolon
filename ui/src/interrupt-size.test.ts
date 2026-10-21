@@ -8,16 +8,18 @@ import local from "./styles/local.css?raw";
 
 const escape = (selector: string) => selector.replace(/[.*+?^${}()|[\]\\:"=]/g, "\\$&");
 
-/** The body of the top-level rule whose selector is exactly `selector`. */
-function rule(selector: string): string {
-  const body = new RegExp(`(?:^|\\})\\s*${escape(selector)}\\s*\\{([^}]*)\\}`, "m").exec(local)?.[1];
-  if (body === undefined) throw new Error(`no rule ${selector}`);
-  return body;
+/** The bodies of every rule whose selector is exactly `selector`, so a later rule cannot dodge a test. */
+function rules(selector: string): string[] {
+  const bodies = [...local.matchAll(new RegExp(`(?:^|\\})\\s*${escape(selector)}\\s*\\{([^}]*)\\}`, "gm"))].map((m) => m[1] ?? "");
+  if (bodies.length === 0) throw new Error(`no rule ${selector}`);
+  return bodies;
 }
 
-/** Declarations of `property` (every one, so a size added twice is seen) in the rule for `selector`. */
+/** Declarations of `property` in every rule for `selector` (a size set twice is seen). */
 function values(selector: string, property: string): string[] {
-  return [...rule(selector).matchAll(new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`, "g"))].map((m) => m[1]?.trim() ?? "");
+  return rules(selector).flatMap((body) =>
+    [...body.matchAll(new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`, "g"))].map((m) => m[1]?.trim() ?? ""),
+  );
 }
 
 const value = (selector: string, property: string): string => {
@@ -30,7 +32,6 @@ const value = (selector: string, property: string): string => {
 const CAPPED: Record<string, string[]> = {
   ".tl-int .sm-btn": ["min-height", "padding", "font-size"],
   ".tl-int .sm-btn.tl-primary": ["padding-inline", "font-size"],
-  ".tl-int-actions": ["gap"],
   ".tl-int-top": ["gap"],
   ".tl-int-count": ["gap"],
   ".tl-int-count svg": ["width", "height"],
@@ -48,6 +49,7 @@ const SCALED: Record<string, string[]> = {
   '.tl-int .tl-int-title[data-len="long"]': ["font-size"],
   '.tl-int .tl-int-title[data-len="longer"]': ["font-size"],
   ".tl-int-head": ["gap"],
+  ".tl-int-actions": ["gap"],
   ".tl-int-hint": ["margin"],
   ".tl-int-list": ["gap"],
   ".tl-int .tl-int-item .sm-display-l": ["font-size"],
@@ -72,6 +74,20 @@ describe("L-045 the reminder's controls keep a fixed size", () => {
 
   it.each(Object.entries(SCALED))("%s keeps scaling %j with --tl-u", (selector, properties) => {
     for (const property of properties) expect(value(selector, property)).toContain("var(--tl-u)");
+  });
+
+  it("B1 the gap between the buttons is at least the focus ring's reach, in the same unit", () => {
+    const unit = (v: string) => {
+      const m = /^calc\((\d+) \* var\((--tl-[uc])\)\)$/.exec(v);
+      if (!m) throw new Error(`not calc(N * var(--tl-u|c)): ${v}`);
+      return { n: Number(m[1]), unit: m[2] };
+    };
+    const ring = unit(value(".tl-int :focus-visible", "outline").replace(/ solid .*$/, ""));
+    const offset = unit(value(".tl-int :focus-visible", "outline-offset"));
+    const gap = unit(value(".tl-int-actions", "gap"));
+    expect(offset.unit).toBe(ring.unit);
+    expect(gap.unit).toBe(ring.unit);
+    expect(gap.n).toBeGreaterThanOrEqual(ring.n + offset.n);
   });
 
   it("the interrupt's base text is the capped 15 pt, so nothing inherits a growing size", () => {
