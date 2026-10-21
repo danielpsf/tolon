@@ -4,6 +4,7 @@
 mod commands;
 mod errors;
 mod interrupt;
+mod notify_copy;
 mod pipeline;
 mod refresh;
 mod scheduler;
@@ -45,6 +46,8 @@ fn open_store_in(dir: &Path) -> anyhow::Result<Store> {
 
 fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
     let store = open_store(app)?;
+    // The notification speaks the language it last got from the settings window; English until then.
+    app.manage(notify_copy::NotifyCopyState::new(notify_copy::load(&store)));
     let fetcher = IcsFetcher::new().context("Tolon could not start its network client.")?;
     app.manage(AppState {
         db: Mutex::new(store),
@@ -137,6 +140,7 @@ fn main() -> anyhow::Result<()> {
             commands::app_hide_panel,
             commands::app_quit,
             commands::tray_tooltip,
+            commands::notify_copy_set,
             #[cfg(feature = "e2e-loopback")]
             commands::alarms_e2e_state,
         ])

@@ -12,6 +12,7 @@ use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
 use crate::interrupt::{AlarmShow, InterruptState, LABEL_PREFIX};
+use crate::notify_copy::{self, NotifyCopy, NotifyCopyState};
 use crate::pipeline::{self, CalendarDto, Db, ListedDto};
 use crate::scheduler::{Act, Scheduler, TauriHost};
 use crate::settings::{self, SettingsDto, SoundChoice};
@@ -536,6 +537,31 @@ pub async fn tray_tooltip(
     Ok(())
 }
 
+/// The fallback notification's wording in the person's language, handed over by the settings
+/// window (the only one with the catalogues) when it loads and when the language changes (L-038).
+/// Validated and stored whole; a bundle that is not valid is `invalid:notify_copy` and changes
+/// nothing. The strings can carry a meeting title only through `{title}`, filled in Rust.
+#[tauri::command]
+pub async fn notify_copy_set(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    copy: serde_json::Value,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    let copy = NotifyCopy::from_page(&copy).map_err(|e| command_error(&e.into()))?;
+    let current = app
+        .try_state::<NotifyCopyState>()
+        .ok_or_else(|| command_error(&AppError::NOT_READY.into()))?;
+    if *current.current() != copy {
+        // Stored first: a bundle that could not be saved must not look kept after a restart.
+        state(&app)
+            .and_then(|s| notify_copy::save(&pipeline::lock(&s.db), &copy))
+            .map_err(|e| command_error(&e))?;
+        current.replace(copy);
+    }
+    Ok(())
+}
+
 /// The alarm rows, for the WebDriver tests. It exists only in the end-to-end build, whose feature no
 /// release build can have (decision "End-to-end fetch seam"). Keys and states, never titles.
 #[cfg(feature = "e2e-loopback")]
@@ -646,6 +672,7 @@ mod tests {
         ("app_hide_panel", "panel_only"),
         ("app_quit", "panel_only"),
         ("tray_tooltip", "main_only"),
+        ("notify_copy_set", "main_only"),
     ];
 
     /// Registered commands with no window check, each with its reason.
@@ -690,7 +717,7 @@ mod tests {
             .skip(1)
             .filter_map(|rest| rest.split(|c: char| c == ',' || c.is_whitespace()).next())
             .collect();
-        assert!(registered.len() >= 25, "{registered:?}");
+        assert!(registered.len() >= 26, "{registered:?}");
         for name in &registered {
             let checked = CHECKED.iter().any(|(n, _)| n == name);
             let explained = UNCHECKED

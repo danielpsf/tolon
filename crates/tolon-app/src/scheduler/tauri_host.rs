@@ -2,9 +2,8 @@
 //! default browser through `tauri-plugin-opener`'s `open_url` (called from Rust only: the plugin is
 //! not registered, so the webview has no opener command at all), and the F4.5 notification.
 //!
-//! The fallback notification's wording is English for now: the core and the app send codes, not
-//! sentences (decision "Tolon is translated"), and the notification is built here. Follow-up: let
-//! the UI hand its catalogue strings over once, at start.
+//! The fallback notification's wording comes from `notify_copy`: the settings window hands over a
+//! bundle from its catalogue, Rust keeps it, and the built-in English is used until one arrives.
 //!
 //! Action support of the notification plugin (tauri-plugin-notification 2.7, from its source):
 //! - Linux: buttons when the notification server offers actions (GNOME, KDE and dunst do). Where it does
@@ -26,6 +25,7 @@ use tolon_platform::{Playback, Sound, SoundPlayer, Takeover};
 use super::{Act, Host, Opened, SNOOZE_MINUTES};
 use crate::commands::{self, AppScheduler};
 use crate::interrupt::{self, AlarmShow, InterruptState, LABEL_PREFIX};
+use crate::notify_copy::{NotifyCopy, NotifyCopyState};
 use crate::pipeline;
 
 const ACTION_TYPE: &str = "alarm";
@@ -194,7 +194,15 @@ impl Host for TauriHost {
     }
 
     fn notify(&self, show: &AlarmShow, id: i32) {
-        let (title, body) = fallback_text(show);
+        let copy = self
+            .app
+            .try_state::<NotifyCopyState>()
+            .map_or_else(|| Arc::new(NotifyCopy::english()), |s| s.current());
+        let (title, body) = copy.text(show, self.zone());
+        // The buttons are read when the notification shows, so the current language reaches them.
+        if let Err(e) = register_actions(&self.app, &copy) {
+            tracing::warn!(error = %e, "could not register the notification buttons");
+        }
         let shown = self
             .app
             .notification()
@@ -218,32 +226,23 @@ impl Host for TauriHost {
     }
 }
 
-/// Title and body of the F4.5 notification: the meeting, or "N meetings", and when it starts.
-fn fallback_text(show: &AlarmShow) -> (String, String) {
-    let first = show.meetings.first();
-    let title = match (show.test, show.meetings.len()) {
-        (true, _) => "Test alarm".to_owned(),
-        (false, 0 | 1) => first.map(|m| m.title.clone()).unwrap_or_default(),
-        (false, n) => format!("{n} meetings are about to start"),
-    };
-    // "2026-10-20T14:00:00+02:00": the clock part, in the machine's offset.
-    let clock = first.and_then(|m| m.start.get(11..16)).unwrap_or_default();
-    (
-        title,
-        format!("Starts at {clock}. Tolon could not cover the screen."),
-    )
+/// The notification's two buttons with the bundle's labels; a type registered again replaces the old one.
+fn register_actions(app: &AppHandle, copy: &NotifyCopy) -> tauri_plugin_notification::Result<()> {
+    app.notification()
+        .register_action_types(vec![ActionType::builder(ACTION_TYPE)
+            .actions(vec![
+                Action::builder(SNOOZE, copy.snooze.as_str()).build(),
+                Action::builder(JOIN, copy.join.as_str()).build(),
+            ])
+            .build()])
 }
 
-/// Registers the notification's Join and Snooze buttons and what they do. Call once at start,
-/// before the first notification: the plugin shows actions only when a handler exists.
+/// Registers what the notification's Join and Snooze buttons do, and the English buttons for a
+/// notification before the first bundle. Call once at start, before the first notification: the
+/// plugin shows actions only when a handler exists.
 pub fn setup_fallback_actions(app: &AppHandle) -> anyhow::Result<()> {
+    register_actions(app, &NotifyCopy::english())?;
     let notification = app.notification();
-    notification.register_action_types(vec![ActionType::builder(ACTION_TYPE)
-        .actions(vec![
-            Action::builder(SNOOZE, format!("Snooze {SNOOZE_MINUTES} min")).build(),
-            Action::builder(JOIN, "Join the call").build(),
-        ])
-        .build()])?;
     let handle = app.clone();
     notification.on_action(move |performed| {
         let act = match performed.action_id() {
