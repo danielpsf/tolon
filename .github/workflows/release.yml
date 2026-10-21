@@ -109,7 +109,7 @@ jobs:
         shell: bash
         run: |
           mkdir out
-          find target -path '*/release/bundle/*' -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' -o -name '*.AppImage.tar.gz' -o -name '*.nsis.zip' -o -name '*.msi.zip' -o -name '*.sig' \) -exec cp {} out/ \;
+          find target -path '*/release/bundle/*' -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' -o -name '*.sig' \) -exec cp {} out/ \;
           ls -l out
           for pattern in ${{ matrix.expect }}; do
             ls out/$pattern > /dev/null || { echo "::error::no $pattern in the build output"; exit 1; }
