@@ -10,6 +10,7 @@
 //! Release builds only. A debug build (`cargo run`, the WebDriver build) never checks unless the
 //! end-to-end command has set a loopback endpoint ([`UpdaterState::set_endpoint`]).
 
+use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration as StdDuration;
 
@@ -31,6 +32,13 @@ pub const EVERY: Duration = Duration::hours(24);
 /// How often the loop looks at the clock. A failed check is retried at the next look, and the
 /// wall clock is used, so a laptop that slept through the 24 hours checks soon after it wakes.
 const LOOK_EVERY: StdDuration = StdDuration::from_secs(60 * 60);
+/// The plugin's request timeout for `latest.json`; without one a hung server holds the check forever.
+const CHECK_TIMEOUT: StdDuration = StdDuration::from_secs(30);
+/// The plugin's request timeout for the package download (the plugin leaves `Update.timeout` unset).
+const DOWNLOAD_TIMEOUT: StdDuration = StdDuration::from_secs(10 * 60);
+/// Our own bound around each plugin call, a little past its request timeout, in case the plugin
+/// waits outside the request.
+const GRACE: StdDuration = StdDuration::from_secs(5);
 
 /// What the About page and the panel show. `available` is the version to offer, `None` when there
 /// is none, it was skipped, or the person chose Later; `installing` while the download runs.
@@ -166,15 +174,26 @@ pub async fn check(app: &AppHandle) -> anyhow::Result<bool> {
     if !checks(!cfg!(debug_assertions), endpoint.is_some()) {
         return Ok(false);
     }
-    let mut builder = app.updater_builder();
+    // The plugin's own hook only cleans up Tauri; on Windows `install` ends the process at once, so
+    // the store is settled first, as on any exit (`settle_store` in main.rs).
+    let handle = app.clone();
+    let mut builder = app
+        .updater_builder()
+        .timeout(CHECK_TIMEOUT)
+        .on_before_exit(move || {
+            crate::settle_store(&handle);
+            handle.cleanup_before_exit();
+        });
     if let Some(url) = endpoint {
         builder = builder.endpoints(vec![url])?;
     }
-    let found = builder.build()?.check().await;
-    let found = found.map_err(|e| {
-        tracing::debug!(reason = %reason(&e), "update check failed");
-        AppError::UPDATE_CHECK
-    })?;
+    let plugin = builder.build()?;
+    let found = bounded(CHECK_TIMEOUT + GRACE, plugin.check())
+        .await
+        .map_err(|reason| {
+            tracing::debug!(%reason, "update check failed");
+            AppError::UPDATE_CHECK
+        })?;
     {
         let state = updater(app)?;
         let mut inner = state.lock();
@@ -191,6 +210,54 @@ pub async fn check(app: &AppHandle) -> anyhow::Result<bool> {
     Ok(true)
 }
 
+/// A plugin call with a hard limit; the error is a short reason for the debug log, never a URL.
+async fn bounded<T>(
+    limit: StdDuration,
+    call: impl Future<Output = Result<T, tauri_plugin_updater::Error>>,
+) -> Result<T, String> {
+    match tokio::time::timeout(limit, call).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(e)) => Err(reason(&e)),
+        Err(_) => Err("timed out".to_owned()),
+    }
+}
+
+/// What one look of the loop did.
+#[derive(Debug, PartialEq, Eq)]
+enum Look {
+    /// Not due yet.
+    Waited,
+    Checked,
+    /// Failed or timed out: `last_good` is unchanged, so the next look tries again.
+    Failed,
+    /// This build does not check: the loop ends.
+    Off,
+}
+
+/// One look: `check` (answering like [`check`]) when due, bounded by `limit` as a whole.
+async fn look<F: Future<Output = anyhow::Result<bool>>>(
+    last_good: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+    limit: StdDuration,
+    check: impl FnOnce() -> F,
+) -> Look {
+    if !due(last_good, now) {
+        return Look::Waited;
+    }
+    match tokio::time::timeout(limit, check()).await {
+        Ok(Ok(true)) => Look::Checked,
+        Ok(Ok(false)) => Look::Off,
+        Ok(Err(e)) => {
+            tracing::debug!(error = %e, "no update check this time");
+            Look::Failed
+        }
+        Err(_) => {
+            tracing::debug!("the update check timed out");
+            Look::Failed
+        }
+    }
+}
+
 /// On launch, then daily, for the life of the app (AC11.1). Errors are silent and retried.
 pub async fn run(app: AppHandle) {
     loop {
@@ -198,12 +265,9 @@ pub async fn run(app: AppHandle) {
             Ok(state) => state.lock().last_good,
             Err(_) => None,
         };
-        if due(last_good, Utc::now()) {
-            match check(&app).await {
-                Ok(false) => return,
-                Ok(true) => {}
-                Err(e) => tracing::debug!(error = %e, "no update check this time"),
-            }
+        let limit = CHECK_TIMEOUT + GRACE + GRACE;
+        if look(last_good, Utc::now(), limit, || check(&app)).await == Look::Off {
+            return;
         }
         tokio::time::sleep(LOOK_EVERY).await;
     }
@@ -246,13 +310,14 @@ pub async fn install(app: &AppHandle) -> anyhow::Result<()> {
         update
     };
     announce(app);
-    let done = update.download_and_install(|_, _| {}, || {}).await;
-    if let Err(e) = done {
-        tracing::warn!(reason = %reason(&e), "the update did not install");
-        updater(app)?.lock().installing = false;
+    let mut update = (*update).clone();
+    update.timeout = Some(DOWNLOAD_TIMEOUT);
+    let download = update.download_and_install(|_, _| {}, || {});
+    let done = finish_install(&*updater(app)?, DOWNLOAD_TIMEOUT + GRACE, download).await;
+    if done.is_err() {
         announce(app);
-        return Err(AppError::UPDATE_INSTALL.into());
     }
+    done?;
     tracing::info!(version = %update.version, "update installed, restarting");
     if let (Some(scheduler), Ok(state)) = (
         app.try_state::<crate::commands::AppScheduler>(),
@@ -261,6 +326,21 @@ pub async fn install(app: &AppHandle) -> anyhow::Result<()> {
         scheduler.shutdown(&state.db).await;
     }
     app.restart();
+}
+
+/// Waits for the download and install at most `limit`. A failure or a timeout ends `installing`, so
+/// the About page offers the buttons again, and answers `update_install`.
+async fn finish_install(
+    state: &UpdaterState,
+    limit: StdDuration,
+    download: impl Future<Output = Result<(), tauri_plugin_updater::Error>>,
+) -> anyhow::Result<()> {
+    if let Err(reason) = bounded(limit, download).await {
+        tracing::warn!(%reason, "the update did not install");
+        state.lock().installing = false;
+        return Err(AppError::UPDATE_INSTALL.into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -351,6 +431,62 @@ mod tests {
         Ok(())
     }
 
+    const SHORT: StdDuration = StdDuration::from_millis(50);
+
+    #[tokio::test]
+    async fn ac11_1_a_hung_check_gives_up_and_the_next_look_retries() {
+        let now = at("2026-10-21T08:00:00Z");
+        let hung = look(
+            None,
+            now,
+            SHORT,
+            std::future::pending::<anyhow::Result<bool>>,
+        )
+        .await;
+        assert_eq!(hung, Look::Failed);
+        // Nothing was recorded as a good check, so the next look (an hour later) is due and tries again.
+        let next = now + Duration::hours(1);
+        assert_eq!(
+            look(None, next, SHORT, || async { Ok(true) }).await,
+            Look::Checked
+        );
+        let offline = look(None, next, SHORT, || async {
+            Err(anyhow::anyhow!("offline"))
+        })
+        .await;
+        assert_eq!(offline, Look::Failed);
+        assert_eq!(
+            look(Some(now), next, SHORT, || async { Ok(true) }).await,
+            Look::Waited
+        );
+        assert_eq!(
+            look(None, next, SHORT, || async { Ok(false) }).await,
+            Look::Off
+        );
+    }
+
+    #[tokio::test]
+    async fn ac11_1_a_hung_download_ends_installing_and_answers_update_install() {
+        let state = UpdaterState::default();
+        state.lock().installing = true;
+        let done = finish_install(&state, SHORT, std::future::pending()).await;
+        let code = done.err().map(|e| crate::errors::command_error(&e).code);
+        assert_eq!(code, Some("update_install"));
+        assert!(!state.lock().installing);
+        assert_eq!(state.dto(None), UpdateDto::default());
+        // A plugin error (a refused signature, a dropped connection) ends the same way.
+        state.lock().installing = true;
+        let refused = finish_install(&state, SHORT, async {
+            Err(tauri_plugin_updater::Error::Network("refused".into()))
+        })
+        .await;
+        assert!(refused.is_err());
+        assert!(!state.lock().installing);
+        assert!(finish_install(&state, SHORT, async { Ok(()) })
+            .await
+            .is_ok());
+    }
+
     #[test]
     fn ac11_1_tauri_conf_sets_the_updater_for_github_releases() -> anyhow::Result<()> {
         let conf: Value = serde_json::from_str(include_str!("../tauri.conf.json"))?;
@@ -361,6 +497,8 @@ mod tests {
             json!(["https://github.com/danielpsf/tolon/releases/latest/download/latest.json"])
         );
         assert_eq!(updater["windows"]["installMode"], json!("passive"));
+        // The signed version must match latest.json's, so a tampered manifest cannot roll back.
+        assert_eq!(updater["requireSignedVersion"], json!(true));
         // The maintainer's key, id D3C5EBF2CE6A842B (decision "Releases use the Tauri CLI"); the
         // release preflight checks the signing key against it.
         assert_eq!(updater["pubkey"], json!(PUBKEY));

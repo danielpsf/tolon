@@ -44,6 +44,7 @@
       "endpoints": [
         "https://github.com/danielpsf/tolon/releases/latest/download/latest.json"
       ],
+      "requireSignedVersion": true,
       "windows": {
         "installMode": "passive"
       }
