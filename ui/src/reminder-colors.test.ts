@@ -8,6 +8,7 @@ import { FirstRunPage } from "./pages/FirstRunPage";
 import { InterruptPage } from "./pages/InterruptPage";
 import { AppearancePage } from "./pages/SettingsPages";
 import { colorAttr } from "./reminder-colors";
+import local from "./styles/local.css?raw";
 import { resetSettings, useSettings } from "./store";
 
 // L-043: the reminder colour reaches the interrupt and both previews as `data-color`, and the Appearance
@@ -137,6 +138,10 @@ describe("Appearance page (L-043)", () => {
     html = render(AppearancePage);
     expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="theme" data-tokens="dark">/);
     expect(html).toContain(">Preview in light</button>");
+  });
+
+  it("marks the checked swatch with an outline under forced colours, where box-shadow is dropped", () => {
+    expect(local).toMatch(/@media \(forced-colors: active\) \{\s*\.tl-swatch input:checked \+ i \{[^}]*outline: 3px solid CanvasText;/);
   });
 
   it("renders nothing to choose before the settings are in", () => {

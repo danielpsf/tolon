@@ -608,6 +608,13 @@
 .tl-swatch input:checked + i {
   box-shadow: 0 0 0 2px var(--sm-paper), 0 0 0 4px var(--sm-ink);
 }
+/* Forced colours drop box-shadow: the checked swatch keeps a system-coloured outline instead. */
+@media (forced-colors: active) {
+  .tl-swatch input:checked + i {
+    outline: 3px solid CanvasText;
+    outline-offset: 2px;
+  }
+}
 .tl-swatch input:focus-visible + i {
   outline: 2px solid var(--sm-focus);
   outline-offset: 6px;
