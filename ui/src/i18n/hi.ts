@@ -136,6 +136,8 @@ export const hi: Messages = {
     eventPage: "इवेंट पेज",
     summary: (minutes, quiet) =>
       `अलार्म ${number.format(minutes)} मिनट पहले। ${quiet ? `शांत समय: ${quiet}।` : "शांत समय बंद है।"}`,
+    dismissConsequence: "खारिज करने पर इस कंप्यूटर पर इस मीटिंग के सभी रिमाइंडर बंद हो जाते हैं।",
+    snoozeEnded: "तब तक मीटिंग शुरू हो चुकी होगी, इसलिए Tolon आपको दोबारा याद नहीं दिलाएगा।",
     tooltip: (title, duration) => `${title}, ${duration} में`,
     tooltipNow: (title) => `अभी: ${title}`,
   },

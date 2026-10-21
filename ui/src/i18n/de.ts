@@ -136,6 +136,8 @@ export const de: Messages = {
     eventPage: "Terminseite",
     summary: (minutes, quiet) =>
       `Alarm ${number.format(minutes)} Min. vorher. ${quiet ? `Ruhezeiten ${quiet}.` : "Ruhezeiten aus."}`,
+    dismissConsequence: "Verwerfen schaltet alle Erinnerungen an diesen Termin auf diesem Computer stumm.",
+    snoozeEnded: "Bis dahin hat der Termin schon begonnen, deshalb erinnert Tolon dich nicht noch einmal.",
     tooltip: (title, duration) => `${title} in ${duration}`,
     tooltipNow: (title) => `Jetzt: ${title}`,
   },

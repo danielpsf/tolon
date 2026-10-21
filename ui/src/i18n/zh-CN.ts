@@ -133,6 +133,8 @@ export const zhCN: Messages = {
     eventPage: "活动页面",
     summary: (minutes, quiet) =>
       `提前 ${number.format(minutes)} 分钟提醒。${quiet ? `勿扰时段：${quiet}。` : "勿扰时段已关闭。"}`,
+    dismissConsequence: "关闭后，此会议的所有提醒将在这台电脑上静音。",
+    snoozeEnded: "届时会议已经开始，所以 Tolon 不会再提醒你。",
     tooltip: (title, duration) => `${title}，${duration}后开始`,
     tooltipNow: (title) => `进行中：${title}`,
   },

@@ -179,8 +179,10 @@ export const ar: Messages = {
         many: (n) => `${n} دقيقة`,
         other: (n) => `${n} دقيقة`,
       })}. ${quiet ? `ساعات الهدوء ${iso(quiet)}.` : "ساعات الهدوء متوقفة."}`,
-    tooltip: (title, duration) => `${iso(title)} بعد ${duration}`,
-    tooltipNow: (title) => `الآن: ${iso(title)}`,
+    dismissConsequence: "يؤدي الإغلاق إلى إسكات كل تذكيرات هذا الاجتماع على هذا الكمبيوتر.",
+    snoozeEnded: "سيكون الاجتماع قد بدأ بحلول ذلك الوقت، لذلك لن يذكّرك Tolon مرة أخرى.",
+    tooltip: (title, duration) => `${title} بعد ${duration}`,
+    tooltipNow: (title) => `الآن: ${title}`,
   },
   relative: {
     neverSynced: "لم تتم المزامنة بعد",

@@ -140,6 +140,11 @@ export interface ListedDto {
   join: JoinDto;
 }
 
+/** `occurrences_snooze`: `ended` when the snooze would have come after the meeting's window, so its reminders ended instead. */
+export interface SnoozeDto {
+  ended: boolean;
+}
+
 /** `app_status`, `app_pause`, `app_resume` and the `app:paused` event. */
 export interface PauseDto {
   /** RFC 3339 UTC, or null while alarms are not paused. */

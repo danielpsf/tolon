@@ -133,6 +133,8 @@ export const tr: Messages = {
     eventPage: "Etkinlik sayfası",
     summary: (minutes, quiet) =>
       `Alarmlar ${number.format(minutes)} dk önce. ${quiet ? `Sessiz saatler: ${quiet}.` : "Sessiz saatler kapalı."}`,
+    dismissConsequence: "Kapatmak bu toplantının tüm hatırlatıcılarını bu bilgisayarda susturur.",
+    snoozeEnded: "O zamana kadar toplantı başlamış olacak, bu yüzden Tolon sana bir daha hatırlatmayacak.",
     tooltip: (title, duration) => `${title}, ${duration} içinde`,
     tooltipNow: (title) => `Şimdi: ${title}`,
   },

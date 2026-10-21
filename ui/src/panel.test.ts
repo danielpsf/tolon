@@ -3,7 +3,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { JoinDto, ListedDto, SettingsDto } from "./api-types";
 import { createCopy, LOCALES } from "./copy";
-import { firstLine, nextOf, pausedText, remaining, rowTime, rowWhere, summaryText, tooltipText } from "./panel";
+import {
+  firstLine,
+  focusFirstAction,
+  hidesPanel,
+  isolate,
+  nextOf,
+  pausedText,
+  remaining,
+  rowTime,
+  rowWhere,
+  summaryText,
+  tooltipText,
+} from "./panel";
 import { PanelPage } from "./pages/PanelPage";
 
 vi.mock("./api", () => ({
@@ -78,8 +90,8 @@ describe("tray panel (F7)", () => {
   });
 
   it("AC7.1 the tooltip names the next meeting and the minutes until it", () => {
-    expect(tooltipText(en, TODAY, null, now)).toBe("Platform weekly sync in 12 min");
-    expect(tooltipText(en, TODAY, null, Date.parse("2026-10-20T14:05:00Z"))).toBe("Now: Platform weekly sync");
+    expect(tooltipText(en, TODAY, null, now)).toBe("\u2068Platform weekly sync\u2069 in 12 min");
+    expect(tooltipText(en, TODAY, null, Date.parse("2026-10-20T14:05:00Z"))).toBe("Now: \u2068Platform weekly sync\u2069");
     expect(tooltipText(en, [], null, now)).toBe("No more meetings today.");
   });
 
@@ -87,7 +99,7 @@ describe("tray panel (F7)", () => {
     const until = "2026-10-20T14:48:00Z";
     const hhmm = en.formatTime(Date.parse(until));
     expect(pausedText(en, until)).toBe(`Paused until ${hhmm}`);
-    expect(tooltipText(en, TODAY, until, now)).toBe(`Paused until ${hhmm}\nPlatform weekly sync in 12 min`);
+    expect(tooltipText(en, TODAY, until, now)).toBe(`Paused until ${hhmm}\n\u2068Platform weekly sync\u2069 in 12 min`);
     const de = createCopy("de");
     expect(pausedText(de, until)).toBe(`Pausiert bis ${de.formatTime(Date.parse(until))}`);
   });
@@ -122,6 +134,54 @@ describe("tray panel (F7)", () => {
       expect(text.length).toBeGreaterThan(3);
     }
     expect(texts[0]).toContain("Platform weekly sync");
+  });
+
+  it.each(LOCALES)("AC7.1 %s wraps the title in FSI and PDI in the tooltip, with its format characters dropped", (locale) => {
+    const sneaky = item("Stand\u202Eup\u200B", "2026-10-20T14:00:00Z");
+    const text = tooltipText(createCopy(locale), [sneaky], null, now);
+    expect(text).toContain("\u2068Standup\u2069");
+    expect(text.match(/\u2068/g)).toHaveLength(1);
+    expect(text.match(/\u2069/g)).toHaveLength(1);
+    expect(text).not.toMatch(/[\u200B\u202E]/);
+  });
+
+  it("AC7.1 isolates a title: format characters out, then FSI and PDI around it", () => {
+    expect(isolate("Team (EU)")).toBe("\u2068Team (EU)\u2069");
+    expect(isolate("\u2068a\u2069\u202Eb\u2066")).toBe("\u2068ab\u2069");
+  });
+
+  it("AC7.2 Esc hides the panel; modified Esc, IME input and other keys do not", () => {
+    const key = (over: Partial<KeyboardEvent>) => ({
+      key: "Escape",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      isComposing: false,
+      ...over,
+    });
+    expect(hidesPanel(key({}))).toBe(true);
+    for (const over of [{ key: "Enter" }, { key: "d" }, { metaKey: true }, { ctrlKey: true }, { altKey: true }, { isComposing: true }]) {
+      expect(hidesPanel(key(over)), JSON.stringify(over)).toBe(false);
+    }
+  });
+
+  it("AC7.2 focus starts on the first action when the panel shows", () => {
+    const focus = vi.fn();
+    const select = vi.fn(() => ({ focus }));
+    expect(focusFirstAction({ querySelector: select } as unknown as ParentNode)).toBe(true);
+    expect(select).toHaveBeenCalledWith(".tl-panel-actions button");
+    expect(focus).toHaveBeenCalledOnce();
+    expect(focusFirstAction({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
+    expect(focusFirstAction(null)).toBe(false);
+  });
+
+  it.each(LOCALES)("%s has the panel's Dismiss consequence and the snooze-ended sentence", (locale) => {
+    const { panel } = createCopy(locale).t;
+    for (const text of [panel.dismissConsequence, panel.snoozeEnded]) {
+      expect(text.length).toBeGreaterThan(10);
+      expect(text).not.toContain("!");
+    }
+    expect(panel.snoozeEnded).toContain("Tolon");
   });
 
   it("AC7.2 offers Pause for 1 hour, Settings and Quit before anything loads", () => {

@@ -136,6 +136,8 @@ export const enGB: Messages = {
     eventPage: "Event page",
     summary: (minutes, quiet) =>
       `Alarms ${number.format(minutes)} min before. ${quiet ? `Quiet hours ${quiet}.` : "Quiet hours off."}`,
+    dismissConsequence: "Dismissing silences every reminder for this meeting on this computer.",
+    snoozeEnded: "By then the meeting will have started, so Tolon will not remind you again.",
     tooltip: (title, duration) => `${title} in ${duration}`,
     tooltipNow: (title) => `Now: ${title}`,
   },

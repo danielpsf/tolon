@@ -136,6 +136,8 @@ export const es: Messages = {
     eventPage: "Página del evento",
     summary: (minutes, quiet) =>
       `Alarmas ${number.format(minutes)} min antes. ${quiet ? `Horas de silencio: ${quiet}.` : "Horas de silencio desactivadas."}`,
+    dismissConsequence: "Descartar silencia todos los recordatorios de esta reunión en este equipo.",
+    snoozeEnded: "Para entonces la reunión ya habrá empezado, así que Tolon no te lo recordará de nuevo.",
     tooltip: (title, duration) => `${title} en ${duration}`,
     tooltipNow: (title) => `Ahora: ${title}`,
   },

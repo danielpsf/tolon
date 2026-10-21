@@ -328,8 +328,8 @@
   overflow-y: auto;
   padding: var(--sm-space-5) var(--sm-space-5) var(--sm-space-4);
   background: var(--sm-card);
+  /* Square corners: the panel window is opaque, so rounded ones would show its corners behind them (decision "Tray panel, pause and window rights"). */
   border: 1px solid var(--sm-line);
-  border-radius: var(--sm-radius-l);
 }
 .tl-panel .tl-brand {
   padding: 0;
@@ -340,8 +340,9 @@
   justify-content: space-between;
   gap: var(--sm-space-3);
 }
+/* Ink, not the signal colour: a pause is a choice, not something wrong (decision "Tray panel, pause and window rights"). */
 .tl-panel-paused {
-  color: var(--sm-signal);
+  color: var(--sm-ink);
   font-size: 13px;
 }
 .tl-panel-next {

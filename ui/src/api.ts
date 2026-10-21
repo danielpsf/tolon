@@ -8,6 +8,7 @@ import type {
   ListedDto,
   PauseDto,
   SettingsDto,
+  SnoozeDto,
   SettingsPatch,
   Sound,
 } from "./api-types";
@@ -31,12 +32,14 @@ export const api = {
   // The tray panel and the tray tooltip (F7).
   occurrencesToday: () => invoke<ListedDto[]>("occurrences_today"),
   occurrencesJoin: (key: string) => invoke<void>("occurrences_join", { key }),
-  occurrencesSnooze: (key: string, minutes: number) => invoke<void>("occurrences_snooze", { key, minutes }),
+  occurrencesSnooze: (key: string, minutes: number) => invoke<SnoozeDto>("occurrences_snooze", { key, minutes }),
   occurrencesDismiss: (key: string) => invoke<void>("occurrences_dismiss", { key }),
   appStatus: () => invoke<PauseDto>("app_status"),
   appPause: (minutes: number) => invoke<PauseDto>("app_pause", { minutes }),
   appResume: () => invoke<PauseDto>("app_resume"),
   appShowSettings: () => invoke<void>("app_show_settings"),
+  /** Esc in the panel: it hides, as on a click away. */
+  appHidePanel: () => invoke<void>("app_hide_panel"),
   appQuit: () => invoke<void>("app_quit"),
   trayTooltip: (text: string) => invoke<void>("tray_tooltip", { text }),
 };

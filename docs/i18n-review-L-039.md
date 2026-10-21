@@ -259,3 +259,30 @@ Rejected:
 | ar | 1, 2 | `panel.label`, `settings.startup.requiresApproval`, `settings.startup.unavailable`, `errors.command.login_item` (7 issues) | Wrap the name Tolon in `iso()`. | No ar string wraps Tolon (L-039): it is one Latin word without punctuation, so the bidi algorithm keeps it in place; `iso()` is for feed and system text such as titles, hosts and keywords, which the new strings do wrap. |
 
 Choices recorded with this review: the tooltip puts "Paused until HH:MM" and the meeting on two lines (a line break needs no per-language separator), and `panel.summary` reuses `interrupt.timeRange` for the quiet hours. Native review is still required before release, as for every catalogue.
+
+### L-015 review fixes
+
+Two new strings, `panel.dismissConsequence` (the one-line consequence next to the panel's Dismiss, N6) and `panel.snoozeEnded` (a panel snooze that would end after the meeting's window, N7), drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues and checked by the same judge and method. The tooltip no longer takes the title through `iso()` in ar and he: the page now wraps the title in FSI and PDI for every locale (N2).
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 415 | 343 (331) | 758 | 2.7 | 0 | ok |
+| de | 1 | 414 | 635 (617) | 1049 | 4.6 | 0 | ok |
+| es | 1 | 419 | 664 (646) | 1083 | 4.7 | 0 | ok |
+| pt-BR | 1 | 436 | 751 (739) | 1187 | 6.5 | 0 | ok |
+| pt-PT | 1 | 432 | 731 (713) | 1163 | 5.4 | 0 | ok |
+| ar | 1 | 437 | 771 (672) | 1208 | 7.2 | 1 | fix |
+| tr | 1 | 421 | 695 (677) | 1116 | 6.0 | 0 | ok |
+| hi | 1 | 424 | 499 (492) | 923 | 3.4 | 0 | ok |
+| zh-CN | 1 | 429 | 1058 (1040) | 1487 | 6.0 | 0 | ok |
+| ja | 1 | 430 | 1650 (1535) | 2080 | 10.9 | 1 | fix |
+| ja | 2 | 429 | 975 (963) | 1404 | 11.6 | 0 | ok |
+| he | 1 | 443 | 1180 (1162) | 1623 | 10.5 | 0 | ok |
+| All (12 calls) | | 5129 | 9952 | 15081 | | 2 | |
+
+Decisions:
+
+| Locale | Round | Key | Judge's point | Decision |
+|---|---|---|---|---|
+| ja | 1 | `panel.snoozeEnded` | "これで終わりです" is colloquial for UI copy; align with "リマインダー". | Accepted: "その頃には会議が始まっているため、Tolon は再度リマインドしません。" Round 2 ok. |
+| ar | 1 | `panel.snoozeEnded` | Wrap the name Tolon in `iso()`. | Rejected, as in the first L-015 round: no ar string wraps the product name. |

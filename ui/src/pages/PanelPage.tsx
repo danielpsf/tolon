@@ -1,13 +1,23 @@
 // The tray panel (F7, mockup 02): the next meeting with Join, Snooze and Dismiss, the rest of
 // today, Pause for 1 hour, Settings and Quit. Every action is a command; the panel computes nothing
 // about alarms.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onOccurrencesChanged, onPaused } from "../api";
 import type { ListedDto, PauseDto } from "../api-types";
 import { Bell } from "../Bell";
 import { copy } from "../copy";
 import { detailsText, primaryLabel, SNOOZE_MINUTES } from "../interrupt";
-import { firstLine, nextOf, pausedText, remaining, rowTime, rowWhere, summaryText } from "../panel";
+import {
+  firstLine,
+  focusFirstAction,
+  hidesPanel,
+  nextOf,
+  pausedText,
+  remaining,
+  rowTime,
+  rowWhere,
+  summaryText,
+} from "../panel";
 import { useSettings } from "../store";
 import { errorText } from "../view";
 
@@ -53,9 +63,29 @@ export function PanelPage() {
   const settings = useSettings((s) => s.settings);
   const { items, pause, setPause, now } = usePanelData();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const root = useRef<HTMLElement>(null);
+
+  // Esc hides the panel; each time it shows (the window takes focus) focus starts on the first action.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!hidesPanel(e)) return;
+      e.preventDefault();
+      api.appHidePanel().catch(() => undefined);
+    };
+    const onFocus = () => focusFirstAction(root.current);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("focus", onFocus);
+    focusFirstAction(root.current);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   const run = async (action: () => Promise<unknown>) => {
     setError(null);
+    setNotice(null);
     try {
       await action();
     } catch (e) {
@@ -63,11 +93,17 @@ export function PanelPage() {
     }
   };
 
+  const snooze = (key: string) =>
+    run(async () => {
+      const { ended } = await api.occurrencesSnooze(key, SNOOZE_MINUTES);
+      if (ended) setNotice(t.snoozeEnded);
+    });
+
   const next = nextOf(items, now);
   const later = remaining(items, now).filter((m) => m.key !== next?.key);
 
   return (
-    <main className="tl-panel" aria-label={t.label}>
+    <main ref={root} className="tl-panel" aria-label={t.label}>
       <header className="tl-panel-top">
         <span className="tl-brand">
           <Bell />
@@ -93,17 +129,21 @@ export function PanelPage() {
                 {primaryLabel(c, next)}
               </button>
             )}
-            <button
-              type="button"
-              className="sm-btn"
-              onClick={() => void run(() => api.occurrencesSnooze(next.key, SNOOZE_MINUTES))}
-            >
+            <button type="button" className="sm-btn" onClick={() => void snooze(next.key)}>
               {ti.snooze(SNOOZE_MINUTES)}
             </button>
-            <button type="button" className="sm-btn quiet" onClick={() => void run(() => api.occurrencesDismiss(next.key))}>
+            <button
+              type="button"
+              className="sm-btn quiet"
+              aria-describedby="tl-panel-dismiss"
+              onClick={() => void run(() => api.occurrencesDismiss(next.key))}
+            >
               {ti.dismiss}
             </button>
           </div>
+          <p id="tl-panel-dismiss" className="sm-caption sm-muted">
+            {t.dismissConsequence}
+          </p>
         </section>
       ) : (
         <p className="sm-body sm-muted tl-panel-next">{t.noMore}</p>
@@ -127,6 +167,11 @@ export function PanelPage() {
         {error && (
           <p role="alert" className="sm-caption tl-panel-error">
             {error}
+          </p>
+        )}
+        {notice && (
+          <p role="status" className="sm-caption">
+            {notice}
           </p>
         )}
         <div className="tl-panel-actions">

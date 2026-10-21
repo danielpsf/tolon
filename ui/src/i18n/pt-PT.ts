@@ -136,6 +136,8 @@ export const ptPT: Messages = {
     eventPage: "Página do evento",
     summary: (minutes, quiet) =>
       `Alarmes ${number.format(minutes)} min antes. ${quiet ? `Horário de silêncio: ${quiet}.` : "Horário de silêncio desligado."}`,
+    dismissConsequence: "Dispensar silencia todos os lembretes desta reunião neste computador.",
+    snoozeEnded: "Nessa altura a reunião já terá começado, por isso o Tolon não volta a avisar.",
     tooltip: (title, duration) => `${title} dentro de ${duration}`,
     tooltipNow: (title) => `Agora: ${title}`,
   },

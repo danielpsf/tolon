@@ -133,6 +133,8 @@ export const ja: Messages = {
     eventPage: "予定のページ",
     summary: (minutes, quiet) =>
       `会議の ${number.format(minutes)} 分前にアラーム。${quiet ? `サイレント時間：${quiet}。` : "サイレント時間はオフ。"}`,
+    dismissConsequence: "閉じると、このコンピュータではこの会議のリマインダーがすべて鳴らなくなります。",
+    snoozeEnded: "その頃には会議が始まっているため、Tolon は再度リマインドしません。",
     tooltip: (title, duration) => `${title}、${duration}後`,
     tooltipNow: (title) => `開催中：${title}`,
   },

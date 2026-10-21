@@ -166,8 +166,10 @@ export const he: Messages = {
         two: () => "שתי דקות",
         other: (n) => `${n} דקות`,
       })} לפני. ${quiet ? `שעות שקטות: ${iso(quiet)}.` : "שעות שקטות לא פעילות."}`,
-    tooltip: (title, duration) => `${iso(title)} בעוד ${duration}`,
-    tooltipNow: (title) => `עכשיו: ${iso(title)}`,
+    dismissConsequence: "סגירה משתיקה את כל התזכורות לפגישה הזו במחשב הזה.",
+    snoozeEnded: "עד אז הפגישה כבר תתחיל, ולכן Tolon לא יזכיר שוב.",
+    tooltip: (title, duration) => `${title} בעוד ${duration}`,
+    tooltipNow: (title) => `עכשיו: ${title}`,
   },
   relative: {
     neverSynced: "עדיין לא סונכרן",

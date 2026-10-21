@@ -51,6 +51,26 @@ export function summaryText(c: Copy, s: SettingsDto): string {
   return c.t.panel.summary(s.lead_minutes, quiet);
 }
 
+/** Unicode format characters (zero-width, bidi overrides and isolates): a feed title must not reorder the text around it. */
+const FORMAT = /\p{Cf}/gu;
+
+/** A meeting title for a sentence: its format characters dropped, then wrapped in FSI and PDI, so it keeps its own direction in every locale. */
+export function isolate(title: string): string {
+  return `\u2068${title.replace(FORMAT, "")}\u2069`;
+}
+
+/** Esc hides the panel (AC7.2); every other key is the page's. */
+export function hidesPanel(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "isComposing">): boolean {
+  return e.key === "Escape" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing;
+}
+
+/** Puts the focus on the panel's first action, the way the interrupt opens on its primary button. */
+export function focusFirstAction(root: Pick<ParentNode, "querySelector"> | null): boolean {
+  const first = root?.querySelector<HTMLElement>(".tl-panel-actions button");
+  first?.focus();
+  return Boolean(first);
+}
+
 /** The tray tooltip (AC7.1): the pause, else the next meeting and the minutes until it, else "no more". */
 export function tooltipText(c: Copy, items: readonly ListedDto[], pausedUntil: string | null, now: number): string {
   const { panel } = c.t;
@@ -58,7 +78,7 @@ export function tooltipText(c: Copy, items: readonly ListedDto[], pausedUntil: s
   const meeting = next
     ? (() => {
         const span = c.until(Date.parse(next.start), now);
-        return span ? panel.tooltip(next.title, span) : panel.tooltipNow(next.title);
+        return span ? panel.tooltip(isolate(next.title), span) : panel.tooltipNow(isolate(next.title));
       })()
     : panel.noMore;
   // A line break is the one separator every language reads the same way.
