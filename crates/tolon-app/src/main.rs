@@ -134,6 +134,7 @@ fn main() -> anyhow::Result<()> {
             commands::app_pause,
             commands::app_resume,
             commands::app_show_settings,
+            commands::app_hide_panel,
             commands::app_quit,
             commands::tray_tooltip,
             #[cfg(feature = "e2e-loopback")]

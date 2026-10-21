@@ -48,6 +48,17 @@ fn main_or_panel(label: &str) -> Result<(), CommandError> {
     panel_only(label).or_else(|_| main_only(label))
 }
 
+/// The alarm actions and `alarms_current`: the interrupt windows (the actions are resolved against
+/// the group on screen, decision "Scheduler wiring") and the settings window. Never the panel: it
+/// has `occurrences_snooze` and `occurrences_dismiss`.
+fn main_or_interrupt(label: &str) -> Result<(), CommandError> {
+    if label.starts_with(LABEL_PREFIX) {
+        Ok(())
+    } else {
+        main_only(label)
+    }
+}
+
 /// `settings_get` only: the interrupt windows and the panel read the settings too, to render in
 /// the person's appearance and language (AC9.3). Reading is all they get.
 fn main_panel_or_interrupt(label: &str) -> Result<(), CommandError> {
@@ -285,29 +296,54 @@ async fn alarm_action(app: &AppHandle, key: &str, act: Act) -> Result<(), Comman
 
 /// The minutes are clamped to 1..=60.
 #[tauri::command]
-pub async fn alarms_snooze(app: AppHandle, key: String, minutes: u32) -> Result<(), CommandError> {
+pub async fn alarms_snooze(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+    minutes: u32,
+) -> Result<(), CommandError> {
+    main_or_interrupt(window.label())?;
     alarm_action(&app, &key, Act::Snooze(minutes)).await
 }
 
 #[tauri::command]
-pub async fn alarms_dismiss(app: AppHandle, key: String) -> Result<(), CommandError> {
+pub async fn alarms_dismiss(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+) -> Result<(), CommandError> {
+    main_or_interrupt(window.label())?;
     alarm_action(&app, &key, Act::Dismiss).await
 }
 
 #[tauri::command]
-pub async fn alarms_join(app: AppHandle, key: String) -> Result<(), CommandError> {
+pub async fn alarms_join(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+) -> Result<(), CommandError> {
+    main_or_interrupt(window.label())?;
     alarm_action(&app, &key, Act::Join).await
 }
 
 #[tauri::command]
-pub async fn alarms_already_there(app: AppHandle, key: String) -> Result<(), CommandError> {
+pub async fn alarms_already_there(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    key: String,
+) -> Result<(), CommandError> {
+    main_or_interrupt(window.label())?;
     alarm_action(&app, &key, Act::AlreadyThere).await
 }
 
 /// The interrupt on screen, for a window that loaded after `alarm:show` was emitted.
 #[tauri::command]
-pub async fn alarms_current(app: AppHandle) -> Option<AlarmShow> {
-    app.try_state::<InterruptState>().and_then(|s| s.get())
+pub async fn alarms_current(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<Option<AlarmShow>, CommandError> {
+    main_or_interrupt(window.label())?;
+    Ok(app.try_state::<InterruptState>().and_then(|s| s.get()))
 }
 
 /// F10's test alarm: a sample interrupt on every screen (also the WebDriver tests' way to open one).
@@ -465,6 +501,17 @@ pub async fn app_show_settings(
     Ok(())
 }
 
+/// Esc in the panel (AC7.2): the panel hides, as on a click away.
+#[tauri::command]
+pub async fn app_hide_panel(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), CommandError> {
+    panel_only(window.label())?;
+    tray::hide_panel(&app);
+    Ok(())
+}
+
 /// The panel's Quit (AC7.4): the scheduler stops with the store settled, then the process exits.
 #[tauri::command]
 pub async fn app_quit(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), CommandError> {
@@ -572,32 +619,46 @@ mod tests {
         }
     }
 
-    /// Every command that reads or changes settings, and the test alarm, checks the window first,
-    /// with the check its access calls for.
+    /// The window check each command starts with (decision "Tray panel, pause and window rights").
+    const CHECKED: &[(&str, &str)] = &[
+        ("calendars_list", "main_only"),
+        ("calendars_add_ics", "main_only"),
+        ("calendars_remove", "main_only"),
+        ("calendars_set_enabled", "main_only"),
+        ("calendars_sync_now", "main_only"),
+        ("occurrences_today", "main_or_panel"),
+        ("occurrences_join", "main_or_panel"),
+        ("occurrences_snooze", "panel_only"),
+        ("occurrences_dismiss", "panel_only"),
+        ("alarms_snooze", "main_or_interrupt"),
+        ("alarms_dismiss", "main_or_interrupt"),
+        ("alarms_join", "main_or_interrupt"),
+        ("alarms_already_there", "main_or_interrupt"),
+        ("alarms_current", "main_or_interrupt"),
+        ("alarms_test", "main_only"),
+        ("settings_get", "main_panel_or_interrupt"),
+        ("settings_set", "main_only"),
+        ("sound_preview", "main_only"),
+        ("app_status", "main_or_panel"),
+        ("app_pause", "panel_only"),
+        ("app_resume", "panel_only"),
+        ("app_show_settings", "panel_only"),
+        ("app_hide_panel", "panel_only"),
+        ("app_quit", "panel_only"),
+        ("tray_tooltip", "main_only"),
+    ];
+
+    /// Registered commands with no window check, each with its reason.
+    const UNCHECKED: &[(&str, &str)] = &[(
+        "alarms_e2e_state",
+        "only in the end-to-end build, whose feature no release can have; keys and states, no titles",
+    )];
+
+    /// Every command checks the window first, with the check its access calls for.
     #[test]
-    fn every_settings_command_checks_the_window_first() {
+    fn every_command_checks_the_window_first() {
         let source = include_str!("commands.rs");
-        for (name, check) in [
-            ("calendars_list", "main_only"),
-            ("calendars_add_ics", "main_only"),
-            ("calendars_remove", "main_only"),
-            ("calendars_set_enabled", "main_only"),
-            ("calendars_sync_now", "main_only"),
-            ("occurrences_today", "main_or_panel"),
-            ("occurrences_join", "main_or_panel"),
-            ("occurrences_snooze", "panel_only"),
-            ("occurrences_dismiss", "panel_only"),
-            ("alarms_test", "main_only"),
-            ("settings_get", "main_panel_or_interrupt"),
-            ("app_status", "main_or_panel"),
-            ("app_pause", "panel_only"),
-            ("app_resume", "panel_only"),
-            ("app_show_settings", "panel_only"),
-            ("app_quit", "panel_only"),
-            ("tray_tooltip", "main_only"),
-            ("settings_set", "main_only"),
-            ("sound_preview", "main_only"),
-        ] {
+        for (name, check) in CHECKED {
             let start = source
                 .find(&format!("pub async fn {name}("))
                 .unwrap_or(usize::MAX);
@@ -612,6 +673,67 @@ mod tests {
                 "{name} must start with {check}"
             );
         }
+    }
+
+    /// N1: every command `generate_handler!` registers is in `CHECKED`, or in `UNCHECKED` with a
+    /// reason; so a new command cannot skip the window check unnoticed.
+    #[test]
+    fn every_registered_command_is_checked_or_explained() {
+        let main = include_str!("main.rs");
+        let handler = main
+            .split("generate_handler![")
+            .nth(1)
+            .and_then(|rest| rest.split("])").next())
+            .unwrap_or_default();
+        let registered: Vec<&str> = handler
+            .split("commands::")
+            .skip(1)
+            .filter_map(|rest| rest.split(|c: char| c == ',' || c.is_whitespace()).next())
+            .collect();
+        assert!(registered.len() >= 25, "{registered:?}");
+        for name in &registered {
+            let checked = CHECKED.iter().any(|(n, _)| n == name);
+            let explained = UNCHECKED
+                .iter()
+                .any(|(n, why)| n == name && !why.is_empty());
+            assert!(
+                checked != explained,
+                "{name}: checked or explained, exactly one"
+            );
+        }
+        for (name, _) in CHECKED {
+            assert!(
+                registered.contains(name),
+                "{name} is checked but not registered"
+            );
+        }
+        // The unchecked one is compiled only with a feature; `check-release-features` pins which
+        // one and keeps it out of every release build.
+        let lines: Vec<&str> = handler.lines().map(str::trim).collect();
+        let at = lines
+            .iter()
+            .position(|l| l.starts_with("commands::alarms_e2e_state"))
+            .unwrap_or(0);
+        assert!(at > 0 && lines[at - 1].starts_with("#[cfg(feature = "));
+    }
+
+    /// The panel gets none of the interrupt's actions; interrupts none of the panel's.
+    #[test]
+    fn the_alarm_actions_answer_interrupts_and_the_main_window_only() {
+        for label in ["interrupt-0", "interrupt-screen-2", "main"] {
+            assert_eq!(main_or_interrupt(label), Ok(()), "{label:?}");
+        }
+        for label in ["panel", "interrupt", "Main", ""] {
+            assert_eq!(
+                main_or_interrupt(label),
+                Err(CommandError { code: "not_found" }),
+                "{label:?}"
+            );
+        }
+        assert_eq!(
+            panel_only("interrupt-0"),
+            Err(CommandError { code: "not_found" })
+        );
     }
 
     /// `settings_set` saves, announces and wakes through `settings::change` (tested on the rig),
