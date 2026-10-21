@@ -613,6 +613,43 @@ test("window rights: the settings window reads the pause and the current alarm, 
   assert.deepEqual(await invoke("notify_copy_set", { copy: {} }), { code: "invalid:notify_copy" });
 });
 
+// ---- Reminder colour (L-043) ---------------------------------------------------------------------
+// The interrupt reads `interrupt_color` from `settings_get` and draws its fill from the Swiss Moss token
+// of that pair. The expected colour is the token itself, resolved by the same webview.
+
+test("the reminder colour reaches the interrupt: data-color info on a --sm-info fill (L-043)", async () => {
+  const main = await driver.getWindowHandle();
+  const saved = await invoke("settings_set", { patch: { interrupt_color: "info" } });
+  assert.equal(saved.answer?.interrupt_color, "info", JSON.stringify(saved));
+  try {
+    await openTestInterrupt(main);
+    const seen = await waitFor("data-color on the interrupt root", () =>
+      driver.executeScript(() => {
+        const root = document.querySelector("main.tl-int");
+        if (root?.dataset.color !== "info") return null;
+        const probe = document.createElement("i");
+        probe.style.background = "var(--sm-info)";
+        document.body.append(probe);
+        const want = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return { color: root.dataset.color, background: getComputedStyle(root).backgroundColor, want };
+      }),
+    );
+    assert.equal(seen.color, "info");
+    assert.notEqual(seen.want, "rgba(0, 0, 0, 0)", "the token resolves");
+    assert.equal(seen.background, seen.want);
+    try {
+      await (await driver.switchTo().activeElement()).sendKeys(Key.ESCAPE);
+    } catch (e) {
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
+    await waitFor("every interrupt window to close", async () => (await interruptHandles(main)).length === 0);
+  } finally {
+    await driver.switchTo().window(main);
+    await invoke("settings_set", { patch: { interrupt_color: "theme" } });
+  }
+});
+
 // ---- Updates (L-019) ----------------------------------------------------------------------------
 // A debug build never checks for updates. The e2e build may point the updater at a `latest.json` on
 // 127.0.0.1 (`update_e2e_endpoint`, compiled only with the fetch seam). The package is signed with a
