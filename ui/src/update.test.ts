@@ -31,7 +31,53 @@ function section(update: UpdateDto | null, checked = false, error: string | null
   );
 }
 
+type Tree = { type: unknown; key: string | null; props: { children?: unknown } };
+const isTree = (node: unknown): node is Tree => typeof node === "object" && node !== null && "props" in node;
+const textOf = (node: unknown): string =>
+  isTree(node) ? [node.props.children].flat().map(textOf).join("") : typeof node === "string" ? node : "";
+
+/**
+ * Where React keeps a button: the child index, element type and key at every level from the section down.
+ * The same path in two renders means React updates that button in place, so its DOM node and focus stay.
+ */
+function pathTo(node: unknown, label: string, root = true): string[] | null {
+  if (!isTree(node)) return null;
+  if (node.type === "button" && textOf(node) === label) return ["button"];
+  const children = [node.props.children].flat();
+  for (const [i, child] of children.entries()) {
+    const below = pathTo(child, label, false);
+    if (below) {
+      const step = [`${i}:${String(isTree(child) ? child.type : "")}:${isTree(child) ? child.key : ""}`, ...below];
+      // The section's own type and key too: a new key there would remount everything under it.
+      return root ? [`${String(node.type)}:${node.key}`, ...step] : step;
+    }
+  }
+  return null;
+}
+
+function tree(update: UpdateDto | null, checked = false, busy = false, error: string | null = null): Tree {
+  const noop = () => undefined;
+  return UpdateSection({ update, checked, busy, error, onCheck: noop, onInstall: noop, onLater: noop, onSkip: noop }) as Tree;
+}
+
 describe("update prompt (F11)", () => {
+  it("AC11.1 a status change keeps every button that stays on screen in place, so it keeps its node and focus", () => {
+    // Check for updates: before and after a check that found nothing, while busy, and with an error.
+    const check = [tree(null), tree(none), tree(none, true), tree(none, true, true), tree(none, true, false, "x")].map((t) =>
+      pathTo(t, "Check for updates"),
+    );
+    expect(check[0]).not.toBeNull();
+    for (const path of check) expect(path).toEqual(check[0]);
+    // The offer's buttons: an update:changed with the same offer, busy, or with an error.
+    for (const label of ["Install and restart", "Later", "Skip this version"]) {
+      const paths = [tree(offer), tree(offer, true), tree(offer, false, true), tree(offer, false, false, "x")].map((t) =>
+        pathTo(t, label),
+      );
+      expect(paths[0], label).not.toBeNull();
+      for (const path of paths) expect(path, label).toEqual(paths[0]);
+    }
+  });
+
   it("AC11.1 offers the version Rust offers, shows the install under way, and says when a check found nothing", () => {
     expect(updateView(null, false)).toBe("idle");
     expect(updateView(none, false)).toBe("idle");
