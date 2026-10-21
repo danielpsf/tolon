@@ -180,14 +180,17 @@ function InterruptView({
         data-action={primaryAction(m.join)}
         onClick={() => void run(primaryAction(m.join), m)}
       >
-        {before}
-        {host && (
-          // D3: a long host loses its start to an ellipsis; its end, the site, stays readable.
-          <span className="tl-host">
-            <bdi dir="ltr">{host}</bdi>
-          </span>
-        )}
-        {after}
+        {/* One flex item: sm-btn's 8 px gap must not open between the words and the host. */}
+        <span>
+          {before}
+          {host && (
+            // D3: a long host loses its start to an ellipsis; its end, the site, stays readable.
+            <span className="tl-host">
+              <bdi dir="ltr">{host}</bdi>
+            </span>
+          )}
+          {after}
+        </span>
       </button>
     );
   };
