@@ -105,9 +105,8 @@ impl UpdaterState {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// The end-to-end build's endpoint (see `commands::update_e2e_endpoint`, its only caller, which
-    /// only that build compiles; so other builds see it unused).
-    #[allow(dead_code)]
+    /// The end-to-end build's endpoint (see `commands::update_e2e_endpoint`, its only caller).
+    #[cfg(feature = "e2e-loopback")]
     pub fn set_endpoint(&self, url: Url) {
         self.lock().endpoint = Some(url);
     }

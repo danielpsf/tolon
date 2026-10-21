@@ -5,8 +5,8 @@
 //!
 //! Where the name may appear:
 //! - the two feature definitions in the manifests, as exact lines;
-//! - the cfg gate line of the alarm command for the WebDriver suite, as an exact line, in the two
-//!   tolon-app files that gate on it (`CFG_GATES`);
+//! - the cfg gate line of the WebDriver suite's commands (alarm state, updater endpoint), as an exact
+//!   line, in the three tolon-app files that gate on it (`CFG_GATES`);
 //! - the e2e build line of `ci.yml` (`tauri build --debug ... --features e2e-loopback`), in a job that
 //!   uploads no artifact;
 //! - the Rust sources that gate on it or lint and test it (`EXEMPT`) and Markdown docs.
@@ -35,9 +35,10 @@ const DEFINITIONS: &[(&str, &str)] = &[
     ),
 ];
 
-/// The only line that may name the feature in the two tolon-app sources that gate the WebDriver
-/// suite's read-only alarm command (its definition, and its registration in the handler list).
-/// Exact lines, like `DEFINITIONS`: any other mention in those files is a violation.
+/// The only line that may name the feature in the three tolon-app sources that gate the WebDriver
+/// suite's commands (the alarm-state read and the updater's loopback endpoint: their definitions,
+/// their registration in the handler list, and the endpoint setter). Exact lines, like
+/// `DEFINITIONS`: any other mention in those files is a violation.
 const CFG_GATES: &[(&str, &str)] = &[
     (
         "crates/tolon-app/src/commands.rs",
@@ -45,6 +46,10 @@ const CFG_GATES: &[(&str, &str)] = &[
     ),
     (
         "crates/tolon-app/src/main.rs",
+        "#[cfg(feature = \"e2e-loopback\")]",
+    ),
+    (
+        "crates/tolon-app/src/updater.rs",
         "#[cfg(feature = \"e2e-loopback\")]",
     ),
 ];
@@ -396,6 +401,7 @@ mod tests {
         for file in [
             "crates/tolon-app/src/commands.rs",
             "crates/tolon-app/src/main.rs",
+            "crates/tolon-app/src/updater.rs",
         ] {
             assert!(violations(file, gate).is_empty(), "{file}");
             assert!(violations(file, &gate.repeat(3)).is_empty(), "{file}");
@@ -404,6 +410,7 @@ mod tests {
         for file in [
             "crates/tolon-app/src/commands.rs",
             "crates/tolon-app/src/main.rs",
+            "crates/tolon-app/src/updater.rs",
         ] {
             for other in [
                 "#[cfg(all(feature = \"e2e-loopback\", test))]\n",
