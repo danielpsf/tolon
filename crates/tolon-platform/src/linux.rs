@@ -19,7 +19,7 @@ use crate::login::{
     appimage_program, autostart_file, read_autostart, remove_autostart, write_autostart,
 };
 use crate::session::{detect_session, session_of_handle, takeover_for};
-use crate::{Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
+use crate::{Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover, TrayStyle};
 use raw_window_handle::HasWindowHandle;
 use std::path::PathBuf;
 
@@ -73,6 +73,19 @@ impl Platform for LinuxPlatform {
                 focus: Focus::Unknown,
             })
             .ok_or(PlatformError::WrongHandleKind("not X11 or Wayland"))
+    }
+
+    /// AppIndicator trays report no clicks, only menus.
+    fn tray_style(&self) -> TrayStyle {
+        TrayStyle {
+            template_icon: false,
+            clicks: false,
+        }
+    }
+
+    /// X11 and Wayland give the pointer to the toolkit, not to this crate: the app asks Tauri.
+    fn pointer(&self) -> Result<(f64, f64), PlatformError> {
+        Err(PlatformError::Unsupported)
     }
 
     fn takeover_support(&self) -> Takeover {

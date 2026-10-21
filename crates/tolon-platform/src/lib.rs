@@ -135,6 +135,41 @@ impl Screen {
     }
 }
 
+impl Screen {
+    /// Whether `(x, y)`, in the unit [`Screen::placement`] uses on this OS, lies on this screen:
+    /// logical points on macOS, physical pixels elsewhere. Match [`Platform::pointer`] with it.
+    pub fn contains_placement_point(&self, x: f64, y: f64) -> bool {
+        if cfg!(target_os = "macos") {
+            self.contains_logical(x, y)
+        } else {
+            self.contains_physical(x, y)
+        }
+    }
+
+    /// `(x, y)` in logical points is on this screen. Right and bottom edges are outside.
+    pub fn contains_logical(&self, x: f64, y: f64) -> bool {
+        self.x <= x && x < self.x + self.width && self.y <= y && y < self.y + self.height
+    }
+
+    /// `(x, y)` in physical pixels is on this screen. Right and bottom edges are outside.
+    pub fn contains_physical(&self, x: f64, y: f64) -> bool {
+        let (left, top) = (f64::from(self.physical_x), f64::from(self.physical_y));
+        left <= x
+            && x < left + f64::from(self.physical_width)
+            && top <= y
+            && y < top + f64::from(self.physical_height)
+    }
+}
+
+/// How the tray icon behaves on this OS (F7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrayStyle {
+    /// The icon is a template image the system tints (macOS menu bar): black and alpha only.
+    pub template_icon: bool,
+    /// The tray reports clicks on the icon. Linux AppIndicator trays report none, only menus.
+    pub clicks: bool,
+}
+
 /// A platform call failed. The app logs it and uses the F4.5 fallback; it never crashes.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PlatformError {
@@ -264,6 +299,15 @@ pub trait Platform: Send + Sync {
     /// [`Platform::start_at_login`] afterwards for the real state: macOS may register and still
     /// wait for approval. Removing an item that is not there succeeds.
     fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError>;
+
+    /// How the tray icon looks and reacts here (F7). No OS call; any thread.
+    fn tray_style(&self) -> TrayStyle;
+
+    /// Where the pointer is now, in the unit [`Screen::placement`] uses: logical points on macOS
+    /// (top-left origin of the primary screen, y down), physical pixels on Windows. Read it when a
+    /// tray click arrives to find the icon's screen with [`Screen::contains_placement_point`].
+    /// Linux and the stub return [`PlatformError::Unsupported`]: the app asks Tauri there.
+    fn pointer(&self) -> Result<(f64, f64), PlatformError>;
 }
 
 /// Implementation for CI and tests: one fixed 1440x900 primary screen at 2x; raising does
@@ -324,6 +368,18 @@ impl Platform for StubPlatform {
     fn set_start_at_login(&self, enabled: bool) -> Result<(), PlatformError> {
         STUB_START_AT_LOGIN.store(enabled, Ordering::SeqCst);
         Ok(())
+    }
+
+    /// A colour icon that reports clicks, like Windows.
+    fn tray_style(&self) -> TrayStyle {
+        TrayStyle {
+            template_icon: false,
+            clicks: true,
+        }
+    }
+
+    fn pointer(&self) -> Result<(f64, f64), PlatformError> {
+        Err(PlatformError::Unsupported)
     }
 }
 
@@ -533,6 +589,77 @@ mod tests {
             Ok(Raised {
                 focus: Focus::Unknown
             })
+        );
+    }
+
+    #[test]
+    fn ac7_1_stub_tray_is_a_colour_icon_with_clicks_and_no_pointer() {
+        assert_eq!(
+            StubPlatform.tray_style(),
+            TrayStyle {
+                template_icon: false,
+                clicks: true
+            }
+        );
+        assert_eq!(StubPlatform.pointer(), Err(PlatformError::Unsupported));
+    }
+
+    /// AC7.2 on a Retina primary (1440x900 points at 2x) with a 1x screen to its right
+    /// (1920x1080 at x = 1440). macOS gives each screen physical values of its own points times
+    /// its own scale, so physical rectangles overlap: x = 2000 px is on both. Logical points,
+    /// what `pointer` returns on macOS, put a click at x = 2000 on the 1x screen only.
+    #[test]
+    fn ac7_2_a_click_on_a_1x_screen_beside_a_retina_one_finds_the_1x_screen() {
+        let retina = Screen {
+            id: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 1440.0,
+            height: 900.0,
+            physical_x: 0,
+            physical_y: 0,
+            physical_width: 2880,
+            physical_height: 1800,
+            scale_factor: 2.0,
+            is_main: true,
+        };
+        let plain = Screen {
+            id: 2,
+            x: 1440.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+            physical_x: 1440,
+            physical_y: 0,
+            physical_width: 1920,
+            physical_height: 1080,
+            scale_factor: 1.0,
+            is_main: false,
+        };
+        let hit = |x, y| {
+            [&retina, &plain]
+                .into_iter()
+                .find(|s| s.contains_logical(x, y))
+                .map(|s| s.id)
+        };
+        assert_eq!(hit(2000.0, 10.0), Some(2));
+        assert_eq!(hit(1439.0, 10.0), Some(1));
+        assert_eq!(
+            hit(1440.0, 10.0),
+            Some(2),
+            "the left edge belongs to the 1x screen"
+        );
+        assert_eq!(hit(1300.0, 1000.0), None, "below the shorter Retina screen");
+        // The physical rectangles cannot tell: both claim x = 2000.
+        assert!(retina.contains_physical(2000.0, 10.0) && plain.contains_physical(2000.0, 10.0));
+        // The unit `pointer` uses is the one `placement` uses.
+        assert_eq!(
+            plain.contains_placement_point(2000.0, 10.0),
+            if cfg!(target_os = "macos") {
+                plain.contains_logical(2000.0, 10.0)
+            } else {
+                plain.contains_physical(2000.0, 10.0)
+            }
         );
     }
 

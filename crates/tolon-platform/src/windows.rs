@@ -15,12 +15,14 @@
 
 use crate::login::{startup_approved_disabled, windows_run_value, windows_run_value_is};
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
-use crate::{hwnd_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
+use crate::{
+    hwnd_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover, TrayStyle,
+};
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
 use windows::core::{w, BOOL, PCWSTR};
 use windows::Win32::Foundation::{
-    ERROR_FILE_NOT_FOUND, ERROR_UNSUPPORTED_TYPE, HWND, LPARAM, RECT,
+    ERROR_FILE_NOT_FOUND, ERROR_UNSUPPORTED_TYPE, HWND, LPARAM, POINT, RECT,
 };
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
@@ -32,8 +34,9 @@ use windows::Win32::System::Registry::{
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
-    SetWindowPos, HWND_TOPMOST, MONITORINFOF_PRIMARY, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    BringWindowToTop, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
+    SetForegroundWindow, SetWindowPos, HWND_TOPMOST, MONITORINFOF_PRIMARY, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_SHOWWINDOW,
 };
 
 pub struct WindowsPlatform;
@@ -266,6 +269,24 @@ impl Platform for WindowsPlatform {
 
     fn takeover_support(&self) -> Takeover {
         Takeover::Full
+    }
+
+    fn tray_style(&self) -> TrayStyle {
+        TrayStyle {
+            template_icon: false,
+            clicks: true,
+        }
+    }
+
+    /// `GetCursorPos`: physical pixels of the virtual screen (Tolon is per-monitor DPI aware).
+    fn pointer(&self) -> Result<(f64, f64), PlatformError> {
+        let mut p = POINT::default();
+        // SAFETY: `p` is a valid, writable POINT for the duration of the call.
+        unsafe { GetCursorPos(&mut p) }.map_err(|e| PlatformError::Os {
+            call: "GetCursorPos",
+            code: u32::from_ne_bytes(e.code().0.to_ne_bytes()),
+        })?;
+        Ok((f64::from(p.x), f64::from(p.y)))
     }
 
     /// Enabled only when the value starts this exe (an entry left by a moved install is off) and

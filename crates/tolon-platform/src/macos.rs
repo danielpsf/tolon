@@ -3,11 +3,13 @@
 use crate::login::{from_sm_app_service_status, sm_call_for, sm_error_means_done, SmCall};
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
-use crate::{ns_view_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover};
+use crate::{
+    ns_view_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover, TrayStyle,
+};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSScreen, NSView, NSWindow,
+    NSApplication, NSApplicationActivationPolicy, NSEvent, NSScreen, NSView, NSWindow,
     NSWindowCollectionBehavior,
 };
 use objc2_foundation::{ns_string, NSError, NSNumber};
@@ -118,6 +120,25 @@ impl Platform for MacPlatform {
 
     fn takeover_support(&self) -> Takeover {
         Takeover::Full
+    }
+
+    fn tray_style(&self) -> TrayStyle {
+        TrayStyle {
+            template_icon: true,
+            clicks: true,
+        }
+    }
+
+    /// `NSEvent.mouseLocation`: global points with the origin at the bottom left of the primary
+    /// screen, flipped to the top-left origin `screens` uses.
+    fn pointer(&self) -> Result<(f64, f64), PlatformError> {
+        let mtm = main_thread()?;
+        let primary_height = NSScreen::screens(mtm)
+            .iter()
+            .next()
+            .map_or(0.0, |s| s.frame().size.height);
+        let p = NSEvent::mouseLocation();
+        Ok((p.x, top_left_y(p.y, 0.0, primary_height)))
     }
 
     fn start_at_login(&self) -> Result<StartAtLogin, PlatformError> {
