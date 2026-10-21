@@ -62,6 +62,11 @@ impl<'a> CalendarsRepo<'a> {
         Self { conn }
     }
 
+    /// A fresh calendar id (uuid v4), for a caller that needs it before the row exists.
+    pub fn new_id() -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+
     /// Inserts a calendar with a fresh uuid v4 id and returns it.
     pub fn insert(
         &self,
@@ -71,13 +76,25 @@ impl<'a> CalendarsRepo<'a> {
         enabled: bool,
         created_at: &str,
     ) -> Result<Calendar, StoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        self.insert_with_id(&Self::new_id(), kind, name, url, enabled, created_at)
+    }
+
+    /// Inserts a calendar under `id` (from [`Self::new_id`]) and returns it.
+    pub fn insert_with_id(
+        &self,
+        id: &str,
+        kind: &str,
+        name: &str,
+        url: Option<&str>,
+        enabled: bool,
+        created_at: &str,
+    ) -> Result<Calendar, StoreError> {
         self.conn.execute(
             "insert into calendars (id, kind, name, enabled, url, created_at)
              values (?1, ?2, ?3, ?4, ?5, ?6)",
             params![id, kind, name, enabled, url, created_at],
         )?;
-        self.get(&id)?.ok_or(StoreError::NotFound)
+        self.get(id)?.ok_or(StoreError::NotFound)
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Calendar>, StoreError> {
