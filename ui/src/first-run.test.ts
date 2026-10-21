@@ -166,7 +166,8 @@ describe("first run (F10)", () => {
     expect(html).toMatch(/<button[^>]*class="sm-btn quiet"[^>]*aria-describedby="skip-consequence"[^>]*>Skip for now<\/button>/);
     expect(html).toContain('id="skip-consequence">Tolon does nothing until you add a calendar.</p>');
     // The preview is a picture: its sample buttons are not buttons, screen readers skip it and it takes no pointer.
-    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true">/);
+    // It takes the reminder colour; with no settings yet, the default.
+    expect(html).toMatch(/<div class="tl-preview" aria-hidden="true" data-color="theme">/);
     expect(local).toMatch(/\.tl-preview \{[^}]*pointer-events: none;/);
     expect(html.match(/<button/g)).toHaveLength(3);
     expect(html).toContain("Platform weekly sync");

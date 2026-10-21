@@ -154,22 +154,67 @@
 }
 
 /*
- * Interrupt window (mockup 01): full-bleed moss in both themes. `--sm-moss` is the fill and
- * `--sm-on-moss` the text; Swiss Moss flips both for dark, so one rule set serves light and dark.
+ * Reminder colours (L-043): each `data-color` is a pair of Swiss Moss tokens, the same table as
+ * ui/src/reminder-colors.ts (contrast.test.ts checks that they agree and that every pair reaches AA
+ * in light and dark). The interrupt, the previews and the swatches draw with these properties only.
+ * `:where()` keeps the default at no specificity, so any `[data-color="..."]` below wins.
+ */
+:where([data-color]) {
+  --tl-bg: var(--sm-moss);
+  --tl-fg: var(--sm-on-moss);
+  --tl-primary-fg: var(--sm-moss-deep);
+  --tl-hover: var(--sm-moss-deep);
+}
+[data-color="moss-deep"] {
+  --tl-bg: var(--sm-moss-deep);
+  --tl-hover: var(--sm-moss);
+}
+[data-color="ink"] {
+  --tl-bg: var(--sm-ink);
+  --tl-fg: var(--sm-on-toast);
+  --tl-primary-fg: var(--sm-ink);
+  --tl-hover: var(--sm-muted);
+}
+[data-color="paper"] {
+  --tl-bg: var(--sm-paper);
+  --tl-fg: var(--sm-ink);
+  --tl-primary-fg: var(--sm-paper);
+  --tl-hover: var(--sm-line);
+}
+[data-color="info"] {
+  --tl-bg: var(--sm-info);
+  --tl-primary-fg: var(--sm-info);
+  --tl-hover: var(--sm-ink);
+}
+[data-color="signal"] {
+  --tl-bg: var(--sm-signal);
+  --tl-primary-fg: var(--sm-signal);
+  --tl-hover: var(--sm-ink);
+}
+[data-color="danger"] {
+  --tl-bg: var(--sm-danger);
+  --tl-primary-fg: var(--sm-danger);
+  --tl-hover: var(--sm-ink);
+}
+
+/*
+ * Interrupt window (mockup 01): full-bleed fill in both themes, moss unless another reminder colour
+ * is chosen. `--tl-bg` is the fill and `--tl-fg` the text; Swiss Moss flips both tokens for dark, so
+ * one rule set serves light and dark.
  * Every length is a multiple of --tl-u, one design pixel at 1280x800, so the page grows with the
  * screen up to 3840x2160 and beyond (the display-xl clamp stops at 112 px, too small on a 4K screen).
  */
 .tl-int {
   --tl-u: max(1px, calc(100vmin / 800));
-  --tl-ring: var(--sm-on-moss);
+  --tl-ring: var(--tl-fg);
   box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100vh;
   overflow: hidden;
   padding: calc(50 * var(--tl-u)) calc(96 * var(--tl-u)) calc(64 * var(--tl-u));
-  background: var(--sm-moss);
-  color: var(--sm-on-moss);
+  background: var(--tl-bg);
+  color: var(--tl-fg);
   font-size: calc(15 * var(--tl-u));
   cursor: default;
   user-select: none;
@@ -180,11 +225,11 @@
  */
 @supports (color: color-mix(in srgb, red, blue)) {
   .tl-int {
-    --tl-ring: color-mix(in srgb, var(--sm-on-moss) 70%, transparent);
+    --tl-ring: color-mix(in srgb, var(--tl-fg) 70%, transparent);
   }
 }
 .tl-int :focus-visible {
-  outline: calc(3 * var(--tl-u)) solid var(--sm-on-moss);
+  outline: calc(3 * var(--tl-u)) solid var(--tl-fg);
   outline-offset: calc(4 * var(--tl-u));
   border-radius: var(--sm-radius-pill);
 }
@@ -274,22 +319,23 @@
   min-height: calc(64 * var(--tl-u));
   padding: calc(8 * var(--tl-u)) calc(38 * var(--tl-u));
   border-color: var(--tl-ring);
-  color: var(--sm-on-moss);
+  color: var(--tl-fg);
   font-size: calc(16 * var(--tl-u));
   font-weight: 500;
   line-height: 1.2;
   white-space: normal;
   overflow-wrap: anywhere;
 }
-/* moss-deep behind on-moss text: 7.7:1 in light and about 10:1 in dark (ui/src/contrast.test.ts). */
+/* The pair's hover token behind its text: 4.5:1 or more for every colour (ui/src/contrast.test.ts). */
 .tl-int .sm-btn:hover {
-  background: var(--sm-moss-deep);
-  color: var(--sm-on-moss);
+  background: var(--tl-hover);
+  color: var(--tl-fg);
 }
+/* The primary button inverts the pair. */
 .tl-int .sm-btn.tl-primary {
-  border-color: var(--sm-on-moss);
-  background: var(--sm-on-moss);
-  color: var(--sm-moss-deep);
+  border-color: var(--tl-fg);
+  background: var(--tl-fg);
+  color: var(--tl-primary-fg);
   padding-inline: calc(54 * var(--tl-u));
   font-size: calc(19 * var(--tl-u));
   font-weight: 600;
@@ -308,8 +354,8 @@
   vertical-align: bottom;
 }
 .tl-int .sm-btn.tl-primary:hover {
-  background: var(--sm-on-moss);
-  color: var(--sm-moss-deep);
+  background: var(--tl-fg);
+  color: var(--tl-primary-fg);
 }
 .tl-int-consequence {
   flex: 1 1 calc(280 * var(--tl-u));
@@ -479,8 +525,8 @@
   gap: var(--sm-space-2);
   padding: var(--sm-space-5);
   border-radius: var(--sm-radius-l);
-  background: var(--sm-moss);
-  color: var(--sm-on-moss);
+  background: var(--tl-bg);
+  color: var(--tl-fg);
   cursor: default;
   user-select: none;
   /* A picture: its sample buttons take no pointer (and the markup hides it from screen readers). */
@@ -506,12 +552,66 @@
   margin-top: var(--sm-space-7);
 }
 .tl-preview .sm-btn {
-  border-color: var(--sm-on-moss);
-  color: var(--sm-on-moss);
+  border-color: var(--tl-fg);
+  color: var(--tl-fg);
 }
 .tl-preview .sm-btn.tl-primary {
-  background: var(--sm-on-moss);
-  color: var(--sm-moss-deep);
+  background: var(--tl-fg);
+  color: var(--tl-primary-fg);
+}
+
+/*
+ * Appearance page (L-043): the reminder colour as a radiogroup of Swiss Moss swatches, each a chip of
+ * its pair with "Aa" in its text colour, and the preview beside them. The radio itself is hidden as
+ * in sm-segmented; the chip shows checked (an ink ring) and keyboard focus (the Swiss Moss focus ring).
+ */
+.tl-colors {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sm-space-3);
+  max-width: 440px;
+}
+.tl-swatch {
+  position: relative;
+  cursor: pointer;
+}
+.tl-swatch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.tl-swatch i {
+  overflow: hidden;
+}
+.tl-swatch i span {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  background: var(--tl-bg);
+  color: var(--tl-fg);
+  font-family: var(--sm-font-display);
+  font-size: 17px;
+  font-style: normal;
+  font-weight: 600;
+}
+.tl-swatch input:checked + i {
+  box-shadow: 0 0 0 2px var(--sm-paper), 0 0 0 4px var(--sm-ink);
+}
+.tl-swatch input:focus-visible + i {
+  outline: 2px solid var(--sm-focus);
+  outline-offset: 6px;
+}
+.tl-color-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sm-space-3);
+  max-width: 440px;
+}
+.tl-color-preview .tl-first-preview {
+  align-self: stretch;
+  margin: 0;
 }
 
 /*

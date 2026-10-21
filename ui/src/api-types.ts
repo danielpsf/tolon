@@ -104,6 +104,10 @@ export type Sound = (typeof SOUNDS)[number];
 export const APPEARANCES = ["auto", "light", "dark"] as const;
 export type Appearance = (typeof APPEARANCES)[number];
 
+/** The interrupt's colour (L-043): a Swiss Moss token pair, mapped in reminder-colors.ts. "theme" is the moss default. */
+export const INTERRUPT_COLORS = ["theme", "moss", "moss-deep", "ink", "paper", "info", "signal", "danger"] as const;
+export type InterruptColor = (typeof INTERRUPT_COLORS)[number];
+
 export interface QuietHoursDto {
   enabled: boolean;
   /** "HH:MM", local time. */
@@ -131,6 +135,7 @@ export interface SettingsDto {
   quiet: QuietHoursDto;
   ignore: IgnoreDto;
   appearance: Appearance;
+  interrupt_color: InterruptColor;
   /** A shipped catalogue, or null to follow the system. */
   locale: string | null;
   /** On only when the OS will start Tolon (AC9.4); the settings window reads it from the OS. */

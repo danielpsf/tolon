@@ -1,43 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { api, onAlarmHide } from "../api";
+import { api } from "../api";
 import type { TrayPlace } from "../api-types";
 import { Bell } from "../Bell";
 import { copy, type Messages } from "../copy";
 import { firstCalendarAdded, focusAtTop, hideAndEndFirstRun } from "../first-run";
-import { SNOOZE_MINUTES } from "../interrupt";
+import { colorAttr } from "../reminder-colors";
+import { useSettings } from "../store";
 import { errorText } from "../view";
+import { AlarmPreview, useTestAlarmOpen } from "./AlarmPreview";
 import { AddCalendarForm } from "./CalendarsPage";
-
-const MINUTE = 60_000;
-
-/** A still picture of the interrupt (mockup 05): a sample meeting at 14:00 today, seen at 13:58. Not interactive. */
-function Preview() {
-  const c = copy();
-  const { firstRun: t, interrupt: i } = c.t;
-  const start = new Date();
-  start.setHours(14, 0, 0, 0);
-  const now = start.getTime() - 2 * MINUTE;
-  const range = i.timeRange(c.formatTime(start), c.formatTime(start.getTime() + 45 * MINUTE));
-  return (
-    <figure className="tl-first-preview">
-      <div className="tl-preview" aria-hidden="true">
-        <div className="tl-preview-top">
-          <span>{c.formatTime(now)}</span>
-          <span>{c.startsIn(start, now)}</span>
-        </div>
-        <p className="sm-title tl-preview-title">{t.sampleTitle}</p>
-        <p className="tl-preview-details">{i.details(range, "Google Meet", 0)}</p>
-        <div className="tl-preview-actions">
-          {/* The short label, so the three sample buttons stay on one row (mockup 05). */}
-          <span className="sm-btn sm tl-primary">{t.previewJoin}</span>
-          <span className="sm-btn sm">{i.snooze(SNOOZE_MINUTES)}</span>
-          <span className="sm-btn sm">{i.dismiss}</span>
-        </div>
-      </div>
-      <figcaption className="sm-caption">{t.previewLabel}</figcaption>
-    </figure>
-  );
-}
 
 /** The tray step's title for where the icon lives, or null while Rust has not answered. */
 export function trayTitle(t: Messages["firstRun"], place: TrayPlace | null): string | null {
@@ -66,27 +37,6 @@ function useTrayPlace(): TrayPlace | null {
   return place;
 }
 
-/** True from a "Try a test alarm" click until its interrupt closes (`alarm:hide`), so a second click does nothing. */
-function useTestAlarmOpen(): [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    let stopped = false;
-    let unlisten: (() => void) | undefined;
-    onAlarmHide(() => setOpen(false)).then(
-      (off) => {
-        if (stopped) off();
-        else unlisten = off;
-      },
-      () => undefined,
-    );
-    return () => {
-      stopped = true;
-      unlisten?.();
-    };
-  }, []);
-  return [open, setOpen];
-}
-
 /**
  * First run (F10, mockup 05; decision "First run (L-018)"): add a calendar, try a test alarm, and where
  * Tolon lives from now on. A first calendar that syncs hides the window (AC10.2); one that fails moves to
@@ -101,6 +51,7 @@ export function FirstRunPage() {
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useTestAlarmOpen();
   const paste = useRef<HTMLButtonElement>(null);
+  const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
 
   // Focus on the primary button, never "Try a test alarm" (Enter would take over the screen), and
   // without the scroll that autoFocus does: the window opens at the top (D6, D8).
@@ -210,7 +161,8 @@ export function FirstRunPage() {
         )}
         <p className="sm-caption">{t.footer}</p>
       </div>
-      <Preview />
+      {/* In the reminder colour the person chose (L-043), as the test alarm will be. */}
+      <AlarmPreview color={color} />
     </main>
   );
 }

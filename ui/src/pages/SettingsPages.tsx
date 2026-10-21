@@ -2,11 +2,13 @@
 // Every control saves on change through the settings store (AC9.1); there is no Save button.
 import { useId, useState, type ReactNode } from "react";
 import { api, asCommandError } from "../api";
-import { APPEARANCES, SOUNDS, type SettingsDto, type SettingsPatch } from "../api-types";
+import { APPEARANCES, INTERRUPT_COLORS, SOUNDS, type SettingsDto, type SettingsPatch } from "../api-types";
 import { copy, LOCALES, NATIVE_NAMES, RTL_LOCALES } from "../copy";
 import { SNOOZE_MINUTES } from "../interrupt";
+import { colorAttr, PREVIEW_TOKENS } from "../reminder-colors";
 import { useSettings } from "../store";
-import { addKeywords, MAX_KEYWORD_LENGTH, MAX_KEYWORDS, parseLead, splitTyped } from "../view";
+import { addKeywords, errorText, MAX_KEYWORD_LENGTH, MAX_KEYWORDS, parseLead, splitTyped } from "../view";
+import { AlarmPreview, useTestAlarmOpen } from "./AlarmPreview";
 
 /** Saves a change; resolves true when it was stored, false when it was refused and rolled back. */
 type Save = (patch: SettingsPatch) => Promise<boolean>;
@@ -366,33 +368,113 @@ export function RulesPage() {
   );
 }
 
+/** The appearance this window shows now (`data-theme` on <html>, set from the setting); light outside a page. */
+function windowTheme(): "light" | "dark" {
+  return typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
 export function AppearancePage() {
-  const { t } = copy();
+  const c = copy();
+  const { t } = c;
   const p = t.settings.appearance;
   const labels = { auto: t.settings.sameAsSystem, light: p.light, dark: p.dark };
+  // The preview's appearance: the window's until the person flips it. Only the preview changes (L-043).
+  const [shown, setShown] = useState<"light" | "dark" | null>(null);
+  const [testing, setTesting] = useTestAlarmOpen();
+  const [testError, setTestError] = useState<string | null>(null);
+
+  async function testAlarm() {
+    if (testing) return;
+    setTesting(true);
+    setTestError(null);
+    try {
+      await api.alarmsTest();
+    } catch (e) {
+      setTesting(false);
+      setTestError(errorText(e, c));
+    }
+  }
+
   return (
     <SettingsPage title={t.nav.appearance} subtitle={p.subtitle}>
-      {(s, save) => (
-        <div className="sm-field">
-          <span className="sm-label" id="theme-heading">
-            {p.theme}
-          </span>
-          <div className="sm-segmented tl-segmented" role="radiogroup" aria-labelledby="theme-heading">
-            {APPEARANCES.map((appearance) => (
-              <label key={appearance}>
-                <input
-                  type="radio"
-                  name="appearance"
-                  value={appearance}
-                  checked={s.appearance === appearance}
-                  onChange={() => save({ appearance })}
-                />
-                <span>{labels[appearance]}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+      {(s, save) => {
+        const tokens = shown ?? windowTheme();
+        const other = tokens === "dark" ? "light" : "dark";
+        return (
+          <>
+            <div className="sm-field">
+              <span className="sm-label" id="theme-heading">
+                {p.theme}
+              </span>
+              <div className="sm-segmented tl-segmented" role="radiogroup" aria-labelledby="theme-heading">
+                {APPEARANCES.map((appearance) => (
+                  <label key={appearance}>
+                    <input
+                      type="radio"
+                      name="appearance"
+                      value={appearance}
+                      checked={s.appearance === appearance}
+                      onChange={() => save({ appearance })}
+                    />
+                    <span>{labels[appearance]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="sm-field">
+              <span className="sm-label" id="color-heading">
+                {p.color}
+              </span>
+              <span className="sm-caption" id="color-hint">
+                {p.colorHint}
+              </span>
+              {/* Native radios: arrow keys move the choice and save it, Tab enters on the checked one. */}
+              <div className="tl-colors" role="radiogroup" aria-labelledby="color-heading" aria-describedby="color-hint">
+                {INTERRUPT_COLORS.map((color) => (
+                  <label key={color} className="sm-swatch tl-swatch">
+                    <input
+                      type="radio"
+                      name="interrupt_color"
+                      value={color}
+                      checked={colorAttr(s.interrupt_color) === color}
+                      onChange={() => save({ interrupt_color: color })}
+                    />
+                    <i aria-hidden="true">
+                      <span data-color={color} data-tokens={tokens}>
+                        Aa
+                      </span>
+                    </i>
+                    <span>{p.colors[color]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="tl-color-preview">
+              <style>{PREVIEW_TOKENS}</style>
+              <AlarmPreview color={colorAttr(s.interrupt_color)} tokens={tokens} />
+              <div className="sm-cluster">
+                <button type="button" className="sm-btn" data-action="preview-theme" onClick={() => setShown(other)}>
+                  {other === "dark" ? p.previewDark : p.previewLight}
+                </button>
+                <button
+                  type="button"
+                  className="sm-btn"
+                  data-action="test-alarm"
+                  aria-disabled={testing}
+                  onClick={() => void testAlarm()}
+                >
+                  {p.testAlarm}
+                </button>
+              </div>
+              {testError && (
+                <p className="sm-alert signal" role="alert">
+                  {testError}
+                </p>
+              )}
+            </div>
+          </>
+        );
+      }}
     </SettingsPage>
   );
 }
