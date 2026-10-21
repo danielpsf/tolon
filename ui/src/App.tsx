@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Bell } from "./Bell";
 import { copy } from "./copy";
+import { startFirstRunWatch, useFirstRun } from "./first-run";
 import { CalendarsPage } from "./pages/CalendarsPage";
+import { FirstRunPage } from "./pages/FirstRunPage";
 import {
   AlarmsPage,
   AppearancePage,
@@ -55,8 +57,13 @@ export function App() {
   useEffect(startCalendarsFeed, []);
   // The settings window stays loaded while hidden (closing it only hides it, S7.2) and writes the tray tooltip.
   useEffect(() => startTrayTooltip(), []);
+  useEffect(startFirstRunWatch, []);
+  const firstRun = useFirstRun((s) => s.shows);
   const page = PAGES.find((p) => p.id === route) ?? PAGES[0];
 
+  // Paper until the calendar list says whether this is a first run (a few milliseconds).
+  if (firstRun === null) return null;
+  if (firstRun) return <FirstRunPage />;
   return (
     <div className="tl-shell">
       <aside className="tl-side">

@@ -184,6 +184,22 @@ export const ar: Messages = {
     tooltip: (title, duration) => `${title} بعد ${duration}`,
     tooltipNow: (title) => `الآن: ${title}`,
   },
+  firstRun: {
+    title: "لن يفوتك أي اجتماع بعد اليوم.",
+    lead: "يتابع Tolon تقويماتك ويملأ الشاشة قبل بدء الاجتماع. لا يُرسَل أي شيء إلى أي مكان.",
+    addTitle: "إضافة تقويم",
+    addBody: "الصق رابط iCal الخاص من أي تقويم. يقرأه Tolon فقط.",
+    tryTitle: "جرّبه",
+    tryBody: "يعرض لك التنبيه التجريبي ما سيحدث بالضبط. Esc للتأجيل، و Enter للانضمام.",
+    trayMenuBar: "يوجد Tolon في شريط القوائم",
+    traySystemTray: "يوجد Tolon في علبة النظام",
+    trayBody: "تُغلق هذه النافذة بعد إضافة تقويم. انقر على أيقونة Tolon لعرض اجتماعات اليوم أو إيقاف التنبيهات مؤقتًا أو فتح الإعدادات.",
+    pasteIcal: "لصق رابط iCal",
+    tryAlarm: "تشغيل تنبيه تجريبي",
+    previewLabel: "معاينة التنبيه",
+    sampleTitle: "اجتماع المنصة الأسبوعي",
+    footer: "برنامج Tolon مفتوح المصدر بموجب ترخيص Apache 2.0. بلا حساب ولا قياس عن بُعد.",
+  },
   notification: {
     body: (time) => `يبدأ في الساعة ${time}. لم يتمكن Tolon من تغطية الشاشة.`,
     many: (count) => counted(count, {

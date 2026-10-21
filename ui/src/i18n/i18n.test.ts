@@ -101,7 +101,8 @@ describe("catalogues", () => {
   it.each(["zh-CN", "ja"] as const)("%s uses full-width punctuation", (locale) => {
     for (const [path, text] of strings(catalogues[locale])) {
       if (path === "calendars.urlPlaceholder") continue;
-      expect(text, path).not.toMatch(/[,.:;?]/);
+      // A version number ("Apache 2.0") keeps its dot.
+      expect(text.replace(/\d\.\d/g, ""), path).not.toMatch(/[,.:;?]/);
     }
   });
 

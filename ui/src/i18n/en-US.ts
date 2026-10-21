@@ -141,6 +141,23 @@ export const enUS = {
     tooltip: (title: string, duration: string) => `${title} in ${duration}`,
     tooltipNow: (title: string) => `Now: ${title}`,
   },
+  firstRun: {
+    // First run (F10, mockup 05). The tray step names where the icon lives on this OS.
+    title: "Never miss a meeting again.",
+    lead: "Tolon watches your calendars and takes over the screen before a meeting starts. Nothing is sent anywhere.",
+    addTitle: "Add a calendar",
+    addBody: "Paste the private iCal link from any calendar. Tolon only reads it.",
+    tryTitle: "Try it",
+    tryBody: "A test alarm shows you exactly what will happen. Esc snoozes, Enter joins.",
+    trayMenuBar: "Tolon is in the menu bar",
+    traySystemTray: "Tolon is in the system tray",
+    trayBody: "This window closes once you add a calendar. Click the Tolon icon to see today's meetings, pause alarms or open the settings.",
+    pasteIcal: "Paste an iCal link",
+    tryAlarm: "Try a test alarm",
+    previewLabel: "Preview of the alarm",
+    sampleTitle: "Platform weekly sync",
+    footer: "Tolon is open source under Apache 2.0. No account, no telemetry.",
+  },
   notification: {
     body: (time: string) => `Starts at ${time}. Tolon could not cover the screen.`,
     many: (count: number) => `${number.format(count)} meetings are about to start`,

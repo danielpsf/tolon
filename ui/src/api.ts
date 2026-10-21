@@ -12,6 +12,7 @@ import type {
   SnoozeDto,
   SettingsPatch,
   Sound,
+  TrayPlace,
 } from "./api-types";
 
 export const api = {
@@ -25,6 +26,8 @@ export const api = {
   alarmsDismiss: (key: string) => invoke<void>("alarms_dismiss", { key }),
   alarmsJoin: (key: string) => invoke<void>("alarms_join", { key }),
   alarmsAlreadyThere: (key: string) => invoke<void>("alarms_already_there", { key }),
+  /** The sample interrupt on every screen (F10, settings window only). */
+  alarmsTest: () => invoke<void>("alarms_test"),
   settingsGet: () => invoke<SettingsDto>("settings_get"),
   /** Saves at once (AC9.1) and answers with every setting as stored. */
   settingsSet: (patch: SettingsPatch) => invoke<SettingsDto>("settings_set", { patch }),
@@ -43,6 +46,10 @@ export const api = {
   appHidePanel: () => invoke<void>("app_hide_panel"),
   appQuit: () => invoke<void>("app_quit"),
   trayTooltip: (text: string) => invoke<void>("tray_tooltip", { text }),
+  // First run (F10), settings window only.
+  /** Hides this window once the first calendar is added (AC10.2). */
+  appHideSettings: () => invoke<void>("app_hide_settings"),
+  appTrayPlace: () => invoke<TrayPlace>("app_tray_place"),
   /** The fallback notification's wording in the active language (L-038). Settings window only. */
   notifyCopySet: (copy: NotifyCopyDto) => invoke<void>("notify_copy_set", { copy }),
 };
@@ -62,6 +69,9 @@ export const onOccurrencesChanged = (handler: () => void): Promise<UnlistenFn> =
 
 export const onPaused = (handler: (pause: PauseDto) => void): Promise<UnlistenFn> =>
   listen<PauseDto>("app:paused", (e) => handler(e.payload));
+
+/** The settings window hid (closed, or after the first calendar): first run ends for this session. */
+export const onSettingsHidden = (handler: () => void): Promise<UnlistenFn> => listen("settings:hidden", handler);
 
 /** The tray icon is under the pointer: its tooltip is about to show (settings window only). */
 export const onTrayHover = (handler: () => void): Promise<UnlistenFn> => listen("tray:hover", handler);

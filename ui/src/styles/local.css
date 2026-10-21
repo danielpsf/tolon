@@ -399,6 +399,91 @@
 }
 
 /*
+ * First run (mockup 05): the welcome, the steps (Swiss Moss sm-steps, stacked) and the buttons at the
+ * start, a still preview of the alarm at the end. The preview takes the interrupt's colours (moss fill,
+ * on-moss text, the primary button inverted), which Swiss Moss flips for dark.
+ */
+.tl-first {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+  gap: var(--sm-space-7);
+  max-width: 1280px;
+  min-height: 100vh;
+  padding: var(--sm-space-7) var(--sm-space-8);
+}
+.tl-first-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sm-space-4);
+}
+.tl-first-bell svg {
+  width: 40px;
+  height: 34px;
+  color: var(--sm-moss);
+}
+.tl-first .sm-steps {
+  flex-direction: column;
+  gap: var(--sm-space-4);
+}
+.tl-first .sm-steps .sm-heading {
+  color: var(--sm-ink);
+  font-weight: 500;
+}
+/* The step to do first is filled, as in the mockup. */
+.tl-first .sm-steps li:first-child::before {
+  border-color: var(--sm-moss);
+  background: var(--sm-moss);
+  color: var(--sm-on-moss);
+}
+.tl-first-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm-space-3);
+  margin: var(--sm-space-9) 0 0;
+}
+.tl-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm-space-2);
+  padding: var(--sm-space-5);
+  border-radius: var(--sm-radius-l);
+  background: var(--sm-moss);
+  color: var(--sm-on-moss);
+  cursor: default;
+  user-select: none;
+}
+.tl-preview > p {
+  margin: 0;
+}
+.tl-preview-top {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sm-space-3);
+  margin-bottom: var(--sm-space-7);
+  font-size: 12px;
+}
+.tl-preview-details {
+  font-size: 13px;
+}
+.tl-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sm-space-2);
+  margin-top: var(--sm-space-7);
+}
+.tl-preview .sm-btn {
+  border-color: var(--sm-on-moss);
+  color: var(--sm-on-moss);
+}
+.tl-preview .sm-btn.tl-primary {
+  background: var(--sm-on-moss);
+  color: var(--sm-moss-deep);
+}
+
+/*
  * Right to left (Arabic and Hebrew, docs/decisions.md): grid, flex and the logical properties above
  * mirror on their own, and so do Swiss Moss controls (the switch knob uses inset-inline-start).
  */

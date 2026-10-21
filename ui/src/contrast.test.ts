@@ -50,6 +50,10 @@ const PAIRS: [string, [string, string], [string, string]][] = [
   ["quiet button hovered", [".tl-int .sm-btn:hover", "background"], [".tl-int .sm-btn:hover", "color"]],
   ["primary button", [".tl-int .sm-btn.tl-primary", "background"], [".tl-int .sm-btn.tl-primary", "color"]],
   ["primary button hovered", [".tl-int .sm-btn.tl-primary:hover", "background"], [".tl-int .sm-btn.tl-primary:hover", "color"]],
+  // The first-run preview of the alarm (mockup 05) draws the same pairs.
+  ["preview text", [".tl-preview", "background"], [".tl-preview", "color"]],
+  ["preview quiet button", [".tl-preview", "background"], [".tl-preview .sm-btn", "color"]],
+  ["preview primary button", [".tl-preview .sm-btn.tl-primary", "background"], [".tl-preview .sm-btn.tl-primary", "color"]],
 ];
 
 describe("interrupt contrast (AC4.3)", () => {

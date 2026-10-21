@@ -171,6 +171,22 @@ export const he: Messages = {
     tooltip: (title, duration) => `${title} בעוד ${duration}`,
     tooltipNow: (title) => `עכשיו: ${title}`,
   },
+  firstRun: {
+    title: "לא מפספסים יותר אף פגישה.",
+    lead: "Tolon עוקב אחרי היומנים שלך ומשתלט על המסך לפני שפגישה מתחילה. שום דבר לא נשלח לשום מקום.",
+    addTitle: "הוספת יומן",
+    addBody: "אפשר להדביק את קישור ה-iCal הפרטי מכל יומן. Tolon רק קורא אותו.",
+    tryTitle: "ניסיון",
+    tryBody: "התראת בדיקה מראה בדיוק מה יקרה. Esc לדחייה, Enter להצטרפות.",
+    trayMenuBar: "Tolon נמצא בשורת התפריטים",
+    traySystemTray: "Tolon נמצא במגש המערכת",
+    trayBody: "החלון הזה ייסגר אחרי הוספת יומן. אפשר ללחוץ על הסמל של Tolon כדי לראות את הפגישות של היום, להשהות התראות או לפתוח את ההגדרות.",
+    pasteIcal: "הדבקת קישור iCal",
+    tryAlarm: "הפעלת התראת בדיקה",
+    previewLabel: "תצוגה מקדימה של ההתראה",
+    sampleTitle: "סנכרון שבועי של צוות הפלטפורמה",
+    footer: "Tolon הוא קוד פתוח ברישיון Apache 2.0. בלי חשבון, בלי טלמטריה.",
+  },
   notification: {
     body: (time) => `התחלה ב-${time}. Tolon לא הצליח לכסות את המסך.`,
     many: (count) => counted(count, {

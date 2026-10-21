@@ -115,24 +115,13 @@ function ConfirmRemove({
   );
 }
 
-export function CalendarsPage() {
+/** The iCal form (`#add-calendar`), shared by the Calendars page and first run (F10). */
+export function AddCalendarForm({ onAdded, onCancel }: { onAdded: () => void; onCancel: () => void }) {
   const c = copy();
   const { calendars: t } = c.t;
-  const { calendars, loaded, loadError } = useCalendars();
-  const now = useNow();
-
-  const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [pending, setPending] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<CalendarDto | null>(null);
-  const [removeBusy, setRemoveBusy] = useState(false);
-  const addButton = useRef<HTMLButtonElement>(null);
-  // The dialog hands focus back to the Remove button it came from, which is gone after a removal.
-  // Its `close` event fires after that hand-back, so focus moves to Add calendar there. A frame callback
-  // would not do: WebView2 holds those back while its window is in the background.
-  const focusAddOnClose = useRef(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -144,15 +133,73 @@ export function CalendarsPage() {
     try {
       // A feed that fails to sync is still added: its row carries the status (AC1.2).
       await api.calendarsAddIcs(value);
-      setUrl("");
-      setAdding(false);
-      addButton.current?.focus();
+      setPending(false);
+      onAdded();
     } catch (err) {
       setAddError(errorText(err, c));
-    } finally {
       setPending(false);
     }
   }
+
+  return (
+    <form id="add-calendar" className="sm-card tl-add sm-stack tight" aria-busy={pending} onSubmit={submit}>
+      <div className={`sm-field${addError ? " invalid" : ""}`}>
+        <label className="sm-label" htmlFor="calendar-url">
+          {t.pasteIcalUrl}
+        </label>
+        <input
+          id="calendar-url"
+          className="sm-input"
+          type="text"
+          inputMode="url"
+          dir="ltr"
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          autoFocus
+          placeholder={t.urlPlaceholder}
+          value={url}
+          disabled={pending}
+          aria-invalid={addError !== null}
+          aria-describedby={addError ? "calendar-url-hint calendar-url-error" : "calendar-url-hint"}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <span className="sm-hint" id="calendar-url-hint">
+          {t.urlHint}
+        </span>
+        {addError && (
+          <span className="sm-error" id="calendar-url-error" role="alert">
+            {addError}
+          </span>
+        )}
+      </div>
+      <div className="sm-cluster">
+        <button type="submit" className={`sm-btn primary${pending ? " loading" : ""}`} aria-disabled={pending}>
+          {pending ? t.adding : t.addCalendar}
+        </button>
+        <button type="button" className="sm-btn" disabled={pending} onClick={onCancel}>
+          {t.cancel}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function CalendarsPage() {
+  const c = copy();
+  const { calendars: t } = c.t;
+  const { calendars, loaded, loadError } = useCalendars();
+  const now = useNow();
+
+  const [adding, setAdding] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<CalendarDto | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
+  // The dialog hands focus back to the Remove button it came from, which is gone after a removal.
+  // Its `close` event fires after that hand-back, so focus moves to Add calendar there. A frame callback
+  // would not do: WebView2 holds those back while its window is in the background.
+  const focusAddOnClose = useRef(false);
 
   async function toggle(calendar: CalendarDto, enabled: boolean) {
     setActionError(null);
@@ -223,55 +270,13 @@ export function CalendarsPage() {
       </div>
 
       {adding && (
-        <form id="add-calendar" className="sm-card tl-add sm-stack tight" aria-busy={pending} onSubmit={submit}>
-          <div className={`sm-field${addError ? " invalid" : ""}`}>
-            <label className="sm-label" htmlFor="calendar-url">
-              {t.pasteIcalUrl}
-            </label>
-            <input
-              id="calendar-url"
-              className="sm-input"
-              type="text"
-              inputMode="url"
-              dir="ltr"
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              autoFocus
-              placeholder={t.urlPlaceholder}
-              value={url}
-              disabled={pending}
-              aria-invalid={addError !== null}
-              aria-describedby={addError ? "calendar-url-hint calendar-url-error" : "calendar-url-hint"}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <span className="sm-hint" id="calendar-url-hint">
-              {t.urlHint}
-            </span>
-            {addError && (
-              <span className="sm-error" id="calendar-url-error" role="alert">
-                {addError}
-              </span>
-            )}
-          </div>
-          <div className="sm-cluster">
-            <button type="submit" className={`sm-btn primary${pending ? " loading" : ""}`} aria-disabled={pending}>
-              {pending ? t.adding : t.addCalendar}
-            </button>
-            <button
-              type="button"
-              className="sm-btn"
-              disabled={pending}
-              onClick={() => {
-                setAdding(false);
-                setAddError(null);
-                setUrl("");
-              }}
-            >
-              {t.cancel}
-            </button>
-          </div>
-        </form>
+        <AddCalendarForm
+          onAdded={() => {
+            setAdding(false);
+            addButton.current?.focus();
+          }}
+          onCancel={() => setAdding(false)}
+        />
       )}
 
       <ConfirmRemove

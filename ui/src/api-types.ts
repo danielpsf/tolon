@@ -171,3 +171,6 @@ export interface PauseDto {
   /** RFC 3339 UTC, or null while alarms are not paused. */
   paused_until: string | null;
 }
+
+/** `app_tray_place` (F10): where the tray icon lives, for first run's tray step. */
+export type TrayPlace = "menu_bar" | "tray";
