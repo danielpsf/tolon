@@ -326,3 +326,22 @@ The fallback notification copy of L-038 (3 new strings in a `notification` secti
 | he | 1 | `notification.body` | "הפגישה מתחילה" (the meeting starts) clashes with a title for several meetings; use a neutral action noun. | Accepted: "התחלה ב-{time}". Round 2 ok. |
 
 Choices recorded with this review: the body is shared by one meeting and by a group, so no locale names the number of meetings in it. The other locales were left as drafted: ok in round 1. A group above 20 meetings gets a title without a number (`manyOver`), so no plural form is needed beyond the 19 written out. Native review is still required before release.
+
+### L-038 review fix: `notification.untitled`
+
+One more string, `notification.untitled` (the title of a meeting that has none), in all 12 catalogues, drafted by Claude Sonnet 5.5 and checked with the same judge and method as above: 11 calls in one round (en-US is the source), no issues, no second round.
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 157 | 145 (136) | 302 | 2.8 | 0 | ok |
+| pt-BR | 1 | 164 | 187 (178) | 351 | 3.3 | 0 | ok |
+| pt-PT | 1 | 159 | 187 (178) | 346 | 3.8 | 0 | ok |
+| de | 1 | 158 | 272 (263) | 430 | 2.3 | 0 | ok |
+| es | 1 | 162 | 183 (174) | 345 | 2.9 | 0 | ok |
+| ar | 1 | 184 | 169 (160) | 353 | 2.0 | 0 | ok |
+| tr | 1 | 160 | 134 (125) | 294 | 1.8 | 0 | ok |
+| hi | 1 | 164 | 230 (221) | 394 | 2.5 | 0 | ok |
+| zh-CN | 1 | 162 | 190 (181) | 352 | 2.8 | 0 | ok |
+| ja | 1 | 160 | 267 (258) | 427 | 3.3 | 0 | ok |
+| he | 1 | 188 | 188 (179) | 376 | 2.2 | 0 | ok |
+| All (11 calls) | | 1818 | 2152 | 3970 | | 0 | |
