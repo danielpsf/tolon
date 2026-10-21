@@ -10,7 +10,9 @@ import {
   joinHost,
   primaryParts,
   keyAction,
+  nextAlarmView,
   nextFocusIndex,
+  NO_ALARM,
   perform,
   primaryAction,
   primaryLabel,
@@ -18,6 +20,7 @@ import {
   startClock,
   titleSize,
 } from "./interrupt";
+import page from "./pages/InterruptPage.tsx?raw";
 
 vi.mock("./api", () => ({
   api: {
@@ -284,5 +287,56 @@ describe("long titles", () => {
     expect(titleSize("Platform weekly sync")).toBe("xl");
     expect(titleSize("x".repeat(37))).toBe("long");
     expect(titleSize("x".repeat(91))).toBe("longer");
+  });
+});
+
+describe("a reused window (L-048)", () => {
+  const show = (title: string, key = "cal:a@2026-10-20T14:00:00Z") => ({
+    test: false,
+    meetings: [meeting(link("meet.google.com", true), { title, key })],
+  });
+
+  it("an alarm:show while one is on screen keeps the view, so the focus stays where the person put it", () => {
+    const first = show("First", "cal:a@1");
+    const view = nextAlarmView(NO_ALARM, { type: "show", alarm: first });
+    const regrouped = { test: false, meetings: [...first.meetings, ...show("Second", "cal:b@1").meetings] };
+    const updated = nextAlarmView(view, { type: "show", alarm: regrouped });
+    // Same count: the page keys its view by it, so it does not remount or move the focus to the primary button.
+    expect(updated.shown).toBe(view.shown);
+    expect(updated.alarm?.meetings.map((m) => m.title)).toEqual(["First", "Second"]);
+    // The stale-meeting drop is the same event with fewer meetings.
+    expect(nextAlarmView(updated, { type: "show", alarm: show("Second", "cal:b@1") }).shown).toBe(view.shown);
+  });
+
+  it("a hide then a show is a fresh view, even a repeat of the same meeting", () => {
+    let view = nextAlarmView(NO_ALARM, { type: "show", alarm: show("First") });
+    const first = view.shown;
+    view = nextAlarmView(view, { type: "hide" });
+    expect(view.alarm).toBeNull();
+    view = nextAlarmView(view, { type: "show", alarm: show("First") });
+    expect(view.alarm?.meetings[0]?.title).toBe("First");
+    // The page keys its view by `shown`: a new number remounts it, which drops focus, error, busy and key handlers.
+    expect(view.shown).toBeGreaterThan(first);
+  });
+
+  it("the second alarm shows its own data and keeps none of the first", () => {
+    let view = nextAlarmView(NO_ALARM, { type: "show", alarm: show("First", "cal:a@1") });
+    view = nextAlarmView(view, { type: "hide" });
+    view = nextAlarmView(view, { type: "show", alarm: show("Second", "cal:b@2") });
+    expect(view.alarm?.meetings.map((m) => m.title)).toEqual(["Second"]);
+  });
+
+  it("an alarm:show that arrives while the page loads beats the pulled answer", () => {
+    const early = nextAlarmView(NO_ALARM, { type: "show", alarm: show("Early") });
+    expect(nextAlarmView(early, { type: "current", alarm: show("Stale") })).toBe(early);
+    expect(nextAlarmView(NO_ALARM, { type: "current", alarm: null })).toBe(NO_ALARM);
+    expect(nextAlarmView(NO_ALARM, { type: "current", alarm: show("Pulled") }).shown).toBe(1);
+  });
+
+  it("the page keys its view by the alarm count and keeps listening after a hide", () => {
+    expect(page).toContain("<InterruptView key={shown}");
+    expect(page).not.toContain("key={first.key}");
+    // `alarm:hide` only clears the alarm: the window outlives it and listens for the next one.
+    expect(page).toContain('onAlarmHide(() => dispatch({ type: "hide" }))');
   });
 });

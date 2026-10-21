@@ -1,6 +1,11 @@
 //! The interrupt windows (F4): one borderless, full-screen, always-on-top window per screen, all
 //! loading `interrupt.html`, and the payload they show.
 //!
+//! A window is built the first time its screen needs one and then kept: closing the interrupt
+//! hides it, the next alarm shows it again. Destroying a window leaks its native window on macOS
+//! (decision 2026-10-22, "Interrupt windows are reused"), so only a window whose screen is gone is
+//! destroyed. "Open" means shown: a hidden window never counts.
+//!
 //! The scheduler (`scheduler.rs`) calls [`open_interrupts`] when an alarm fires. The windows ask for the
 //! payload with `alarms_current` when they load and also listen for `alarm:show` / `alarm:hide`,
 //! because an event emitted before a new window has registered its listener is lost.
@@ -307,14 +312,29 @@ pub(crate) fn place(window: &WebviewWindow, placement: Placement) -> tauri::Resu
     }
 }
 
+/// One interrupt window as the windowing system reports it. A hidden window exists but is not
+/// open: it takes no keys, clicks or focus, and nothing that asks "is an interrupt up" counts it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WindowState {
+    pub label: String,
+    pub visible: bool,
+    pub focused: bool,
+}
+
 /// What opening the interrupt needs from the windowing system. Tauri implements it; tests use a fake.
 pub trait Windows {
-    fn is_open(&self, label: &str) -> bool;
-    /// Creates the window on its screen and shows it.
+    /// Every interrupt window that exists, shown or hidden.
+    fn states(&self) -> Vec<WindowState>;
+    /// Shows the window for `spec` on its screen: builds it the first time and reuses it after that.
     fn open(&self, spec: &WindowSpec) -> anyhow::Result<()>;
-    /// Puts an open window above everything and asks for focus.
+    /// Puts a shown window above everything and asks for focus.
     fn raise(&self, label: &str) -> anyhow::Result<()>;
-    fn close(&self, label: &str);
+    /// Takes a window off the screen and out of the key and focus chain, and keeps it for the
+    /// next alarm. A window that does not exist is ignored.
+    fn hide(&self, label: &str);
+    /// Closes a window for good. Only for a window whose screen is gone: closing leaks the
+    /// native window on macOS (decision 2026-10-22, "Interrupt windows are reused").
+    fn destroy(&self, label: &str);
 }
 
 struct TauriWindows<'a> {
@@ -323,27 +343,52 @@ struct TauriWindows<'a> {
 }
 
 impl Windows for TauriWindows<'_> {
-    fn is_open(&self, label: &str) -> bool {
-        self.app.get_webview_window(label).is_some()
+    fn states(&self) -> Vec<WindowState> {
+        let mut states: Vec<WindowState> = self
+            .app
+            .webview_windows()
+            .into_iter()
+            .filter(|(label, _)| label.starts_with(LABEL_PREFIX))
+            .map(|(label, window)| WindowState {
+                label,
+                visible: window.is_visible().unwrap_or(false),
+                focused: window.is_focused().unwrap_or(false),
+            })
+            .collect();
+        states.sort_by(|a, b| a.label.cmp(&b.label));
+        states
     }
 
     fn open(&self, spec: &WindowSpec) -> anyhow::Result<()> {
-        let window = WebviewWindowBuilder::new(
-            self.app,
-            &spec.label,
-            WebviewUrl::App(spec.path.clone().into()),
-        )
-        .title("Tolon")
-        .decorations(false)
-        .always_on_top(true)
-        .visible_on_all_workspaces(true)
-        .skip_taskbar(true)
-        .resizable(false)
-        .closable(false)
-        .focused(true)
-        .visible(false)
-        .build()
-        .context("could not create an interrupt window")?;
+        let physical = matches!(spec.placement, Placement::Physical { .. });
+        let existing = self.app.get_webview_window(&spec.label);
+        let reused = existing.is_some();
+        let window = match existing {
+            Some(window) => {
+                // Full screen pins a window to its monitor; leave it so the window can move to
+                // the screen it belongs to now (a monitor may have come and gone).
+                if physical {
+                    window.set_fullscreen(false)?;
+                }
+                window
+            }
+            None => WebviewWindowBuilder::new(
+                self.app,
+                &spec.label,
+                WebviewUrl::App(spec.path.clone().into()),
+            )
+            .title("Tolon")
+            .decorations(false)
+            .always_on_top(true)
+            .visible_on_all_workspaces(true)
+            .skip_taskbar(true)
+            .resizable(false)
+            .closable(false)
+            .focused(true)
+            .visible(false)
+            .build()
+            .context("could not create an interrupt window")?,
+        };
         place(&window, spec.placement).context("could not place an interrupt window")?;
         window
             .show()
@@ -352,8 +397,15 @@ impl Windows for TauriWindows<'_> {
         // is what covers panels and the taskbar (GTK keep-above plus full screen on X11,
         // docs/architecture.md); on macOS native full screen would make a Space of its own, so the
         // window covers its screen by size and window level instead.
-        if matches!(spec.placement, Placement::Physical { .. }) {
+        if physical {
             window.set_fullscreen(true)?;
+        }
+        if reused {
+            // A window built just now asks for focus itself; one that was hidden has to be asked.
+            // A refusal costs focus, not the takeover: the raise and the F4.5 re-check follow.
+            if let Err(e) = window.set_focus() {
+                tracing::warn!(error = %e, "could not focus a reused interrupt window");
+            }
         }
         Ok(())
     }
@@ -379,34 +431,57 @@ impl Windows for TauriWindows<'_> {
         Ok(())
     }
 
-    fn close(&self, label: &str) {
+    fn hide(&self, label: &str) {
+        if let Some(window) = self.app.get_webview_window(label) {
+            // Tauri's `hide` is `orderOut` on macOS, `SW_HIDE` on Windows and an unmap on X11: the
+            // window leaves the screen and the key chain, so the app behind it gets the keys back.
+            if let Err(e) = window.hide() {
+                tracing::warn!(label, error = %e, "could not hide an interrupt window");
+            }
+        }
+    }
+
+    fn destroy(&self, label: &str) {
         if let Some(window) = self.app.get_webview_window(label) {
             // `destroy`, not `close`: the windows are not closable by the person.
             if let Err(e) = window.destroy() {
-                tracing::warn!(label, error = %e, "could not close an interrupt window");
+                tracing::warn!(label, error = %e, "could not destroy an interrupt window");
             }
         }
     }
 }
 
-/// One window per screen: new ones are opened and raised, windows that are already open are raised
-/// again. If a window cannot be opened, the ones this call opened are closed and the error returned;
-/// windows that were already open stay.
+fn is_visible(states: &[WindowState], label: &str) -> bool {
+    states.iter().any(|s| s.label == label && s.visible)
+}
+
+/// One window per screen: each screen's window is shown (built the first time, reused after) and
+/// raised, and a window that is already shown is raised again. A window whose screen is gone is
+/// destroyed; no other window ever is. If a window cannot be shown, the ones this call showed are
+/// hidden again and the error returned; windows that were already shown stay.
 pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result<()> {
     anyhow::ensure!(!screens.is_empty(), "no screen to show the interrupt on");
-    let mut opened: Vec<String> = Vec::new();
-    for spec in plan_windows(screens) {
-        let done = if windows.is_open(&spec.label) {
+    let specs = plan_windows(screens);
+    let before = windows.states();
+    for gone in before
+        .iter()
+        .filter(|s| !specs.iter().any(|spec| spec.label == s.label))
+    {
+        windows.destroy(&gone.label);
+    }
+    let mut shown: Vec<String> = Vec::new();
+    for spec in specs {
+        let done = if is_visible(&before, &spec.label) {
             windows.raise(&spec.label)
         } else {
-            windows.open(&spec).and_then(|()| {
-                opened.push(spec.label.clone());
-                windows.raise(&spec.label)
-            })
+            shown.push(spec.label.clone());
+            windows
+                .open(&spec)
+                .and_then(|()| windows.raise(&spec.label))
         };
         if let Err(e) = done {
-            for label in &opened {
-                windows.close(label);
+            for label in &shown {
+                windows.hide(label);
             }
             return Err(e);
         }
@@ -414,8 +489,39 @@ pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result
     Ok(())
 }
 
+/// Hides every interrupt window (AC4.6: one action closes all screens) and keeps them.
+pub fn hide_windows(windows: &dyn Windows) {
+    for state in windows.states() {
+        windows.hide(&state.label);
+    }
+}
+
+/// True while a shown interrupt window has keyboard focus. A hidden window never counts, whatever
+/// its toolkit still says about focus.
+fn any_focused(states: &[WindowState]) -> bool {
+    states.iter().any(|s| s.visible && s.focused)
+}
+
+/// The interrupt windows that exist and whether each is shown and focused.
+pub fn window_states(app: &AppHandle) -> Vec<WindowState> {
+    TauriWindows {
+        app,
+        platform: native(),
+    }
+    .states()
+}
+
+/// True while a shown interrupt window has keyboard focus.
+pub fn focused(app: &AppHandle) -> bool {
+    any_focused(&window_states(app))
+}
+
 /// Shows `payload` on every screen. The payload is kept for windows that load after the event;
-/// when the windows cannot be opened it is dropped again and nothing stays on screen.
+/// when the windows cannot be shown it is dropped again and nothing stays on screen.
+/// The alarm is emitted before the windows are shown, so a hidden window that is being reused is
+/// told what to render ahead of its show. The emit is asynchronous and gives no guarantee that the
+/// page has rendered it by the time the window is on screen; the page keeps the last alarm it was
+/// told, and a window built now has no listener yet and asks for the payload when it loads.
 /// The scheduler re-checks focus about 500 ms later and runs the F4.5 fallback
 /// (`docs/decisions.md`, "Platform contract after L-012").
 pub fn open_interrupts(
@@ -428,30 +534,29 @@ pub fn open_interrupts(
     if let Some(state) = &state {
         state.set(Some(payload.clone()));
     }
-    if let Err(e) = open_windows(&TauriWindows { app, platform }, screens) {
+    let shown = app
+        .emit(SHOW_EVENT, payload)
+        .map_err(anyhow::Error::from)
+        .and_then(|()| open_windows(&TauriWindows { app, platform }, screens));
+    if let Err(e) = shown {
         if let Some(state) = &state {
             state.set(None);
         }
         return Err(e);
     }
-    app.emit(SHOW_EVENT, payload)?;
     Ok(())
 }
 
-/// Closes every interrupt window and tells any listener (AC4.6: one action closes all screens).
+/// Hides every interrupt window and tells any listener (AC4.6: one action closes all screens).
+/// The windows stay for the next alarm.
 pub fn close_all(app: &AppHandle) {
     if let Some(state) = app.try_state::<InterruptState>() {
         state.set(None);
     }
-    let windows = TauriWindows {
+    hide_windows(&TauriWindows {
         app,
         platform: native(),
-    };
-    for (label, _) in app.webview_windows() {
-        if label.starts_with(LABEL_PREFIX) {
-            windows.close(&label);
-        }
-    }
+    });
     if let Err(e) = app.emit(HIDE_EVENT, ()) {
         tracing::warn!(event = HIDE_EVENT, error = %e, "could not emit event");
     }
@@ -642,45 +747,102 @@ mod tests {
 
     use std::cell::RefCell;
 
-    /// A windowing system that records what it was asked and can be told to fail an open.
+    /// A windowing system that records what it was asked and can be told to fail an open. A window
+    /// is in `windows` from its first open until it is destroyed; `visible` says if it is shown.
     #[derive(Default)]
     struct FakeWindows {
-        open: RefCell<Vec<String>>,
+        windows: RefCell<Vec<WindowState>>,
         calls: RefCell<Vec<String>>,
+        /// How many times each label was built, as opposed to reused.
+        built: RefCell<Vec<String>>,
         fail_open_of: Option<String>,
     }
 
     impl FakeWindows {
-        fn with_open(labels: &[&str]) -> Self {
+        fn with(shown: &[&str], hidden: &[&str]) -> Self {
+            let state = |label: &&str, visible| WindowState {
+                label: (*label).to_owned(),
+                visible,
+                focused: visible,
+            };
+            let windows = shown
+                .iter()
+                .map(|l| state(l, true))
+                .chain(hidden.iter().map(|l| state(l, false)))
+                .collect();
             Self {
-                open: RefCell::new(labels.iter().map(|l| (*l).to_owned()).collect()),
+                windows: RefCell::new(windows),
                 ..Self::default()
             }
         }
         fn calls(&self) -> Vec<String> {
             self.calls.borrow().clone()
         }
+        fn labels(&self) -> Vec<String> {
+            let mut labels: Vec<String> = self
+                .windows
+                .borrow()
+                .iter()
+                .map(|w| w.label.clone())
+                .collect();
+            labels.sort();
+            labels
+        }
+        fn shown(&self) -> Vec<String> {
+            let mut shown: Vec<String> = self
+                .windows
+                .borrow()
+                .iter()
+                .filter(|w| w.visible)
+                .map(|w| w.label.clone())
+                .collect();
+            shown.sort();
+            shown
+        }
     }
 
     impl Windows for FakeWindows {
-        fn is_open(&self, label: &str) -> bool {
-            self.open.borrow().iter().any(|l| l == label)
+        fn states(&self) -> Vec<WindowState> {
+            self.windows.borrow().clone()
         }
         fn open(&self, spec: &WindowSpec) -> anyhow::Result<()> {
             self.calls.borrow_mut().push(format!("open {}", spec.label));
             if self.fail_open_of.as_deref() == Some(spec.label.as_str()) {
                 anyhow::bail!("no window for {}", spec.label);
             }
-            self.open.borrow_mut().push(spec.label.clone());
+            let mut windows = self.windows.borrow_mut();
+            if let Some(w) = windows.iter_mut().find(|w| w.label == spec.label) {
+                w.visible = true;
+                w.focused = true;
+            } else {
+                self.built.borrow_mut().push(spec.label.clone());
+                windows.push(WindowState {
+                    label: spec.label.clone(),
+                    visible: true,
+                    focused: true,
+                });
+            }
             Ok(())
         }
         fn raise(&self, label: &str) -> anyhow::Result<()> {
             self.calls.borrow_mut().push(format!("raise {label}"));
             Ok(())
         }
-        fn close(&self, label: &str) {
-            self.calls.borrow_mut().push(format!("close {label}"));
-            self.open.borrow_mut().retain(|l| l != label);
+        fn hide(&self, label: &str) {
+            self.calls.borrow_mut().push(format!("hide {label}"));
+            // A toolkit can keep reporting focus on a window it has hidden; `focused` stays.
+            if let Some(w) = self
+                .windows
+                .borrow_mut()
+                .iter_mut()
+                .find(|w| w.label == label)
+            {
+                w.visible = false;
+            }
+        }
+        fn destroy(&self, label: &str) {
+            self.calls.borrow_mut().push(format!("destroy {label}"));
+            self.windows.borrow_mut().retain(|w| w.label != label);
         }
     }
 
@@ -701,19 +863,90 @@ mod tests {
     }
 
     #[test]
-    fn s4_2_a_second_call_raises_the_open_windows_and_opens_none() -> TestResult {
-        let windows = FakeWindows::with_open(&["interrupt-1", "interrupt-2"]);
+    fn s4_2_a_second_call_raises_the_shown_windows_and_opens_none() -> TestResult {
+        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
         open_windows(&windows, &[screen(1, 0.0, 2.0), screen(2, 1920.0, 1.0)])?;
         assert_eq!(windows.calls(), ["raise interrupt-1", "raise interrupt-2"]);
         Ok(())
     }
 
     #[test]
-    fn s4_2_a_failed_open_closes_what_this_call_opened_and_keeps_older_windows() -> TestResult {
-        // Screen 1 was already open; 2 opens; 3 fails. 2 is closed again, 1 stays.
+    fn s4_2_open_close_open_again_reuses_the_window_and_destroys_none() -> TestResult {
+        let windows = FakeWindows::default();
+        let screens = [screen(1, 0.0, 2.0), screen(2, 1920.0, 1.0)];
+        for _ in 0..3 {
+            open_windows(&windows, &screens)?;
+            assert_eq!(windows.shown(), ["interrupt-1", "interrupt-2"]);
+            hide_windows(&windows);
+            assert!(windows.shown().is_empty());
+            assert_eq!(windows.labels(), ["interrupt-1", "interrupt-2"]);
+        }
+        // Built once per screen, never again, never destroyed.
+        assert_eq!(*windows.built.borrow(), ["interrupt-1", "interrupt-2"]);
+        assert!(windows.calls().iter().all(|c| !c.starts_with("destroy")));
+        assert_eq!(windows.labels().len(), 2, "at most one window per screen");
+        Ok(())
+    }
+
+    #[test]
+    fn s4_2_a_hidden_window_is_not_open_so_the_next_alarm_shows_and_raises_it() -> TestResult {
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        assert!(!is_visible(&windows.states(), "interrupt-1"));
+        open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
+        // Not just raised: a hidden window has to be shown first.
+        assert_eq!(windows.calls(), ["open interrupt-1", "raise interrupt-1"]);
+        assert_eq!(*windows.built.borrow(), Vec::<String>::new());
+        assert_eq!(windows.shown(), ["interrupt-1"]);
+        Ok(())
+    }
+
+    #[test]
+    fn s4_2_a_hidden_window_does_not_count_as_focused_even_if_the_toolkit_says_so() {
+        let windows = FakeWindows::with(&["interrupt-1"], &[]);
+        assert!(any_focused(&windows.states()));
+        hide_windows(&windows);
+        // The fake keeps `focused` set on the hidden window, as a toolkit can.
+        assert!(windows.states().iter().all(|w| w.focused));
+        assert!(!any_focused(&windows.states()));
+    }
+
+    #[test]
+    fn s4_2_closing_hides_every_window_and_keeps_them() {
+        let windows = FakeWindows::with(&["interrupt-1"], &["interrupt-2"]);
+        hide_windows(&windows);
+        assert_eq!(windows.shown(), Vec::<String>::new());
+        assert_eq!(windows.labels(), ["interrupt-1", "interrupt-2"]);
+        assert!(windows.calls().iter().all(|c| c.starts_with("hide ")));
+    }
+
+    #[test]
+    fn s4_2_a_window_whose_screen_is_gone_is_destroyed_and_the_others_are_kept() -> TestResult {
+        // Screens 1 and 2 had windows (2 hidden); only screen 1 is left.
+        let windows = FakeWindows::with(&[], &["interrupt-1", "interrupt-2"]);
+        open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
+        assert_eq!(
+            windows.calls(),
+            [
+                "destroy interrupt-2",
+                "open interrupt-1",
+                "raise interrupt-1"
+            ]
+        );
+        assert_eq!(windows.labels(), ["interrupt-1"]);
+        // A shown window of a gone screen goes too.
+        let windows = FakeWindows::with(&["interrupt-1", "interrupt-3"], &[]);
+        open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
+        assert_eq!(windows.labels(), ["interrupt-1"]);
+        Ok(())
+    }
+
+    #[test]
+    fn s4_2_a_failed_open_hides_what_this_call_showed_and_keeps_older_windows() -> TestResult {
+        // 1 was already shown, 2 is hidden and shows again, 3 fails. 2 is hidden again, 1 stays
+        // shown, and nothing is destroyed.
         let windows = FakeWindows {
             fail_open_of: Some("interrupt-3".to_owned()),
-            ..FakeWindows::with_open(&["interrupt-1"])
+            ..FakeWindows::with(&["interrupt-1"], &["interrupt-2"])
         };
         let screens = [
             screen(1, 0.0, 1.0),
@@ -724,7 +957,8 @@ mod tests {
             anyhow::bail!("the third window cannot open, so the call must fail");
         };
         assert!(e.to_string().contains("interrupt-3"), "{e}");
-        assert_eq!(*windows.open.borrow(), ["interrupt-1"]);
+        assert_eq!(windows.shown(), ["interrupt-1"]);
+        assert_eq!(windows.labels(), ["interrupt-1", "interrupt-2"]);
         assert_eq!(
             windows.calls(),
             [
@@ -732,10 +966,44 @@ mod tests {
                 "open interrupt-2",
                 "raise interrupt-2",
                 "open interrupt-3",
-                "close interrupt-2"
+                "hide interrupt-2",
+                "hide interrupt-3"
             ]
         );
         Ok(())
+    }
+
+    /// A source check for the real windows, which no test can build: closing hides, and the only
+    /// call that destroys is the one for a gone screen (the leak of L-047).
+    #[test]
+    fn s4_2_closing_hides_and_only_a_gone_screen_destroys() {
+        let source = include_str!("interrupt.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let close = shipped
+            .split("pub fn close_all(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_default();
+        assert!(close.contains("hide_windows("), "{close}");
+        assert!(!close.contains("destroy"), "{close}");
+        assert_eq!(shipped.matches("windows.destroy(").count(), 1);
+        assert!(shipped.contains("window.hide()"));
+    }
+
+    /// A source check too: the alarm is emitted before the windows are shown, so a reused window
+    /// is told what to render ahead of its show.
+    #[test]
+    fn s4_2_open_interrupts_emits_the_alarm_before_it_shows_the_windows() {
+        let source = include_str!("interrupt.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let body = shipped
+            .split("pub fn open_interrupts(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_default();
+        let emit = body.find(".emit(SHOW_EVENT").unwrap_or(usize::MAX);
+        let open = body.find("open_windows(").unwrap_or(0);
+        assert!(emit < open, "emit SHOW_EVENT, then open_windows: {body}");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FocusEvent } from "react";
+import { useEffect, useReducer, useRef, useState, type FocusEvent } from "react";
 import { api, onAlarmHide, onAlarmShow } from "../api";
 import type { AlarmShowDto, InterruptColor, MeetingDto } from "../api-types";
 import { Bell } from "../Bell";
@@ -9,7 +9,9 @@ import {
   handlesKey,
   hintText,
   keyAction,
+  nextAlarmView,
   nextFocusIndex,
+  NO_ALARM,
   perform,
   primaryAction,
   primaryParts,
@@ -17,6 +19,7 @@ import {
   startClock,
   titleSize,
   type Action,
+  type AlarmView,
 } from "../interrupt";
 import { colorAttr, PREVIEW_TOKENS, tokensFor } from "../reminder-colors";
 import { useSettings } from "../store";
@@ -29,19 +32,23 @@ function useNow(): number {
   return now;
 }
 
-/** The interrupt for this window: pulled once on load, then replaced by `alarm:show` and cleared by `alarm:hide`. */
-function useAlarm(): AlarmShowDto | null {
-  const [alarm, setAlarm] = useState<AlarmShowDto | null>(null);
+/**
+ * The interrupt for this window: pulled once on load, then replaced by `alarm:show` and cleared by
+ * `alarm:hide`. The window stays alive between alarms (it is only hidden), so the page keeps listening
+ * for the next one; `shown` says which alarm this is (see `nextAlarmView`).
+ */
+function useAlarm(): AlarmView {
+  const [view, dispatch] = useReducer(nextAlarmView, NO_ALARM);
   useEffect(() => {
     let stopped = false;
     const offs: (() => void)[] = [];
     const keep = (off: () => void) => (stopped ? off() : offs.push(off));
     // Listen first, then ask: an `alarm:show` sent while this window loaded must not be missed.
     // No IPC (plain browser, tests) leaves the page empty.
-    onAlarmShow(setAlarm).then(keep, () => undefined);
-    onAlarmHide(() => setAlarm(null)).then(keep, () => undefined);
+    onAlarmShow((alarm) => dispatch({ type: "show", alarm })).then(keep, () => undefined);
+    onAlarmHide(() => dispatch({ type: "hide" })).then(keep, () => undefined);
     api.alarmsCurrent().then(
-      (current) => !stopped && setAlarm((shown) => shown ?? current),
+      (alarm) => !stopped && dispatch({ type: "current", alarm }),
       () => undefined,
     );
     return () => {
@@ -49,7 +56,7 @@ function useAlarm(): AlarmShowDto | null {
       offs.forEach((off) => off());
     };
   }, []);
-  return alarm;
+  return view;
 }
 
 /** Every button the focus trap cycles through, in tab order. */
@@ -61,7 +68,7 @@ const actionOf = (el: Element | null): Action | null =>
 
 /** The page: waits for an interrupt, then shows it. A new interrupt is a new view, so no state carries over. */
 export function InterruptPage() {
-  const alarm = useAlarm();
+  const { alarm, shown } = useAlarm();
   const screen = new URLSearchParams(window.location.search).get("screen");
   // The reminder colour (L-043) from `settings_get`, and live from `settings:changed` while it is open.
   const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
@@ -73,7 +80,9 @@ export function InterruptPage() {
         <style>{PREVIEW_TOKENS}</style>
       </main>
     );
-  return <InterruptView key={first.key} alarm={alarm} first={first} screen={screen} color={color} />;
+  // Keyed by the alarm's number, not its meeting: the window is reused, and a snoozed meeting that fires again has the same key.
+  // An update of the alarm on screen keeps the number, so the person's focus stays where it is.
+  return <InterruptView key={shown} alarm={alarm} first={first} screen={screen} color={color} />;
 }
 
 function InterruptView({
@@ -98,6 +107,15 @@ function InterruptView({
   // The interrupt opens on its primary button (AC4.4).
   useEffect(() => {
     root.current?.querySelector<HTMLElement>(CONTROLS)?.focus();
+    // This view is rendered while its reused window is still hidden, where a webview may not take
+    // focus yet: when the window is shown and gets focus, the primary button takes it again.
+    const onWindowFocus = () => {
+      if (!root.current?.contains(document.activeElement)) {
+        root.current?.querySelector<HTMLElement>(CONTROLS)?.focus();
+      }
+    };
+    window.addEventListener("focus", onWindowFocus);
+    return () => window.removeEventListener("focus", onWindowFocus);
   }, []);
 
   /** One action, once: the window closes on success, so a second press must not send a second command. */

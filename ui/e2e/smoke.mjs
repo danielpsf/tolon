@@ -352,7 +352,37 @@ test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () 
 // WebDriver handles: the test switches to one, checks focus, presses a key and expects every
 // interrupt window to close (AC4.6). The copy is left alone because it follows the system language.
 
-const interruptHandles = async (main) => (await driver.getAllWindowHandles()).filter((h) => h !== main);
+// Tolon keeps its interrupt windows after an alarm and only hides them (L-048), so a WebDriver handle
+// says nothing about whether an interrupt is up. `app_e2e_interrupt_windows` (end-to-end build only)
+// says which windows exist and which are shown; the handles of the shown ones are the interrupts.
+
+/** The interrupt windows that exist, `{ label, visible, focused }` each. Leaves the main window current. */
+async function interruptStates(main) {
+  await driver.switchTo().window(main);
+  const { answer, code } = await invoke("app_e2e_interrupt_windows");
+  assert.equal(code, undefined, `app_e2e_interrupt_windows failed: ${code}`);
+  return answer;
+}
+
+/** The handles of the interrupt windows that are shown. Leaves the main window current. */
+async function interruptHandles(main) {
+  const others = (await driver.getAllWindowHandles()).filter((h) => h !== main);
+  if (others.length === 0) return [];
+  const shown = new Set((await interruptStates(main)).filter((s) => s.visible).map((s) => s.label));
+  const found = [];
+  for (const handle of others) {
+    try {
+      await driver.switchTo().window(handle);
+      const screen = new URL(await driver.getCurrentUrl()).searchParams.get("screen");
+      if (shown.has(`interrupt-${screen}`)) found.push(handle);
+    } catch (e) {
+      // A window that went away between the list and the switch is not shown.
+      if (!(e instanceof error.NoSuchWindowError)) throw e;
+    }
+  }
+  await driver.switchTo().window(main);
+  return found;
+}
 
 async function openTestInterrupt(main) {
   const failure = await driver.executeAsyncScript((done) => {
@@ -421,7 +451,7 @@ for (const [name, keys] of KEY_CASES) {
       // The current window may be gone: go back to the main one for the next test.
       await driver.switchTo().window(main);
     }
-    assert.equal((await driver.getAllWindowHandles()).length, 1);
+    assert.equal((await interruptHandles(main)).length, 0);
   });
 }
 
@@ -510,6 +540,50 @@ test("s3_3 D dismisses the alarm for good", async () => {
   await withImminentMeeting("e2e-dismiss", "Dismiss meeting", async (main) => {
     await pressAndWaitForClose(main, "d");
     assert.equal((await leadOf("e2e-dismiss")).state, "dismissed");
+  });
+});
+
+// The windows are kept between alarms (L-048): one per screen for the whole run, hidden on close and
+// shown again for the next alarm, which shows its own meeting and starts with the focus on the primary button.
+test("l048 two alarms in a row leave one window per screen, hidden between them, and the second shows its own title", async () => {
+  const shownStates = async (main) => (await interruptStates(main)).filter((s) => s.visible);
+  let label;
+  await withImminentMeeting("e2e-reuse-a", "First reuse meeting", async (main) => {
+    // Earlier tests opened and closed many interrupts: still one window per screen (xvfb has one).
+    const states = await interruptStates(main);
+    assert.equal(states.length, 1, JSON.stringify(states));
+    assert.deepEqual(states.map((s) => s.visible), [true]);
+    label = states[0].label;
+    await driver.switchTo().window((await interruptHandles(main))[0]);
+    // Mark this page and move the focus off the primary button: the second alarm must start without either.
+    await driver.executeScript(() => {
+      window.__tolonReuseMarker = "first alarm";
+    });
+    await (await driver.switchTo().activeElement()).sendKeys(Key.TAB);
+    assert.equal(await driver.executeScript(() => document.activeElement?.dataset.action), "snooze");
+    await pressAndWaitForClose(main, "d");
+    // Closed means hidden, not gone.
+    const hidden = await interruptStates(main);
+    assert.deepEqual(hidden.map((s) => [s.label, s.visible]), [[label, false]]);
+    assert.equal((await interruptHandles(main)).length, 0);
+  });
+  await withImminentMeeting("e2e-reuse-b", "Second reuse meeting", async (main) => {
+    // `withImminentMeeting` has read the title of the second meeting from the window it found.
+    assert.deepEqual((await shownStates(main)).map((s) => s.label), [label]);
+    assert.equal((await interruptStates(main)).length, 1, "no second window was made");
+    await driver.switchTo().window((await interruptHandles(main))[0]);
+    // The same page, not a new one: the marker of the first alarm is still there.
+    assert.equal(await driver.executeScript(() => window.__tolonReuseMarker), "first alarm");
+    // The feed has no join link, so the primary button is "I am already there"; the first alarm left the focus on Snooze.
+    await waitFor("focus on the primary button of the second alarm", async () => {
+      const active = await driver.switchTo().activeElement();
+      return (await active.getAttribute("data-action")) === "already_there";
+    });
+    assert.equal(await (await find(".tl-int-title")).getText(), "Second reuse meeting");
+    // The keys work again on the reused page.
+    await pressAndWaitForClose(main, "d");
+    assert.equal((await leadOf("e2e-reuse-b")).state, "dismissed");
+    assert.deepEqual((await interruptStates(main)).map((s) => [s.label, s.visible]), [[label, false]]);
   });
 });
 
