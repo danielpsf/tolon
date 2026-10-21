@@ -33,3 +33,8 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.4 An old fallback notification's Join or Snooze does nothing once a later meeting is open.
 - [ ] AC4.4 With an Arabic or Hebrew keyboard layout active, D dismisses the interrupt.
 - [ ] L-039 With the system language set to Arabic or Hebrew, the interrupt and Settings mirror right to left; Hindi, Chinese and Japanese text renders in a system font, not boxes.
+- [ ] AC7.1 The tray icon reads in a light and a dark menu bar or taskbar; its tooltip shows the next meeting and the minutes until it.
+- [ ] AC7.2 Clicking the tray icon opens the panel under or above it on each display; a second click or clicking away hides it; Esc hides it and focus starts on the first action.
+- [ ] S7.1 Pause for 1 hour shows the paused icon and "Paused until HH:MM"; a meeting in 20 minutes does not fire; the pause holds across a quit and restart (icon included); Resume and the automatic end restore the normal icon.
+- [ ] S7.2 Closing the settings window keeps the tray icon and an alarm still fires; Settings in the panel brings the window back (no Dock icon on macOS).
+- [ ] AC7.4 Quit in the panel removes the tray icon and ends the process; Cmd+Q in the settings window also quits cleanly; logging out is not blocked by Tolon.
