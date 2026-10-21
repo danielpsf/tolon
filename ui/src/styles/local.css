@@ -415,21 +415,38 @@
  * start, a still preview of the alarm at the end. The preview takes the interrupt's colours (moss fill,
  * on-moss text, the primary button inverted), which Swiss Moss flips for dark.
  */
+/* D6, D7: sized to fit the 960 x 640 window where the copy allows; the text column gets the width, the preview at most 340 px. */
 .tl-first {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
   align-items: start;
-  gap: var(--sm-space-7);
+  gap: var(--sm-space-6);
   max-width: 1280px;
   min-height: 100vh;
-  padding: var(--sm-space-7) var(--sm-space-8);
+  padding: var(--sm-space-5) var(--sm-space-7);
 }
 .tl-first-text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sm-space-4);
+  gap: var(--sm-space-2);
+}
+/* Arabic and Devanagari glyphs reach past display-l's line-height of 1: keep them off the lead. */
+.tl-first .tl-head {
+  gap: var(--sm-space-1);
+}
+.tl-first-text > p {
+  margin: 0;
+}
+/* No word left alone on the last line ("it.", "settings."). */
+.tl-first :is(h1, p, .sm-body) {
+  text-wrap: pretty;
+}
+/* D9: Skip for now has no visible edge, so its hit area is pinned to Swiss Moss's 40 px button height. */
+.tl-first .sm-btn.quiet {
+  min-block-size: 40px;
+  min-inline-size: 40px;
 }
 .tl-first-bell svg {
   width: 40px;
@@ -438,7 +455,7 @@
 }
 .tl-first .sm-steps {
   flex-direction: column;
-  gap: var(--sm-space-4);
+  gap: var(--sm-space-3);
 }
 .tl-first .sm-steps .sm-heading {
   color: var(--sm-ink);
@@ -454,7 +471,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sm-space-3);
-  margin: var(--sm-space-9) 0 0;
+  margin: var(--sm-space-8) 0 0;
 }
 .tl-preview {
   display: flex;

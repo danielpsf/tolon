@@ -170,7 +170,7 @@ describe("tray panel (F7)", () => {
     const select = vi.fn(() => ({ focus }));
     expect(focusFirstAction({ querySelector: select } as unknown as ParentNode)).toBe(true);
     expect(select).toHaveBeenCalledWith(".tl-panel-actions button");
-    expect(focus).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
     expect(focusFirstAction({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
     expect(focusFirstAction(null)).toBe(false);
   });

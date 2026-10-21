@@ -168,6 +168,7 @@ export const hi: Messages = {
     pasteIcal: "iCal लिंक चिपकाएं",
     tryAlarm: "टेस्ट अलार्म चलाएं",
     previewLabel: "अलार्म का प्रीव्यू",
+    previewJoin: "शामिल हों",
     sampleTitle: "प्लैटफ़ॉर्म की साप्ताहिक मीटिंग",
     footer: "Tolon, Apache 2.0 के तहत ओपन सोर्स है। न कोई अकाउंट, न टेलीमेट्री।",
     skip: "अभी छोड़ें",

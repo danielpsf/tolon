@@ -168,6 +168,7 @@ export const ptBR: Messages = {
     pasteIcal: "Colar um link iCal",
     tryAlarm: "Testar um alarme",
     previewLabel: "Prévia do alarme",
+    previewJoin: "Entrar",
     sampleTitle: "Reunião semanal da plataforma",
     footer: "O Tolon é de código aberto sob a licença Apache 2.0. Sem conta, sem telemetria.",
     skip: "Pular por enquanto",

@@ -6,6 +6,7 @@ import { createCopy, initCopy, LOCALES } from "./copy";
 import {
   asksForPage,
   firstCalendarAdded,
+  focusAtTop,
   hideAndEndFirstRun,
   listenForHide,
   startFirstRunWatch,
@@ -169,7 +170,10 @@ describe("first run (F10)", () => {
     expect(local).toMatch(/\.tl-preview \{[^}]*pointer-events: none;/);
     expect(html.match(/<button/g)).toHaveLength(3);
     expect(html).toContain("Platform weekly sync");
-    expect(html).toContain("Join the call");
+    // The preview's Join is the short label, so its three buttons fit on one row (D7).
+    expect(html).toContain('<span class="sm-btn sm tl-primary">Join</span>');
+    expect(html).not.toContain("Join the call");
+    expect(html).not.toContain("autofocus");
     expect(html).toContain("Snooze 5 min");
     expect(html).toContain("Tolon is open source under Apache 2.0. No account, no telemetry.");
   });
@@ -185,6 +189,22 @@ describe("first run (F10)", () => {
     expect(t.traySystemTray).toContain("Tolon");
     expect(t.skipConsequence).toContain("Tolon");
     expect(t.trayMenuBar).not.toBe(t.traySystemTray);
+  });
+
+  it("D6, D8 focus starts on Paste an iCal link without scrolling, and the page opens at its top", () => {
+    const focus = vi.fn();
+    const scrollTo = vi.fn();
+    focusAtTop({ focus }, { scrollTo });
+    expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    // No element yet: still at the top.
+    focusAtTop(null, { scrollTo });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
+
+  it("D7, D9 the first-run text wraps without widows and Skip for now keeps a 40 px hit area", () => {
+    expect(local).toMatch(/\.tl-first :is\(h1, p, \.sm-body\) \{[^}]*text-wrap: pretty;/);
+    expect(local).toMatch(/\.tl-first \.sm-btn\.quiet \{[^}]*min-block-size: 40px;[^}]*min-inline-size: 40px;/);
   });
 
   it("uses the review's words for he and ar", () => {

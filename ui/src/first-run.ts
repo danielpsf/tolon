@@ -7,6 +7,16 @@ import type { CalendarDto } from "./api-types";
 import { useCalendars } from "./store";
 
 /** A route in the URL asks for a settings page (a reload, the WebDriver tests): Tolon opens the window on none. */
+/**
+ * Focus for a window that opens (decision "Reaching Tolon without the tray, and first-run focus"): on
+ * `el` without scrolling it into view, with the page at its top, so a page taller than the window never
+ * opens scrolled down to its buttons.
+ */
+export function focusAtTop(el: Pick<HTMLElement, "focus"> | null | undefined, page: Pick<Window, "scrollTo"> = window): void {
+  el?.focus({ preventScroll: true });
+  page.scrollTo(0, 0);
+}
+
 export const asksForPage = (hash: string): boolean => hash.replace(/^#\/?/, "") !== "";
 
 /**

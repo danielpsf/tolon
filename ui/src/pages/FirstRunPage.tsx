@@ -3,7 +3,7 @@ import { api, onAlarmHide } from "../api";
 import type { TrayPlace } from "../api-types";
 import { Bell } from "../Bell";
 import { copy, type Messages } from "../copy";
-import { firstCalendarAdded, hideAndEndFirstRun } from "../first-run";
+import { firstCalendarAdded, focusAtTop, hideAndEndFirstRun } from "../first-run";
 import { SNOOZE_MINUTES } from "../interrupt";
 import { errorText } from "../view";
 import { AddCalendarForm } from "./CalendarsPage";
@@ -28,7 +28,8 @@ function Preview() {
         <p className="sm-title tl-preview-title">{t.sampleTitle}</p>
         <p className="tl-preview-details">{i.details(range, "Google Meet", 0)}</p>
         <div className="tl-preview-actions">
-          <span className="sm-btn sm tl-primary">{i.joinCall}</span>
+          {/* The short label, so the three sample buttons stay on one row (mockup 05). */}
+          <span className="sm-btn sm tl-primary">{t.previewJoin}</span>
           <span className="sm-btn sm">{i.snooze(SNOOZE_MINUTES)}</span>
           <span className="sm-btn sm">{i.dismiss}</span>
         </div>
@@ -96,6 +97,10 @@ export function FirstRunPage() {
   const [testing, setTesting] = useTestAlarmOpen();
   const paste = useRef<HTMLButtonElement>(null);
 
+  // Focus on the primary button, never "Try a test alarm" (Enter would take over the screen), and
+  // without the scroll that autoFocus does: the window opens at the top (D6, D8).
+  useEffect(() => focusAtTop(paste.current), []);
+
   async function testAlarm() {
     if (testing) return;
     setTesting(true);
@@ -159,7 +164,6 @@ export function FirstRunPage() {
             ref={paste}
             type="button"
             className="sm-btn primary"
-            autoFocus
             aria-expanded={adding}
             aria-controls="add-calendar"
             onClick={() => setAdding(true)}

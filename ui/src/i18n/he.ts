@@ -198,6 +198,7 @@ export const he: Messages = {
     pasteIcal: "הדבקת קישור iCal",
     tryAlarm: "הפעלת התראת בדיקה",
     previewLabel: "תצוגה מקדימה של ההתראה",
+    previewJoin: "הצטרפות",
     sampleTitle: "סנכרון שבועי של צוות הפלטפורמה",
     footer: "Tolon הוא קוד פתוח ברישיון Apache 2.0. בלי חשבון, בלי טלמטריה.",
     skip: "דילוג בינתיים",

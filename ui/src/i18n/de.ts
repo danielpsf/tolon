@@ -168,6 +168,7 @@ export const de: Messages = {
     pasteIcal: "iCal-Link einfügen",
     tryAlarm: "Testalarm auslösen",
     previewLabel: "Vorschau des Alarms",
+    previewJoin: "Teilnehmen",
     sampleTitle: "Wöchentlicher Plattform-Sync",
     footer: "Tolon ist Open Source unter Apache 2.0. Kein Konto, keine Telemetrie.",
     skip: "Vorerst überspringen",

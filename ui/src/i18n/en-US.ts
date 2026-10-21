@@ -169,6 +169,7 @@ export const enUS = {
     pasteIcal: "Paste an iCal link",
     tryAlarm: "Try a test alarm",
     previewLabel: "Preview of the alarm",
+    previewJoin: "Join",
     sampleTitle: "Platform weekly sync",
     footer: "Tolon is open source under Apache 2.0. No account, no telemetry.",
     skip: "Skip for now",

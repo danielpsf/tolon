@@ -165,6 +165,7 @@ export const zhCN: Messages = {
     pasteIcal: "粘贴 iCal 链接",
     tryAlarm: "体验测试提醒",
     previewLabel: "提醒预览",
+    previewJoin: "加入",
     sampleTitle: "平台每周同步会",
     footer: "Tolon 是基于 Apache 2.0 许可的开源软件。无需账户，没有遥测。",
     skip: "暂时跳过",

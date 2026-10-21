@@ -165,6 +165,7 @@ export const tr: Messages = {
     pasteIcal: "iCal bağlantısı yapıştır",
     tryAlarm: "Test alarmını dene",
     previewLabel: "Alarm önizlemesi",
+    previewJoin: "Katıl",
     sampleTitle: "Platform haftalık toplantısı",
     footer: "Tolon, Apache 2.0 lisanslı açık kaynaklı bir yazılımdır. Hesap yok, telemetri yok.",
     skip: "Şimdilik atla",

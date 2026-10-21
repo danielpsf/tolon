@@ -168,6 +168,7 @@ export const es: Messages = {
     pasteIcal: "Pegar un enlace iCal",
     tryAlarm: "Probar una alarma",
     previewLabel: "Vista previa de la alarma",
+    previewJoin: "Unirse",
     sampleTitle: "Sincronización semanal de plataforma",
     footer: "Tolon es de código abierto con licencia Apache 2.0. Sin cuenta, sin telemetría.",
     skip: "Omitir por ahora",

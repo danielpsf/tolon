@@ -165,6 +165,7 @@ export const ja: Messages = {
     pasteIcal: "iCal リンクを貼り付け",
     tryAlarm: "テストアラームを鳴らす",
     previewLabel: "アラームのプレビュー",
+    previewJoin: "参加",
     sampleTitle: "プラットフォーム週次定例",
     footer: "Tolon は Apache 2.0 ライセンスのオープンソースです。アカウント不要、テレメトリなし。",
     skip: "今はスキップ",

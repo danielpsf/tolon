@@ -211,6 +211,7 @@ export const ar: Messages = {
     pasteIcal: "لصق رابط iCal",
     tryAlarm: "تشغيل تنبيه تجريبي",
     previewLabel: "معاينة التنبيه",
+    previewJoin: "انضمام",
     sampleTitle: "اجتماع المنصة الأسبوعي",
     footer: "برنامج Tolon مفتوح المصدر بموجب ترخيص Apache 2.0. بلا حساب ولا قياس عن بُعد.",
     skip: "التخطي الآن",
