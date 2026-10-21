@@ -115,6 +115,14 @@ impl<'a> CalendarsRepo<'a> {
         )
     }
 
+    /// The signed-in account a Google calendar belongs to (its address).
+    pub fn set_account(&self, id: &str, account: &str) -> Result<(), StoreError> {
+        self.touch(
+            "update calendars set account = ?2 where id = ?1",
+            params![id, account],
+        )
+    }
+
     /// A 2xx fetch: store the new etag, stamp the sync time, clear any error.
     pub fn record_success(&self, id: &str, etag: Option<&str>, at: &str) -> Result<(), StoreError> {
         self.touch(
@@ -233,6 +241,29 @@ mod tests {
         assert_eq!(got.last_sync_at.as_deref(), Some("t3"));
         assert!(matches!(
             c.record_not_modified("nope", "t"),
+            Err(StoreError::NotFound)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn set_account_stores_the_google_account() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let c = store.calendars();
+        let a = c.insert(
+            "google",
+            "Team",
+            Some("team@group.calendar.google.com"),
+            true,
+            "t",
+        )?;
+        c.set_account(&a.id, "me@example.com")?;
+        assert_eq!(
+            c.get(&a.id)?.ok_or("gone")?.account.as_deref(),
+            Some("me@example.com")
+        );
+        assert!(matches!(
+            c.set_account("nope", "x"),
             Err(StoreError::NotFound)
         ));
         Ok(())
