@@ -161,7 +161,7 @@ def badge(px, cx, cy, r):
                     d = (fx * fx + fy * fy) ** 0.5
                     if d <= r:
                         hits[0] += 1
-                    if d <= r - 1.2:
+                    if d <= r - 1.0:
                         hits[1] += 1
                         if abs(fy) <= r * 0.42 and (r * 0.16 <= abs(fx) <= r * 0.16 + r * 0.26):
                             hits[2] += 1
@@ -178,8 +178,8 @@ def main():
     small = rounded(read_png(src / "32x32.png"), 7)
     write_png(out / "peek-44.png", big)
     write_png(out / "peek-32.png", small)
-    write_png(out / "peek-44-paused.png", badge([r[:] for r in big], 35, 35, 9))
-    write_png(out / "peek-32-paused.png", badge([r[:] for r in small], 25, 25, 7))
+    write_png(out / "peek-44-paused.png", badge([r[:] for r in big], 37, 37, 6.5))
+    write_png(out / "peek-32-paused.png", badge([r[:] for r in small], 26.5, 26.5, 5))
 
 
 if __name__ == "__main__":
