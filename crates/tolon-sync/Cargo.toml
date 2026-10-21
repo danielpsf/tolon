@@ -17,6 +17,17 @@ tolon-core = { path = "../tolon-core" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 thiserror = "2"
 tracing = "0.1"
+# F13 OAuth (named in docs/architecture.md): PKCE S256, CSRF state, code exchange, refresh and
+# revocation. No default features: it uses our reqwest client (rustls, native roots), no second TLS stack.
+oauth2 = { version = "5", default-features = false, features = ["reqwest"] }
+# Google Calendar JSON (calendarList, events.list); both already in the tree.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The loopback listener for the OAuth redirect and its timeouts; already in the tree (Tauri's runtime).
+tokio = { version = "1", features = ["net", "io-util", "time"] }
+# Google event times to core times; same versions as tolon-core.
+chrono = "0.4.45"
+chrono-tz = "0.10.4"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time"] }
