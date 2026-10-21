@@ -171,6 +171,15 @@ export const he: Messages = {
     tooltip: (title, duration) => `${title} בעוד ${duration}`,
     tooltipNow: (title) => `עכשיו: ${title}`,
   },
+  notification: {
+    body: (time) => `התחלה ב-${time}. Tolon לא הצליח לכסות את המסך.`,
+    many: (count) => counted(count, {
+      one: () => "פגישה אחת עומדת להתחיל",
+      two: () => "שתי פגישות עומדות להתחיל",
+      other: (n) => `${n} פגישות עומדות להתחיל`,
+    }),
+    manyOver: "כמה פגישות עומדות להתחיל",
+  },
   relative: {
     neverSynced: "עדיין לא סונכרן",
     syncedJustNow: "סונכרן הרגע",

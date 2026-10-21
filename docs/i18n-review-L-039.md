@@ -286,3 +286,43 @@ Decisions:
 |---|---|---|---|---|
 | ja | 1 | `panel.snoozeEnded` | "これで終わりです" is colloquial for UI copy; align with "リマインダー". | Accepted: "その頃には会議が始まっているため、Tolon は再度リマインドしません。" Round 2 ok. |
 | ar | 1 | `panel.snoozeEnded` | Wrap the name Tolon in `iso()`. | Rejected, as in the first L-015 round: no ar string wraps the product name. |
+
+## L-038
+
+The fallback notification copy of L-038 (3 new strings in a `notification` section: `body(time)`, `many(count)` and `manyOver`; the title of one meeting is the meeting itself, the test title and the two buttons reuse `interrupt.testTitle`, `interrupt.snooze` and `interrupt.joinCall`) was drafted by the implementing agent (Claude Sonnet 5.5) in all 12 catalogues and checked by the same judge. en-US is the source and was not judged.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, JSON response format.
+- One locale per call. Each prompt held the en-US and the locale's TypeScript for the new keys, the reused keys for context, where the strings show (a system notification: title for 2 to 20 meetings, title for more, body with the Intl-formatted local time), the copy rules and the language rules of the L-039 method.
+- Round 2 ran only on the locales with an accepted round 1 fix (hi, he). Two rounds at most.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 613 | 292 (274) | 905 | 2.6 | 0 | ok |
+| pt-BR | 1 | 629 | 703 (694) | 1332 | 5.7 | 0 | ok |
+| pt-PT | 1 | 625 | 674 (656) | 1299 | 5.5 | 0 | ok |
+| de | 1 | 615 | 1100 (1082) | 1715 | 6.6 | 0 | ok |
+| es | 1 | 621 | 754 (736) | 1375 | 5.8 | 0 | ok |
+| ar | 1 | 833 | 1519 (1501) | 2352 | 14.0 | 0 | ok |
+| tr | 1 | 617 | 430 (421) | 1047 | 3.6 | 0 | ok |
+| hi | 1 | 624 | 1628 (1520) | 2252 | 14.1 | 1 | fix |
+| zh-CN | 1 | 612 | 458 (440) | 1070 | 3.3 | 0 | ok |
+| ja | 1 | 620 | 889 (880) | 1509 | 7.8 | 0 | ok |
+| he | 1 | 751 | 3850 (3698) | 4601 | 32.0 | 1 | fix |
+| hi | 2 | 625 | 2009 (1991) | 2634 | 11.3 | 0 | ok |
+| he | 2 | 748 | 5471 (5462) | 6219 | 35.6 | 0 | ok |
+| All (13 calls) | | 8533 | 19777 | 28310 | | 2 | |
+
+### Issues and decisions
+
+2 issues, both accepted; the round 2 calls found none.
+
+| Locale | Round | Key | Judge's point | Decision |
+|---|---|---|---|---|
+| hi | 1 | `notification.body` | "घेरना" means to surround or encircle, not to cover a screen. | Accepted: "कवर नहीं कर सका". Round 2 ok. The same verb stays in the earlier hi `takeOver` label ("स्क्रीन घेरें"), which no judge round flagged; left for the native review. |
+| he | 1 | `notification.body` | "הפגישה מתחילה" (the meeting starts) clashes with a title for several meetings; use a neutral action noun. | Accepted: "התחלה ב-{time}". Round 2 ok. |
+
+Choices recorded with this review: the body is shared by one meeting and by a group, so no locale names the number of meetings in it. The other locales were left as drafted: ok in round 1. A group above 20 meetings gets a title without a number (`manyOver`), so no plural form is needed beyond the 19 written out. Native review is still required before release.

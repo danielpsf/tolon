@@ -141,6 +141,11 @@ export const de: Messages = {
     tooltip: (title, duration) => `${title} in ${duration}`,
     tooltipNow: (title) => `Jetzt: ${title}`,
   },
+  notification: {
+    body: (time) => `Beginnt um ${time} Uhr. Tolon konnte den Bildschirm nicht abdecken.`,
+    many: (count) => `${number.format(count)} Termine beginnen gleich`,
+    manyOver: "Mehrere Termine beginnen gleich",
+  },
   relative: {
     neverSynced: "Noch nicht synchronisiert",
     syncedJustNow: "Gerade synchronisiert",

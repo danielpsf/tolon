@@ -141,6 +141,11 @@ export const es: Messages = {
     tooltip: (title, duration) => `${title} en ${duration}`,
     tooltipNow: (title) => `Ahora: ${title}`,
   },
+  notification: {
+    body: (time) => `Hora de inicio: ${time}. Tolon no pudo cubrir la pantalla.`,
+    many: (count) => `${number.format(count)} reuniones están a punto de empezar`,
+    manyOver: "Varias reuniones están a punto de empezar",
+  },
   relative: {
     neverSynced: "Aún sin sincronizar",
     syncedJustNow: "Sincronizado hace un momento",

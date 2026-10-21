@@ -141,6 +141,11 @@ export const ptPT: Messages = {
     tooltip: (title, duration) => `${title} dentro de ${duration}`,
     tooltipNow: (title) => `Agora: ${title}`,
   },
+  notification: {
+    body: (time) => `Hora de início: ${time}. O Tolon não conseguiu cobrir o ecrã.`,
+    many: (count) => `${number.format(count)} reuniões estão prestes a começar`,
+    manyOver: "Várias reuniões estão prestes a começar",
+  },
   relative: {
     neverSynced: "Ainda não sincronizado",
     syncedJustNow: "Sincronizado agora mesmo",

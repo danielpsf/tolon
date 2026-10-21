@@ -141,6 +141,11 @@ export const enGB: Messages = {
     tooltip: (title, duration) => `${title} in ${duration}`,
     tooltipNow: (title) => `Now: ${title}`,
   },
+  notification: {
+    body: (time) => `Starts at ${time}. Tolon could not cover the screen.`,
+    many: (count) => `${number.format(count)} meetings are about to start`,
+    manyOver: "Several meetings are about to start",
+  },
   relative: {
     neverSynced: "Not synced yet",
     syncedJustNow: "Synced just now",

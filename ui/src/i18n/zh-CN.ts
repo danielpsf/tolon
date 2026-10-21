@@ -138,6 +138,11 @@ export const zhCN: Messages = {
     tooltip: (title, duration) => `${title}，${duration}后开始`,
     tooltipNow: (title) => `进行中：${title}`,
   },
+  notification: {
+    body: (time) => `开始时间：${time}。Tolon 无法覆盖屏幕。`,
+    many: (count) => `${number.format(count)} 个会议即将开始`,
+    manyOver: "多个会议即将开始",
+  },
   relative: {
     neverSynced: "尚未同步",
     syncedJustNow: "刚刚同步",

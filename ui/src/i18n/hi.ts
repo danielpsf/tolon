@@ -141,6 +141,11 @@ export const hi: Messages = {
     tooltip: (title, duration) => `${title}, ${duration} में`,
     tooltipNow: (title) => `अभी: ${title}`,
   },
+  notification: {
+    body: (time) => `${time} पर शुरू होगी। Tolon स्क्रीन को कवर नहीं कर सका।`,
+    many: (count) => `${number.format(count)} मीटिंग जल्द शुरू होने वाली हैं`,
+    manyOver: "कई मीटिंग जल्द शुरू होने वाली हैं",
+  },
   relative: {
     neverSynced: "अभी तक सिंक नहीं हुआ",
     syncedJustNow: "अभी-अभी सिंक हुआ",

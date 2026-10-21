@@ -138,6 +138,11 @@ export const ja: Messages = {
     tooltip: (title, duration) => `${title}、${duration}後`,
     tooltipNow: (title) => `開催中：${title}`,
   },
+  notification: {
+    body: (time) => `開始時刻は${time}です。Tolon は画面を覆えませんでした。`,
+    many: (count) => `${number.format(count)}件の会議がまもなく始まります`,
+    manyOver: "複数の会議がまもなく始まります",
+  },
   relative: {
     neverSynced: "未同期",
     syncedJustNow: "たった今同期しました",

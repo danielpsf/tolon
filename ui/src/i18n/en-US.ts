@@ -141,6 +141,11 @@ export const enUS = {
     tooltip: (title: string, duration: string) => `${title} in ${duration}`,
     tooltipNow: (title: string) => `Now: ${title}`,
   },
+  notification: {
+    body: (time: string) => `Starts at ${time}. Tolon could not cover the screen.`,
+    many: (count: number) => `${number.format(count)} meetings are about to start`,
+    manyOver: "Several meetings are about to start",
+  },
   relative: {
     neverSynced: "Not synced yet",
     syncedJustNow: "Synced just now",

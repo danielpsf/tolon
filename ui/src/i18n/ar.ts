@@ -184,6 +184,18 @@ export const ar: Messages = {
     tooltip: (title, duration) => `${title} بعد ${duration}`,
     tooltipNow: (title) => `الآن: ${title}`,
   },
+  notification: {
+    body: (time) => `يبدأ في الساعة ${time}. لم يتمكن Tolon من تغطية الشاشة.`,
+    many: (count) => counted(count, {
+      zero: (n) => `${n} اجتماع على وشك البدء`,
+      one: () => "اجتماع واحد على وشك البدء",
+      two: () => "اجتماعان على وشك البدء",
+      few: (n) => `${n} اجتماعات على وشك البدء`,
+      many: (n) => `${n} اجتماعًا على وشك البدء`,
+      other: (n) => `${n} اجتماع على وشك البدء`,
+    }),
+    manyOver: "عدة اجتماعات على وشك البدء",
+  },
   relative: {
     neverSynced: "لم تتم المزامنة بعد",
     syncedJustNow: "تمت المزامنة الآن",

@@ -138,6 +138,11 @@ export const tr: Messages = {
     tooltip: (title, duration) => `${title}, ${duration} içinde`,
     tooltipNow: (title) => `Şimdi: ${title}`,
   },
+  notification: {
+    body: (time) => `Başlangıç: ${time}. Tolon ekranı kaplayamadı.`,
+    many: (count) => `${number.format(count)} toplantı birazdan başlıyor`,
+    manyOver: "Birkaç toplantı birazdan başlıyor",
+  },
   relative: {
     neverSynced: "Henüz eşitlenmedi",
     syncedJustNow: "Az önce eşitlendi",
