@@ -34,6 +34,10 @@ npm --prefix ui run dev | build | lint | test
 
 Quit an installed Tolon before `make dev` or `cargo run -p tolon-app`. Both use the same app id (`dev.tolon.desktop`), so the development build hands over to the Tolon that is already running, which only shows its window, and then exits.
 
+### Google Calendar sign-in
+
+"Sign in with Google" shows only in a build that has a Google OAuth client. Create a client of type "Desktop app" in your own Google Cloud project with the scope `https://www.googleapis.com/auth/calendar.readonly`, then set `TOLON_GOOGLE_CLIENT_ID` and `TOLON_GOOGLE_CLIENT_SECRET` when you build (they are compiled in) or when you run Tolon (they win over the built-in ones). Google issues a client secret with a Desktop app client and asks for it when tokens are exchanged, but its installed-app guidance says a desktop app cannot keep it confidential, so it is configuration, not a credential. Tolon never logs it, and keeps each refresh token in the system keychain, never in `tolon.db`. A client in "Testing" publishing status gets refresh tokens that expire after 7 days, so people then need to sign in again.
+
 ## Where things live
 
 ```
