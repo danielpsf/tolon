@@ -42,3 +42,5 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] AC10.1 A fresh install opens first run in front with focus; step 3 reads "menu bar" on macOS and "system tray" on Windows and Linux; "Try a test alarm" covers every screen and Esc closes it.
 - [ ] AC10.2 Adding a first calendar that syncs hides the window and leaves only the tray; a relaunch shows no window and does not take focus from the front app; a first link that fails to sync shows the error on the Calendars page instead.
 - [ ] AC10.2 After a relaunch with the window hidden, the fallback notification still uses the chosen language.
+- [ ] AC11.1 With an update waiting, the tray panel shows one line and Settings, About shows Install and restart, Later and Skip this version; Skip this version survives a restart; offline, launch shows no error.
+- [ ] AC11.1 Windows: Install and restart shows the passive installer window (MSI asks for administrator approval) and Tolon starts again. Linux: a `.deb` update asks for the password; an AppImage update replaces the file and restarts.
