@@ -133,7 +133,14 @@ const find = (css) => driver.wait(until.elementLocated(By.css(css)), WAIT);
 
 /** The row of the calendar these tests add (the host is the name), or false while it is not listed. */
 async function rowForTestCalendar() {
-  for (const row of await driver.findElements(By.css(".tl-row"))) {
+  let rows;
+  // WebKitGTK's lookup itself can fail as stale when a row leaves the list during it: look again.
+  while (!rows) {
+    rows = await driver.findElements(By.css(".tl-row")).catch((e) => {
+      if (!(e instanceof error.StaleElementReferenceError)) throw e;
+    });
+  }
+  for (const row of rows) {
     try {
       if ((await row.findElement(By.css(".tl-name")).getText()).startsWith("127.0.0.1")) return row;
     } catch (e) {
