@@ -39,3 +39,6 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S7.1 Pause for 1 hour shows the paused icon and "Paused until HH:MM"; a meeting in 20 minutes does not fire; the pause holds across a quit and restart (icon included); Resume and the automatic end restore the normal icon.
 - [ ] S7.2 Closing the settings window keeps the tray icon and an alarm still fires; Settings in the panel brings the window back (no Dock icon on macOS).
 - [ ] AC7.4 Quit in the panel removes the tray icon and ends the process; Cmd+Q in the settings window also quits cleanly; logging out is not blocked by Tolon.
+- [ ] AC10.1 A fresh install opens first run in front with focus; step 3 reads "menu bar" on macOS and "system tray" on Windows and Linux; "Try a test alarm" covers every screen and Esc closes it.
+- [ ] AC10.2 Adding a first calendar that syncs hides the window and leaves only the tray; a relaunch shows no window and does not take focus from the front app; a first link that fails to sync shows the error on the Calendars page instead.
+- [ ] AC10.2 After a relaunch with the window hidden, the fallback notification still uses the chosen language.
