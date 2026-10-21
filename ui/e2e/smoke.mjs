@@ -1,8 +1,8 @@
 // WebDriver smoke test: tauri-driver starts the debug app and selenium-webdriver drives it.
 // Run with `npm --prefix ui run e2e` after `npm --prefix ui run tauri build -- --debug --no-bundle`.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -581,20 +581,43 @@ test("window rights: the settings window reads the pause and the current alarm, 
 
 // ---- Updates (L-019) ----------------------------------------------------------------------------
 // A debug build never checks for updates. The e2e build may point the updater at a `latest.json` on
-// 127.0.0.1 (`update_e2e_endpoint`, compiled only with the fetch seam). The signature is not one the
-// pubkey made, so Install downloads the file and then refuses it: Tolon keeps running. Versions grow
-// with the clock, because Windows keeps the skipped version in its data dir between runs.
+// 127.0.0.1 (`update_e2e_endpoint`, compiled only with the fetch seam). The package is signed with a
+// throwaway minisign key made for this run (no password), a real signature for the right version that
+// the pubkey in tauri.conf.json did not make, so Install downloads it and the signature check refuses
+// it: Tolon keeps running. Versions grow with the clock, because Windows keeps the skipped version in
+// its data dir between runs.
 
 const TARGETS = ["linux", "windows", "darwin"].flatMap((os) => ["x86_64", "aarch64"].map((arch) => `${os}-${arch}`));
 
-/** Serves `latest.json` offering `state.version`, and the package it points at. */
+const tauriCli = fileURLToPath(new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url));
+
+/** The Tauri CLI's `signer` subcommand; fails the test with its output when it fails. */
+function signer(...args) {
+  const done = spawnSync(process.execPath, [tauriCli, "signer", ...args], { encoding: "utf8", env: { ...process.env, CI: "true" } });
+  assert.equal(done.status, 0, `tauri signer ${args[0]}: ${done.stdout}${done.stderr}`);
+}
+
+/** A package signed for `version` by a fresh key that is not Tolon's: its `.sig` text, as latest.json carries it. */
+function signedByAnotherKey(version) {
+  const dir = mkdtempSync(join(tmpdir(), "tolon-e2e-key-"));
+  try {
+    signer("generate", "--ci", "-p", "", "-w", join(dir, "key"));
+    writeFileSync(join(dir, "tolon.bin"), "not an update");
+    signer("sign", "-f", join(dir, "key"), "-p", "", "--app-version", version, join(dir, "tolon.bin"));
+    return readFileSync(join(dir, "tolon.bin.sig"), "utf8").trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Serves `latest.json` offering `state.version` with `state.signature`, and the package it points at. */
 async function updateServer(state) {
   const requests = [];
   const server = http.createServer((req, res) => {
     requests.push(req.url);
     const port = server.address().port;
     if (req.url === "/latest.json") {
-      const platform = { signature: Buffer.from("not a minisign signature").toString("base64"), url: `http://127.0.0.1:${port}/tolon.bin` };
+      const platform = { signature: state.signature, url: `http://127.0.0.1:${port}/tolon.bin` };
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ version: state.version, notes: "", pub_date: new Date().toISOString(), platforms: Object.fromEntries(TARGETS.map((t) => [t, platform])) }));
     } else {
@@ -618,6 +641,7 @@ const shows = (step, text) => waitFor(step, async () => (await byText(text)).len
 test("ac11_1 a debug build does not check; a found update asks first, Later and Skip this version hold, a newer one asks again, and a bad signature installs nothing", async () => {
   const run = Math.floor(Date.now() / 1000);
   const state = { version: `9.${run}.0` };
+  state.signature = signedByAnotherKey(state.version);
   const { server, requests, port } = await updateServer(state);
   try {
     assert.deepEqual(await invoke("update_status"), { answer: { available: null, installing: false } });
@@ -635,8 +659,11 @@ test("ac11_1 a debug build does not check; a found update asks first, Later and 
     await shows("the offer", `Tolon ${state.version} is available.`);
     assert.ok(requests.includes("/latest.json"));
 
-    // Later hides the prompt until the next check.
+    // Later hides the prompt until the next check, and focus moves to the Updates heading.
     await clickButton("Later");
+    await waitFor("Later to hide the offer", async () => (await byText(`Tolon ${state.version} is available.`)).length === 0);
+    assert.deepEqual(await invoke("update_status"), { answer: { available: null, installing: false } });
+    await waitFor("focus on the Updates heading", async () => (await driver.executeScript(() => document.activeElement?.id)) === "updates-heading");
     await clickButton("Check for updates");
     await shows("the offer again after a check", `Tolon ${state.version} is available.`);
 
