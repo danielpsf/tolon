@@ -100,7 +100,7 @@ function ratios(color: InterruptColor, theme: Theme) {
   };
 }
 
-describe("reminder colours (L-043)", () => {
+describe("interrupt contrast for every reminder colour (AC4.3, L-043)", () => {
   it("offers the eight choices of the decision, each a Swiss Moss token pair", () => {
     expect(Object.keys(REMINDER_PAIRS)).toEqual([...INTERRUPT_COLORS]);
     for (const pair of Object.values(REMINDER_PAIRS)) {
@@ -197,7 +197,7 @@ describe("reminder colours (L-043)", () => {
   });
 });
 
-describe("preview tokens (L-043)", () => {
+describe("preview tokens (AC4.3, L-043)", () => {
   it("scopes Swiss Moss's own light and dark values to data-tokens, so a preview shows either appearance", () => {
     for (const [theme, values] of Object.entries(THEMES)) {
       const block = new RegExp(`\\[data-tokens=${theme}\\]\\{([^}]*)\\}`).exec(PREVIEW_TOKENS)?.[1] ?? "";
