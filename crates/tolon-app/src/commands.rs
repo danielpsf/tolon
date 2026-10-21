@@ -697,6 +697,18 @@ pub async fn alarms_e2e_state(app: AppHandle) -> Result<Vec<AlarmStateDto>, Comm
         .collect())
 }
 
+/// Whether the settings window is shown, for the WebDriver tests of first run (F10). Only in the
+/// end-to-end build: WebView2 keeps `document.visibilityState` at visible when Windows hides the
+/// window, so the suite asks the window itself.
+#[cfg(feature = "e2e-loopback")]
+#[tauri::command]
+pub async fn app_e2e_settings_visible(window: tauri::WebviewWindow) -> Result<bool, CommandError> {
+    main_only(window.label())?;
+    window
+        .is_visible()
+        .map_err(|_| command_error(&AppError::NOT_READY.into()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -785,6 +797,7 @@ mod tests {
         ("update_skip", "main_only"),
         ("update_later", "main_only"),
         ("update_e2e_endpoint", "main_only"),
+        ("app_e2e_settings_visible", "main_only"),
     ];
 
     /// Registered commands with no window check, each with its reason.
@@ -849,7 +862,11 @@ mod tests {
         // The unchecked one is compiled only with a feature; `check-release-features` pins which
         // one and keeps it out of every release build.
         let lines: Vec<&str> = handler.lines().map(str::trim).collect();
-        for gated in ["alarms_e2e_state", "update_e2e_endpoint"] {
+        for gated in [
+            "alarms_e2e_state",
+            "update_e2e_endpoint",
+            "app_e2e_settings_visible",
+        ] {
             let at = lines
                 .iter()
                 .position(|l| l.starts_with(&format!("commands::{gated}")))

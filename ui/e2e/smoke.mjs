@@ -705,10 +705,16 @@ test("ac11_1 a debug build does not check; a found update asks first, Later and 
 // ---- First run (L-018) --------------------------------------------------------------------------
 // Every test above removes what it adds, so Tolon has no calendar again, as on a first launch. A launch on
 // no page opens the settings window on first run (AC10.1); a first calendar that syncs hides it, and the
-// next launch opens no window (AC10.2). The page's `document.visibilityState` is how WebDriver sees a
-// hidden window, and a hidden window is driven by script only. Runs last: the window ends up hidden.
+// next launch opens no window (AC10.2). WebDriver cannot tell a hidden window, and WebView2 keeps
+// `document.visibilityState` at visible when Windows hides one, so the window is asked through
+// `app_e2e_settings_visible` (end-to-end build only). A hidden window is driven by script only. Runs
+// last: the window ends up hidden.
 
-const visibility = () => driver.executeScript(() => document.visibilityState);
+const visibility = async () => {
+  const shown = await invoke("app_e2e_settings_visible");
+  assert.equal(typeof shown.answer, "boolean", JSON.stringify(shown));
+  return shown.answer ? "visible" : "hidden";
+};
 
 /** Quits and starts Tolon on no page, as it starts itself; with no calendar that is first run. */
 async function launchOnFirstRun() {
