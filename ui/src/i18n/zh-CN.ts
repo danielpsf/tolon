@@ -15,7 +15,6 @@ export const zhCN: Messages = {
     language: "语言",
     startup: "启动",
     about: "关于",
-    comingSoon: "将在后续版本中推出。",
   },
   calendars: {
     title: "日历",
@@ -98,6 +97,20 @@ export const zhCN: Messages = {
       requiresApproval: "请在“系统设置”的“登录项”中允许 Tolon，以便在登录时启动。",
       unavailable: "Tolon 无法从系统读取此设置。",
     },
+    about: {
+      subtitle: "此电脑上的 Tolon 版本及其更新。",
+      version: (version: string) => `版本 ${version}`,
+      updates: "更新",
+      available: (version: string) => `已有新版本 Tolon ${version}。`,
+      install: "安装并重新启动",
+      later: "稍后",
+      skip: "跳过此版本",
+      restartNote: "Tolon 会短暂关闭以完成更新，重新打开后提醒会继续。",
+      installing: "正在安装更新。完成后 Tolon 会重新启动。",
+      check: "检查更新",
+      upToDate: "没有可安装的新版本。",
+      autoCheck: "Tolon 每天在 GitHub 上检查一次新版本，未经你同意绝不会安装。",
+    },
   },
   interrupt: {
     region: "会议提醒",
@@ -137,6 +150,7 @@ export const zhCN: Messages = {
     snoozeEnded: "届时会议已经开始，所以 Tolon 不会再提醒你。",
     tooltip: (title, duration) => `${title}，${duration}后开始`,
     tooltipNow: (title) => `进行中：${title}`,
+    update: (version: string, settings: string, about: string) => `已有新版本 Tolon ${version}。可在“${settings}”中的“${about}”页面安装。`,
   },
   firstRun: {
     title: "再也不会错过会议。",
@@ -208,6 +222,8 @@ export const zhCN: Messages = {
       db_error: "Tolon 无法保存此更改，请重试。",
       internal: "Tolon 内部出错，请重试。",
       login_item: "系统不允许 Tolon 更改此设置。登录时启动仅适用于已安装的 Tolon。",
+      update_check: "Tolon 无法连接 GitHub 检查更新，请稍后再试。",
+      update_install: "更新未能安装。Tolon 将继续使用当前版本。",
     },
   },
 };

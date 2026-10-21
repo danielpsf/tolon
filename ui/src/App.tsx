@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Bell } from "./Bell";
 import { copy } from "./copy";
 import { startFirstRunWatch, useFirstRun } from "./first-run";
+import { AboutPage } from "./pages/AboutPage";
 import { CalendarsPage } from "./pages/CalendarsPage";
 import { FirstRunPage } from "./pages/FirstRunPage";
 import {
@@ -16,7 +17,7 @@ import { startTrayTooltip } from "./panel";
 import { startCalendarsFeed, useSettings } from "./store";
 import pkg from "../package.json";
 
-// One topic per page (AC9.2). About has no page yet.
+// One topic per page (AC9.2).
 export const PAGES = [
   { id: "calendars", key: "calendars", Page: CalendarsPage },
   { id: "alarms", key: "alarms", Page: AlarmsPage },
@@ -25,7 +26,7 @@ export const PAGES = [
   { id: "appearance", key: "appearance", Page: AppearancePage },
   { id: "language", key: "language", Page: LanguagePage },
   { id: "startup", key: "startup", Page: StartupPage },
-  { id: "about", key: "about", Page: null },
+  { id: "about", key: "about", Page: AboutPage },
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
@@ -81,14 +82,7 @@ export function App() {
         <span className="sm-caption tl-version">v{pkg.version}</span>
       </aside>
       <main className="tl-main" aria-label={t.nav[page.key]}>
-        {page.Page ? (
-          <page.Page />
-        ) : (
-          <>
-            <h1 className="sm-display-m">{t.nav[page.key]}</h1>
-            <p className="sm-body sm-muted">{t.nav.comingSoon}</p>
-          </>
-        )}
+        <page.Page />
       </main>
     </div>
   );

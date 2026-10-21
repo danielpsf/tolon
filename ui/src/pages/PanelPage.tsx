@@ -19,6 +19,7 @@ import {
   summaryText,
 } from "../panel";
 import { useSettings } from "../store";
+import { useUpdate } from "../update";
 import { errorText } from "../view";
 
 /** Pause for 1 hour (AC7.2). */
@@ -62,6 +63,7 @@ export function PanelPage() {
   const { panel: t, interrupt: ti } = c.t;
   const settings = useSettings((s) => s.settings);
   const { items, pause, setPause, now } = usePanelData();
+  const [update] = useUpdate();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const root = useRef<HTMLElement>(null);
@@ -172,6 +174,12 @@ export function PanelPage() {
         {notice && (
           <p role="status" className="sm-caption">
             {notice}
+          </p>
+        )}
+        {/* F11: one quiet line while an update waits; the buttons are on the About page. */}
+        {update?.available && !update.installing && (
+          <p role="status" className="sm-caption" data-update>
+            {t.update(update.available, c.t.nav.label, c.t.nav.about)}
           </p>
         )}
         <div className="tl-panel-actions">

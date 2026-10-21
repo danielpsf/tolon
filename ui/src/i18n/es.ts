@@ -16,7 +16,6 @@ export const es: Messages = {
     language: "Idioma",
     startup: "Inicio",
     about: "Acerca de",
-    comingSoon: "Disponible en una versión futura.",
   },
   calendars: {
     title: "Calendarios",
@@ -99,6 +98,20 @@ export const es: Messages = {
       requiresApproval: "Permite Tolon en Ajustes del Sistema, en Ítems de inicio, para que se abra al iniciar sesión.",
       unavailable: "Tolon no pudo leer este ajuste del sistema.",
     },
+    about: {
+      subtitle: "La versión de Tolon en este equipo y sus actualizaciones.",
+      version: (version: string) => `Versión ${version}`,
+      updates: "Actualizaciones",
+      available: (version: string) => `Tolon ${version} está disponible.`,
+      install: "Instalar y reiniciar",
+      later: "Más tarde",
+      skip: "Omitir esta versión",
+      restartNote: "Tolon se cierra un momento para actualizarse. Las alarmas siguen en cuanto vuelve a abrirse.",
+      installing: "Instalando la actualización. Tolon se reinicia cuando termina.",
+      check: "Buscar actualizaciones",
+      upToDate: "No hay ninguna versión nueva para instalar.",
+      autoCheck: "Una vez al día, Tolon consulta en GitHub si hay una versión nueva. Nunca instala nada sin preguntarte.",
+    },
   },
   interrupt: {
     region: "Alarma de reunión",
@@ -140,6 +153,7 @@ export const es: Messages = {
     snoozeEnded: "Para entonces la reunión ya habrá empezado, así que Tolon no te lo recordará de nuevo.",
     tooltip: (title, duration) => `${title} en ${duration}`,
     tooltipNow: (title) => `Ahora: ${title}`,
+    update: (version: string, settings: string, about: string) => `Tolon ${version} está disponible. Instálalo desde ${settings}, ${about}.`,
   },
   firstRun: {
     title: "No vuelvas a perderte una reunión.",
@@ -212,6 +226,8 @@ export const es: Messages = {
       db_error: "Tolon no pudo guardar ese cambio. Inténtalo de nuevo.",
       internal: "Algo salió mal dentro de Tolon. Inténtalo de nuevo.",
       login_item: "El sistema no dejó que Tolon cambiara esto. Esta opción solo funciona con una copia instalada de Tolon.",
+      update_check: "Tolon no pudo conectarse a GitHub para buscar actualizaciones. Inténtalo de nuevo más tarde.",
+      update_install: "La actualización no se instaló. Tolon sigue con esta versión.",
     },
   },
 };

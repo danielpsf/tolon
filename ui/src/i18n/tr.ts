@@ -15,7 +15,6 @@ export const tr: Messages = {
     language: "Dil",
     startup: "Başlangıç",
     about: "Hakkında",
-    comingSoon: "Sonraki bir sürümde gelecek.",
   },
   calendars: {
     title: "Takvimler",
@@ -98,6 +97,20 @@ export const tr: Messages = {
       requiresApproval: "Oturum açtığında başlaması için Sistem Ayarları'nda, Giriş Öğeleri altında Tolon'a izin ver.",
       unavailable: "Tolon bu ayarı sistemden okuyamadı.",
     },
+    about: {
+      subtitle: "Bu bilgisayardaki Tolon sürümü ve güncellemeleri.",
+      version: (version: string) => `Sürüm ${version}`,
+      updates: "Güncellemeler",
+      available: (version: string) => `Tolon ${version} kullanıma sunuldu.`,
+      install: "Yükle ve yeniden başlat",
+      later: "Daha sonra",
+      skip: "Bu sürümü atla",
+      restartNote: "Tolon güncelleme için kısa bir süre kapanır. Yeniden açıldığında alarmlar devam eder.",
+      installing: "Güncelleme yükleniyor. Tamamlandığında Tolon yeniden başlar.",
+      check: "Güncellemeleri denetle",
+      upToDate: "Yüklenecek yeni bir sürüm yok.",
+      autoCheck: "Tolon günde bir kez GitHub'da yeni bir sürüm olup olmadığına bakar. Sana sormadan hiçbir şey yüklemez.",
+    },
   },
   interrupt: {
     region: "Toplantı alarmı",
@@ -137,6 +150,7 @@ export const tr: Messages = {
     snoozeEnded: "O zamana kadar toplantı başlamış olacak, bu yüzden Tolon sana bir daha hatırlatmayacak.",
     tooltip: (title, duration) => `${title}, ${duration} içinde`,
     tooltipNow: (title) => `Şimdi: ${title}`,
+    update: (version: string, settings: string, about: string) => `Tolon ${version} kullanıma sunuldu. ${settings}, ${about} bölümünden yükleyebilirsin.`,
   },
   firstRun: {
     title: "Bir daha hiçbir toplantıyı kaçırma.",
@@ -208,6 +222,8 @@ export const tr: Messages = {
       db_error: "Tolon bu değişikliği kaydedemedi. Yeniden dene.",
       internal: "Tolon'da bir sorun oluştu. Yeniden dene.",
       login_item: "Sistem, Tolon'un bunu değiştirmesine izin vermedi. Oturum açınca başlatma yalnızca yüklü bir Tolon ile çalışır.",
+      update_check: "Tolon, güncellemeleri denetlemek için GitHub'a bağlanamadı. Daha sonra yeniden dene.",
+      update_install: "Güncelleme yüklenemedi. Tolon bu sürümle çalışmaya devam ediyor.",
     },
   },
 };

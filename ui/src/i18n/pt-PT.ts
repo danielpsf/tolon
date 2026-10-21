@@ -16,7 +16,6 @@ export const ptPT: Messages = {
     language: "Idioma",
     startup: "Arranque",
     about: "Acerca de",
-    comingSoon: "Disponível numa versão futura.",
   },
   calendars: {
     title: "Calendários",
@@ -99,6 +98,20 @@ export const ptPT: Messages = {
       requiresApproval: "Permita o Tolon nas Definições do Sistema, em Elementos de início de sessão, para que arranque ao iniciar sessão.",
       unavailable: "O Tolon não conseguiu ler esta definição do sistema.",
     },
+    about: {
+      subtitle: "A versão do Tolon neste computador e as respetivas atualizações.",
+      version: (version: string) => `Versão ${version}`,
+      updates: "Atualizações",
+      available: (version: string) => `O Tolon ${version} está disponível.`,
+      install: "Instalar e reiniciar",
+      later: "Mais tarde",
+      skip: "Ignorar esta versão",
+      restartNote: "O Tolon fecha por um momento para se atualizar. Os alarmes retomam assim que voltar a abrir.",
+      installing: "A instalar a atualização. O Tolon reinicia quando terminar.",
+      check: "Procurar atualizações",
+      upToDate: "Não há nenhuma versão nova para instalar.",
+      autoCheck: "Uma vez por dia, o Tolon pergunta ao GitHub se há uma versão nova. Nunca instala nenhuma sem lhe perguntar.",
+    },
   },
   interrupt: {
     region: "Alarme de reunião",
@@ -140,6 +153,7 @@ export const ptPT: Messages = {
     snoozeEnded: "Nessa altura a reunião já terá começado, por isso o Tolon não volta a avisar.",
     tooltip: (title, duration) => `${title} dentro de ${duration}`,
     tooltipNow: (title) => `Agora: ${title}`,
+    update: (version: string, settings: string, about: string) => `O Tolon ${version} está disponível. Instale-o em ${settings}, ${about}.`,
   },
   firstRun: {
     title: "Nunca mais perca uma reunião.",
@@ -212,6 +226,8 @@ export const ptPT: Messages = {
       db_error: "O Tolon não conseguiu guardar a alteração. Tente novamente.",
       internal: "Ocorreu um erro interno no Tolon. Tente novamente.",
       login_item: "O sistema não deixou o Tolon alterar isto. O início ao iniciar sessão só funciona com o Tolon instalado.",
+      update_check: "O Tolon não conseguiu contactar o GitHub para procurar atualizações. Tente novamente mais tarde.",
+      update_install: "A atualização não foi instalada. O Tolon continua nesta versão.",
     },
   },
 };

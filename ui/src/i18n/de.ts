@@ -16,7 +16,6 @@ export const de: Messages = {
     language: "Sprache",
     startup: "Systemstart",
     about: "Info",
-    comingSoon: "Kommt in einer späteren Version.",
   },
   calendars: {
     title: "Kalender",
@@ -99,6 +98,20 @@ export const de: Messages = {
       requiresApproval: "Erlaube Tolon in den Systemeinstellungen unter Anmeldeobjekte, damit es beim Anmelden startet.",
       unavailable: "Tolon konnte diese Einstellung nicht vom System lesen.",
     },
+    about: {
+      subtitle: "Die Version von Tolon auf diesem Computer und ihre Updates.",
+      version: (version: string) => `Version ${version}`,
+      updates: "Updates",
+      available: (version: string) => `Tolon ${version} ist verfügbar.`,
+      install: "Installieren und neu starten",
+      later: "Später",
+      skip: "Diese Version überspringen",
+      restartNote: "Tolon schließt sich kurz für das Update. Die Alarme laufen weiter, sobald es wieder da ist.",
+      installing: "Das Update wird installiert. Tolon startet neu, sobald es fertig ist.",
+      check: "Nach Updates suchen",
+      upToDate: "Es gibt keine neue Version zum Installieren.",
+      autoCheck: "Tolon fragt einmal am Tag bei GitHub nach einer neuen Version. Ohne dich zu fragen, installiert es nie etwas.",
+    },
   },
   interrupt: {
     region: "Meeting-Alarm",
@@ -140,6 +153,7 @@ export const de: Messages = {
     snoozeEnded: "Bis dahin hat der Termin schon begonnen, deshalb erinnert Tolon dich nicht noch einmal.",
     tooltip: (title, duration) => `${title} in ${duration}`,
     tooltipNow: (title) => `Jetzt: ${title}`,
+    update: (version: string, settings: string, about: string) => `Tolon ${version} ist verfügbar. Installiere es unter ${settings}, ${about}.`,
   },
   firstRun: {
     title: "Verpasse nie wieder einen Termin.",
@@ -212,6 +226,8 @@ export const de: Messages = {
       db_error: "Tolon konnte die Änderung nicht speichern. Versuch es noch einmal.",
       internal: "In Tolon ist etwas schiefgelaufen. Versuch es noch einmal.",
       login_item: "Das System hat Tolon diese Änderung nicht erlaubt. Der Start bei der Anmeldung funktioniert nur mit einer installierten Version von Tolon.",
+      update_check: "Tolon konnte GitHub nicht erreichen, um nach Updates zu suchen. Versuch es später noch einmal.",
+      update_install: "Das Update wurde nicht installiert. Tolon läuft mit dieser Version weiter.",
     },
   },
 };

@@ -16,7 +16,6 @@ export const enGB: Messages = {
     language: "Language",
     startup: "Startup",
     about: "About",
-    comingSoon: "Coming in a later version.",
   },
   calendars: {
     title: "Calendars",
@@ -99,6 +98,20 @@ export const enGB: Messages = {
       requiresApproval: "Allow Tolon in System Settings, Login Items, so it starts when you log in.",
       unavailable: "Tolon could not read this setting from the system.",
     },
+    about: {
+      subtitle: "The version of Tolon on this computer, and its updates.",
+      version: (version: string) => `Version ${version}`,
+      updates: "Updates",
+      available: (version: string) => `Tolon ${version} is available.`,
+      install: "Install and restart",
+      later: "Later",
+      skip: "Skip this version",
+      restartNote: "Tolon closes for a moment to update. Alarms resume when it is back.",
+      installing: "Installing the update. Tolon restarts when it is done.",
+      check: "Check for updates",
+      upToDate: "There is no new version to install.",
+      autoCheck: "Once a day Tolon asks GitHub for a new version. It never installs one without asking you.",
+    },
   },
   interrupt: {
     region: "Meeting alarm",
@@ -140,6 +153,7 @@ export const enGB: Messages = {
     snoozeEnded: "By then the meeting will have started, so Tolon will not remind you again.",
     tooltip: (title, duration) => `${title} in ${duration}`,
     tooltipNow: (title) => `Now: ${title}`,
+    update: (version: string, settings: string, about: string) => `Tolon ${version} is available. Install it from ${settings}, ${about}.`,
   },
   firstRun: {
     title: "Never miss a meeting again.",
@@ -212,6 +226,8 @@ export const enGB: Messages = {
       db_error: "Tolon could not save that change. Try again.",
       internal: "Something went wrong inside Tolon. Try again.",
       login_item: "The system did not let Tolon change this. Start at login works only for an installed copy of Tolon.",
+      update_check: "Tolon could not reach GitHub to check for updates. Try again later.",
+      update_install: "The update did not install. Tolon keeps running this version.",
     },
   },
 };

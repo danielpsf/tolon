@@ -13,6 +13,7 @@ import type {
   SettingsPatch,
   Sound,
   TrayPlace,
+  UpdateDto,
 } from "./api-types";
 
 export const api = {
@@ -52,6 +53,13 @@ export const api = {
   appTrayPlace: () => invoke<TrayPlace>("app_tray_place"),
   /** The fallback notification's wording in the active language (L-038). Settings window only. */
   notifyCopySet: (copy: NotifyCopyDto) => invoke<void>("notify_copy_set", { copy }),
+  // Updates (F11). The panel may only read the status; the rest is the settings window's.
+  updateStatus: () => invoke<UpdateDto>("update_status"),
+  updateCheckNow: () => invoke<UpdateDto>("update_check_now"),
+  /** Downloads, verifies and installs, then Tolon restarts; it answers only when that failed. */
+  updateInstall: () => invoke<void>("update_install"),
+  updateSkip: () => invoke<UpdateDto>("update_skip"),
+  updateLater: () => invoke<UpdateDto>("update_later"),
 };
 
 export const onSettingsChanged = (handler: () => void): Promise<UnlistenFn> => listen("settings:changed", handler);
@@ -75,6 +83,10 @@ export const onSettingsHidden = (handler: () => void): Promise<UnlistenFn> => li
 
 /** The tray icon is under the pointer: its tooltip is about to show (settings window only). */
 export const onTrayHover = (handler: () => void): Promise<UnlistenFn> => listen("tray:hover", handler);
+
+/** The update prompt changed: a check found a version, or it was installed, skipped or put off. */
+export const onUpdateChanged = (handler: (update: UpdateDto) => void): Promise<UnlistenFn> =>
+  listen<UpdateDto>("update:changed", (e) => handler(e.payload));
 
 /** A rejected command carries `{ code }`; anything else (no IPC, a bug) reads as `internal`. */
 export function asCommandError(e: unknown): CommandError {

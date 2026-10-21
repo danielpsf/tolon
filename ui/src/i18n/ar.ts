@@ -27,7 +27,6 @@ export const ar: Messages = {
     language: "اللغة",
     startup: "بدء التشغيل",
     about: "حول",
-    comingSoon: "سيتوفر في إصدار لاحق.",
   },
   calendars: {
     title: "التقويمات",
@@ -118,6 +117,20 @@ export const ar: Messages = {
       requiresApproval: "اسمح لـ Tolon في إعدادات النظام، ضمن عناصر تسجيل الدخول، حتى يبدأ عند تسجيل الدخول.",
       unavailable: "تعذّر على Tolon قراءة هذا الإعداد من النظام.",
     },
+    about: {
+      subtitle: "إصدار Tolon على هذا الكمبيوتر وتحديثاته.",
+      version: (version: string) => `الإصدار ${version}`,
+      updates: "التحديثات",
+      available: (version: string) => `يتوفر الإصدار ${version} من Tolon.`,
+      install: "التثبيت وإعادة التشغيل",
+      later: "لاحقًا",
+      skip: "تخطي هذا الإصدار",
+      restartNote: "يُغلق Tolon لحظةً لإتمام التحديث، وتعود التنبيهات فور عودته.",
+      installing: "جارٍ تثبيت التحديث. سيُعاد تشغيل Tolon عند الانتهاء.",
+      check: "البحث عن تحديثات",
+      upToDate: "لا يوجد إصدار جديد لتثبيته.",
+      autoCheck: "يتحقق Tolon من GitHub مرة يوميًا بحثًا عن إصدار جديد، ولا يثبّت أي شيء دون أن يسألك.",
+    },
   },
   interrupt: {
     region: "تنبيه الاجتماع",
@@ -183,6 +196,7 @@ export const ar: Messages = {
     snoozeEnded: "سيكون الاجتماع قد بدأ بحلول ذلك الوقت، لذلك لن يذكّرك Tolon مرة أخرى.",
     tooltip: (title, duration) => `${title} بعد ${duration}`,
     tooltipNow: (title) => `الآن: ${title}`,
+    update: (version: string, settings: string, about: string) => `يتوفر الإصدار ${version} من Tolon. ثبّته من ${settings}، ${about}.`,
   },
   firstRun: {
     title: "لن يفوتك أي اجتماع بعد اليوم.",
@@ -269,6 +283,8 @@ export const ar: Messages = {
       db_error: "تعذّر على Tolon حفظ هذا التغيير. حاول مرة أخرى.",
       internal: "حدث خطأ ما داخل Tolon. حاول مرة أخرى.",
       login_item: "لم يسمح النظام لـ Tolon بتغيير ذلك. لا يعمل التشغيل عند تسجيل الدخول إلا في نسخة مثبتة من Tolon.",
+      update_check: "تعذّر على Tolon الوصول إلى GitHub للبحث عن تحديثات. حاول مرة أخرى لاحقًا.",
+      update_install: "لم يُثبَّت التحديث. يواصل Tolon العمل بهذا الإصدار.",
     },
   },
 };

@@ -25,6 +25,8 @@ export const COMMAND_ERROR_CODES = [
   "db_error",
   "internal",
   "login_item",
+  "update_check",
+  "update_install",
 ] as const;
 
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
@@ -174,3 +176,12 @@ export interface PauseDto {
 
 /** `app_tray_place` (F10): where the tray icon lives, for first run's tray step. */
 export type TrayPlace = "menu_bar" | "tray";
+
+/**
+ * The update prompt (F11), `UpdateDto` in crates/tolon-app/src/updater.rs: the version on offer, null when
+ * there is none, it was skipped or put off; `installing` while it downloads and installs.
+ */
+export interface UpdateDto {
+  available: string | null;
+  installing: boolean;
+}

@@ -31,7 +31,6 @@ export const he: Messages = {
     language: "שפה",
     startup: "הפעלה",
     about: "אודות",
-    comingSoon: "יגיע בגרסה מאוחרת יותר.",
   },
   calendars: {
     title: "יומנים",
@@ -114,6 +113,20 @@ export const he: Messages = {
       requiresApproval: "אפשר לאשר את Tolon בהגדרות המערכת, תחת פריטי פתיחה, כדי שיופעל בעת ההתחברות.",
       unavailable: "Tolon לא הצליח לקרוא את ההגדרה הזו מהמערכת.",
     },
+    about: {
+      subtitle: "הגרסה של Tolon במחשב הזה והעדכונים שלו.",
+      version: (version: string) => `גרסה ${version}`,
+      updates: "עדכונים",
+      available: (version: string) => `גרסה ${version} של Tolon זמינה.`,
+      install: "התקנה והפעלה מחדש",
+      later: "אחר כך",
+      skip: "דילוג על הגרסה הזו",
+      restartNote: "Tolon ייסגר לרגע כדי להתעדכן. ההתראות יחזרו ברגע שייפתח שוב.",
+      installing: "העדכון מותקן. Tolon יופעל מחדש בסיום.",
+      check: "בדיקת עדכונים",
+      upToDate: "אין גרסה חדשה להתקנה.",
+      autoCheck: "פעם ביום Tolon בודק ב-GitHub אם יש גרסה חדשה. הוא אף פעם לא מתקין בלי לשאול אותך.",
+    },
   },
   interrupt: {
     region: "התראת פגישה",
@@ -170,6 +183,7 @@ export const he: Messages = {
     snoozeEnded: "עד אז הפגישה כבר תתחיל, ולכן Tolon לא יזכיר שוב.",
     tooltip: (title, duration) => `${title} בעוד ${duration}`,
     tooltipNow: (title) => `עכשיו: ${title}`,
+    update: (version: string, settings: string, about: string) => `גרסה ${version} של Tolon זמינה. אפשר להתקין אותה דרך ${settings}, ${about}.`,
   },
   firstRun: {
     title: "לא מפספסים יותר אף פגישה.",
@@ -250,6 +264,8 @@ export const he: Messages = {
       db_error: "Tolon לא הצליח לשמור את השינוי. אפשר לנסות שוב.",
       internal: "משהו השתבש בתוך Tolon. אפשר לנסות שוב.",
       login_item: "המערכת לא אפשרה ל-Tolon לשנות את זה. הפעלה בכניסה למערכת עובדת רק בעותק מותקן של Tolon.",
+      update_check: "Tolon לא הצליח להתחבר ל-GitHub כדי לבדוק עדכונים. אפשר לנסות שוב מאוחר יותר.",
+      update_install: "העדכון לא הותקן. Tolon ממשיך לעבוד בגרסה הזו.",
     },
   },
 };

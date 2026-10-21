@@ -16,7 +16,6 @@ export const hi: Messages = {
     language: "भाषा",
     startup: "स्टार्टअप",
     about: "के बारे में",
-    comingSoon: "यह बाद के किसी वर्शन में आएगा।",
   },
   calendars: {
     title: "कैलेंडर",
@@ -99,6 +98,20 @@ export const hi: Messages = {
       requiresApproval: "सिस्टम सेटिंग्स के लॉगिन आइटम में Tolon को अनुमति दें, ताकि आपके लॉग इन करने पर यह शुरू हो सके।",
       unavailable: "Tolon सिस्टम से यह सेटिंग नहीं पढ़ सका।",
     },
+    about: {
+      subtitle: "इस कंप्यूटर पर Tolon का वर्शन और उसके अपडेट।",
+      version: (version: string) => `वर्शन ${version}`,
+      updates: "अपडेट",
+      available: (version: string) => `Tolon ${version} उपलब्ध है।`,
+      install: "इंस्टॉल करें और रीस्टार्ट करें",
+      later: "बाद में",
+      skip: "यह वर्शन छोड़ें",
+      restartNote: "अपडेट के लिए Tolon कुछ पल के लिए बंद होगा। वापस खुलते ही अलार्म फिर से चालू हो जाएंगे।",
+      installing: "अपडेट इंस्टॉल हो रहा है। पूरा होने पर Tolon रीस्टार्ट होगा।",
+      check: "अपडेट देखें",
+      upToDate: "इंस्टॉल करने के लिए कोई नया वर्शन नहीं है।",
+      autoCheck: "Tolon दिन में एक बार GitHub पर नया वर्शन देखता है। आपसे पूछे बिना वह कभी कुछ इंस्टॉल नहीं करता।",
+    },
   },
   interrupt: {
     region: "मीटिंग अलार्म",
@@ -140,6 +153,7 @@ export const hi: Messages = {
     snoozeEnded: "तब तक मीटिंग शुरू हो चुकी होगी, इसलिए Tolon आपको दोबारा याद नहीं दिलाएगा।",
     tooltip: (title, duration) => `${title}, ${duration} में`,
     tooltipNow: (title) => `अभी: ${title}`,
+    update: (version: string, settings: string, about: string) => `Tolon ${version} उपलब्ध है। इसे ${settings}, ${about} से इंस्टॉल करें।`,
   },
   firstRun: {
     title: "अब कोई मीटिंग न छूटे।",
@@ -211,6 +225,8 @@ export const hi: Messages = {
       db_error: "Tolon यह बदलाव सेव नहीं कर सका। फिर कोशिश करें।",
       internal: "Tolon में कुछ गड़बड़ हो गई। फिर कोशिश करें।",
       login_item: "सिस्टम ने Tolon को इसे बदलने नहीं दिया। लॉग इन करते ही शुरू होना सिर्फ़ इंस्टॉल किए गए Tolon में काम करता है।",
+      update_check: "अपडेट देखने के लिए Tolon, GitHub तक नहीं पहुंच सका। बाद में फिर से कोशिश करें।",
+      update_install: "अपडेट इंस्टॉल नहीं हुआ। Tolon इसी वर्शन पर चलता रहेगा।",
     },
   },
 };

@@ -15,7 +15,6 @@ export const ja: Messages = {
     language: "言語",
     startup: "起動",
     about: "バージョン情報",
-    comingSoon: "今後のバージョンで対応予定です。",
   },
   calendars: {
     title: "カレンダー",
@@ -98,6 +97,20 @@ export const ja: Messages = {
       requiresApproval: "ログイン時に起動できるよう、「システム設定」の「ログイン項目」で Tolon を許可してください。",
       unavailable: "Tolon はこの設定をシステムから読み取れませんでした。",
     },
+    about: {
+      subtitle: "このコンピュータの Tolon のバージョンとアップデート。",
+      version: (version: string) => `バージョン ${version}`,
+      updates: "アップデート",
+      available: (version: string) => `Tolon ${version} を利用できます。`,
+      install: "インストールして再起動",
+      later: "後で",
+      skip: "このバージョンをスキップ",
+      restartNote: "アップデートのため Tolon は少しの間終了します。再び起動するとアラームも再開します。",
+      installing: "アップデートをインストールしています。完了すると Tolon が再起動します。",
+      check: "アップデートを確認",
+      upToDate: "インストールできる新しいバージョンはありません。",
+      autoCheck: "Tolon は 1 日に 1 回 GitHub で新しいバージョンを確認します。確認なしにインストールすることはありません。",
+    },
   },
   interrupt: {
     region: "会議アラーム",
@@ -137,6 +150,7 @@ export const ja: Messages = {
     snoozeEnded: "その頃には会議が始まっているため、Tolon は再度リマインドしません。",
     tooltip: (title, duration) => `${title}、${duration}後`,
     tooltipNow: (title) => `開催中：${title}`,
+    update: (version: string, settings: string, about: string) => `Tolon ${version} を利用できます。「${settings}」の「${about}」からインストールしてください。`,
   },
   firstRun: {
     title: "もう会議を逃しません。",
@@ -208,6 +222,8 @@ export const ja: Messages = {
       db_error: "Tolon は変更を保存できませんでした。もう一度お試しください。",
       internal: "Tolon の内部でエラーが発生しました。もう一度お試しください。",
       login_item: "システムが Tolon によるこの変更を許可しませんでした。ログイン時の起動は、インストールした Tolon でのみ使えます。",
+      update_check: "Tolon は GitHub に接続できず、アップデートを確認できませんでした。しばらくしてからもう一度お試しください。",
+      update_install: "アップデートをインストールできませんでした。Tolon は現在のバージョンのまま動作します。",
     },
   },
 };

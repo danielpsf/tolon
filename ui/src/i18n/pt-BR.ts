@@ -16,7 +16,6 @@ export const ptBR: Messages = {
     language: "Idioma",
     startup: "Inicialização",
     about: "Sobre",
-    comingSoon: "Disponível em uma versão futura.",
   },
   calendars: {
     title: "Calendários",
@@ -99,6 +98,20 @@ export const ptBR: Messages = {
       requiresApproval: "Permita o Tolon em Ajustes do Sistema, em Itens de Início, para ele abrir ao fazer login.",
       unavailable: "O Tolon não conseguiu ler essa opção do sistema.",
     },
+    about: {
+      subtitle: "A versão do Tolon neste computador e suas atualizações.",
+      version: (version: string) => `Versão ${version}`,
+      updates: "Atualizações",
+      available: (version: string) => `O Tolon ${version} está disponível.`,
+      install: "Instalar e reiniciar",
+      later: "Mais tarde",
+      skip: "Pular esta versão",
+      restartNote: "O Tolon fecha por um momento para atualizar. Os alarmes voltam assim que ele reabrir.",
+      installing: "Instalando a atualização. O Tolon reinicia quando terminar.",
+      check: "Procurar atualizações",
+      upToDate: "Não há nenhuma versão nova para instalar.",
+      autoCheck: "Uma vez por dia, o Tolon consulta o GitHub em busca de uma versão nova. Ele nunca instala nada sem perguntar a você.",
+    },
   },
   interrupt: {
     region: "Alarme de reunião",
@@ -140,6 +153,7 @@ export const ptBR: Messages = {
     snoozeEnded: "Até lá a reunião já terá começado, então o Tolon não vai lembrar você de novo.",
     tooltip: (title, duration) => `${title} em ${duration}`,
     tooltipNow: (title) => `Agora: ${title}`,
+    update: (version: string, settings: string, about: string) => `O Tolon ${version} está disponível. Instale em ${settings}, ${about}.`,
   },
   firstRun: {
     title: "Nunca mais perca uma reunião.",
@@ -212,6 +226,8 @@ export const ptBR: Messages = {
       db_error: "O Tolon não conseguiu salvar a alteração. Tente de novo.",
       internal: "Algo deu errado dentro do Tolon. Tente de novo.",
       login_item: "O sistema não deixou o Tolon mudar isso. Abrir ao fazer login só funciona com o Tolon instalado.",
+      update_check: "O Tolon não conseguiu acessar o GitHub para procurar atualizações. Tente de novo mais tarde.",
+      update_install: "A atualização não foi instalada. O Tolon continua nesta versão.",
     },
   },
 };
