@@ -186,10 +186,11 @@ describe("details line", () => {
     expect(text).toMatch(/^\d{2}:\d{2} to \d{2}:\d{2} on Google Meet with 8 people\.$/);
   });
 
-  it("leaves the unrecognised host to the button and drops 'with 0 people'", () => {
-    const text = detailsText(createCopy("en-GB"), meeting(link("example.com", false), { people: 0 }));
-    expect(text).toMatch(/^\d{2}:\d{2} to \d{2}:\d{2}\.$/);
-    expect(text).not.toContain("example.com");
+  it("names an unrecognised host in full, as the button may cut it, and drops 'with 0 people'", () => {
+    const host = "video.conferencing.example.com";
+    const text = detailsText(createCopy("en-GB"), meeting(link(host, false), { people: 0 }));
+    expect(text).toMatch(/^\d{2}:\d{2} to \d{2}:\d{2} on video\.conferencing\.example\.com\.$/);
+    for (const locale of LOCALES) expect(detailsText(createCopy(locale), meeting(link(host, false))), locale).toContain(host);
   });
 
   it("uses the singular for one person", () => {
