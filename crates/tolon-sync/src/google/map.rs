@@ -10,7 +10,7 @@ use tolon_core::{
     parse_recurrence, CalendarId, Event, EventId, EventStatus, EventTime, Override, Response,
 };
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub(crate) struct Item {
     pub id: String,
@@ -28,6 +28,16 @@ pub(crate) struct Item {
     pub attendees: Vec<Attendee>,
     pub conference_data: Option<Conference>,
     pub updated: Option<String>,
+}
+
+/// Id, title, description, location and links are not printed.
+impl std::fmt::Debug for Item {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Item")
+            .field("status", &self.status)
+            .field("attendees", &self.attendees.len())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]

@@ -12,9 +12,10 @@ mod tests;
 use std::collections::HashMap;
 use std::fmt;
 use std::net::Ipv4Addr;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use chrono::Utc;
 use oauth2::basic::{BasicClient, BasicErrorResponse, BasicErrorResponseType};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
@@ -25,6 +26,7 @@ use reqwest::{redirect, StatusCode, Url};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Semaphore;
 use tolon_core::{CalendarId, Event};
 
 /// The only scope Tolon asks for (AC13.2, AGENTS.md rule 7).
@@ -40,6 +42,13 @@ const SIGN_IN_WAIT: Duration = Duration::from_secs(5 * 60);
 /// A connection to the loopback listener that sends nothing is dropped after this.
 const READ_WAIT: Duration = Duration::from_secs(10);
 const MAX_HEAD: usize = 16 * 1024;
+/// Connections read at once on the loopback port; any further one is dropped on arrival, so a local
+/// process cannot pin a socket and a task per connection for READ_WAIT each.
+const MAX_CONNECTIONS: usize = 16;
+/// The first full listing starts this far back. The scheduler plans from one day back
+/// (`LOOKBACK` in tolon-app's scheduler) and seven days ahead, so older events are never used. A
+/// series still running is listed whatever its start, so a big calendar's history is not fetched.
+const HISTORY: chrono::Duration = chrono::Duration::days(1);
 /// 250 events a page: about 25,000 events before a listing is cut off as broken.
 const MAX_PAGES: usize = 100;
 /// An access token is renewed this long before Google says it expires.
@@ -57,6 +66,8 @@ pub struct GoogleConfig {
     token_url: String,
     revoke_url: String,
     api_base: String,
+    /// How long `sign_in` waits for the browser; tests shorten it.
+    sign_in_wait: Duration,
 }
 
 impl GoogleConfig {
@@ -68,6 +79,7 @@ impl GoogleConfig {
             token_url: TOKEN_URL.into(),
             revoke_url: REVOKE_URL.into(),
             api_base: API_BASE.into(),
+            sign_in_wait: SIGN_IN_WAIT,
         }
     }
 }
@@ -96,12 +108,21 @@ pub enum GoogleError {
 }
 
 /// A calendar of the signed-in account that Tolon can read.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RemoteCalendar {
     /// Google's calendar id (the address for a primary calendar).
     pub id: String,
     pub name: String,
     pub primary: bool,
+}
+
+/// The id can be an address and the name a title: neither is printed.
+impl fmt::Debug for RemoteCalendar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RemoteCalendar")
+            .field("primary", &self.primary)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A finished sign-in. Keep `refresh_token` in the keychain only.
@@ -128,13 +149,22 @@ pub struct DonePage<'a> {
 }
 
 /// One calendar after a sync.
-#[derive(Debug)]
 pub struct Synced {
     pub events: Vec<Event>,
     /// Keep for the next sync (`calendars.etag`).
     pub sync_token: String,
     /// Items that could not be read (no start, invalid RRULE), as VEVENTs are skipped in a feed.
     pub skipped: usize,
+}
+
+/// Event titles and the sync token are not printed.
+impl fmt::Debug for Synced {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Synced")
+            .field("events", &self.events.len())
+            .field("skipped", &self.skipped)
+            .finish_non_exhaustive()
+    }
 }
 
 type OAuth = BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
@@ -217,10 +247,12 @@ impl GoogleClient {
         if !open(url.as_str()) {
             return Err(GoogleError::Browser);
         }
-        let code =
-            tokio::time::timeout(SIGN_IN_WAIT, wait_for_code(&listener, state.secret(), page))
-                .await
-                .map_err(|_| GoogleError::Timeout)??;
+        let code = tokio::time::timeout(
+            self.cfg.sign_in_wait,
+            wait_for_code(&listener, state.secret(), page),
+        )
+        .await
+        .map_err(|_| GoogleError::Timeout)??;
         let tokens = oauth
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(verifier)
@@ -392,6 +424,10 @@ impl GoogleClient {
         }
         let mut items = Vec::new();
         let mut page_token: Option<String> = None;
+        // Google refuses `timeMin` with `syncToken`: a delta keeps the first listing's bounds.
+        let time_min = sync_token
+            .is_none()
+            .then(|| (Utc::now() - HISTORY).to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
         for _ in 0..MAX_PAGES {
             let mut url = self.api(&["calendars", calendar_id, "events"])?;
             {
@@ -400,6 +436,9 @@ impl GoogleClient {
                     .append_pair("maxResults", "250");
                 if let Some(t) = sync_token {
                     q.append_pair("syncToken", t);
+                }
+                if let Some(t) = &time_min {
+                    q.append_pair("timeMin", t);
                 }
                 if let Some(t) = &page_token {
                     q.append_pair("pageToken", t);
@@ -480,12 +519,16 @@ async fn wait_for_code(
     page: &DonePage<'_>,
 ) -> Result<String, GoogleError> {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<(TcpStream, String)>(8);
+    let room = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     loop {
         tokio::select! {
             accepted = listener.accept() => {
                 let (mut sock, _) = accepted.map_err(|_| GoogleError::Connect)?;
+                // No room: the socket is dropped here, which closes it at once.
+                let Ok(permit) = Arc::clone(&room).try_acquire_owned() else { continue };
                 let tx = tx.clone();
                 tokio::spawn(async move {
+                    let _permit = permit;
                     if let Ok(Some(head)) = tokio::time::timeout(READ_WAIT, read_head(&mut sock)).await {
                         let _ = tx.send((sock, head)).await;
                     }
@@ -531,13 +574,23 @@ fn redirect_result(head: &str, state: &str) -> Option<Result<String, GoogleError
         return None;
     }
     let query: HashMap<_, _> = url.query_pairs().collect();
-    if query.get("state").map(|s| s.as_ref()) != Some(state) {
+    if !query
+        .get("state")
+        .is_some_and(|s| same(s.as_bytes(), state.as_bytes()))
+    {
         return None;
     }
     Some(match query.get("code") {
         Some(code) if !code.is_empty() => Ok(code.to_string()),
         _ => Err(GoogleError::Denied),
     })
+}
+
+/// Equal bytes, compared without stopping at the first difference. The length is not secret: the
+/// CSRF token has a fixed size.
+fn same(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len()
+        && std::hint::black_box(a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y))) == 0
 }
 
 async fn respond(sock: &mut TcpStream, status: &str, body: &str) {
