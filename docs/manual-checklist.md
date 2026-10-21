@@ -7,6 +7,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.1 Interrupt shows over a native full-screen app on each display (two displays, one app full screen on each in turn), and no Space switch happens with Settings open on another Space.
 - [ ] In the settings window, Cmd+V pastes into the iCal link field and Cmd+C copies (Tolon has no menu bar, so the Edit shortcuts must still work).
 - [ ] S4.2 Two monitors: both show the interrupt; Esc on either hides both.
+- [ ] L-048 Interrupt windows are reused, not leaked: fire 50 test alarms in a row (Settings, "Try a test alarm", Esc each time) and count layer-1001 windows after 0, 10, 20, 30, 40 and 50 (`CGWindowList` or the L-047 script, or `heap Tolon | grep -c TaoWindow`); the count stays at one per screen (two displays: two), none of them on screen between alarms, and the footprint does not climb with each alarm. Also: right after Esc, typing goes to the app that was in front before (not to Tolon, no error beep); a second alarm shows its own title with focus on the primary button; unplug a display, fire an alarm and the window count drops to the screens still connected.
 - [ ] S4.3 Interrupt has focus on open; Enter joins; D dismisses; Space marks already there.
 - [ ] AC9.4 Start at login switch reflects System Settings, Login Items. Turning it off in System Settings and reopening the page shows the switch off with the hint to allow Tolon in Login Items; switching off twice shows no error.
 - [ ] AC9.4 A development build (`cargo run`) shows the switch off, and turning it on shows an error without a crash.
@@ -36,6 +37,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.4 An old fallback notification's Join or Snooze does nothing once a later meeting is open.
 - [ ] AC4.5 L-038 With the language set to German, then Arabic, then Hebrew (Settings, Language), a fallback notification shows the title in that language (the meeting title isolated in ar and he), the start time in that locale's clock, and Snooze and Join in that language; after a quit and restart it still does before the settings window is opened.
 - [ ] AC4.4 With an Arabic or Hebrew keyboard layout active, D dismisses the interrupt.
+- [ ] L-048 After Esc or D the interrupt is gone from the screen and from the window switcher, a click where it was reaches the app behind it, and the next alarm shows it again in front with focus (Windows: Alt+Tab; Linux: the window list).
 - [ ] L-039 With the system language set to Arabic or Hebrew, the interrupt and Settings mirror right to left; Hindi, Chinese and Japanese text renders in a system font, not boxes.
 - [ ] AC7.1 The tray icon reads in a light and a dark menu bar or taskbar; its tooltip shows the next meeting and the minutes until it.
 - [ ] AC7.2 Clicking the tray icon opens the panel under or above it on each display; a second click or clicking away hides it; Esc hides it and focus starts on the first action.
