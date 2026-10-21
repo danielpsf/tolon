@@ -106,8 +106,13 @@ describe("Appearance page (L-043)", () => {
     expect(radios(html).filter((m) => m[2]).map((m) => m[1])).toEqual(["info"]);
     // Each radio is named by its label's text; the sample chip is hidden from screen readers.
     const t = createCopy("en-US").t.settings.appearance.colors;
+    // Default is drawn in both appearances' moss (L-046); every other chip is one pinned colour.
+    const chip = (color: string) =>
+      color === "theme"
+        ? '<span class="tl-split"><span data-color="theme" data-tokens="light">Aa</span><span data-color="theme" data-tokens="dark">Aa</span></span>'
+        : `<span data-color="${color}" data-tokens="light">Aa</span>`;
     for (const color of INTERRUPT_COLORS) {
-      expect(html).toMatch(new RegExp(`<label class="sm-swatch tl-swatch"><input [^>]*value="${color}"[^>]*/><i aria-hidden="true"><span data-color="${color}" data-tokens="light">Aa</span></i><span>${t[color]}</span></label>`));
+      expect(html).toContain(`<i aria-hidden="true">${chip(color)}</i><span>${t[color]}</span></label>`);
     }
   });
 
@@ -116,7 +121,8 @@ describe("Appearance page (L-043)", () => {
     shown({ interrupt_color: "ink", appearance: "dark" });
     vi.stubGlobal("document", { documentElement: { dataset: { theme: "dark" } } });
     const html = render(AppearancePage);
-    expect(html).toContain('<span data-color="theme" data-tokens="dark">Aa</span>');
+    // The Default chip is half light, half dark whatever the window is.
+    expect(html).toContain('<span class="tl-split"><span data-color="theme" data-tokens="light">Aa</span><span data-color="theme" data-tokens="dark">Aa</span></span>');
     for (const color of INTERRUPT_COLORS.filter((c) => c !== "theme")) {
       expect(html).toContain(`<span data-color="${color}" data-tokens="light">Aa</span>`);
     }

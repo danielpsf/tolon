@@ -198,6 +198,53 @@ describe("interrupt contrast for every reminder colour (AC4.3, L-043)", () => {
   });
 });
 
+// L-046, WCAG 1.4.11: the preview card and every swatch chip carry a 1px border that reaches 3:1 against the
+// PAGE (--sm-paper of the window's appearance), not against the pinned block they draw in.
+describe("preview and swatch borders against the page (L-046)", () => {
+  /** The `--sm-*` token behind a border: through `--tl-edge` (declared on the unpinned figure) or directly. */
+  const edge = (selector: string) => {
+    const border = declaration(selector, "border");
+    expect(border, selector).toMatch(/^1px solid var\(--(?:tl-edge|sm-control-line)\)$/);
+    const name = /var\((--[\w-]+)\)/.exec(border)?.[1] ?? "";
+    return name === "--tl-edge" ? (/var\((--sm-[\w-]+)\)/.exec(declaration(".tl-first-preview", "--tl-edge"))?.[1] ?? "") : name;
+  };
+  const measured = (selector: string, appearance: Theme) => contrast(hexOf(appearance, edge(selector)), hexOf(appearance, "--sm-paper"));
+
+  it.each(APPEARANCES)("the preview card border reaches 3:1 against the page in %s", (appearance) => {
+    expect(measured(".tl-preview", appearance)).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(APPEARANCES)("the swatch chip border reaches 3:1 against the page in %s", (appearance) => {
+    expect(measured(".tl-swatch i", appearance)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("resolves the card's edge where the window's tokens apply, never inside a data-tokens block", () => {
+    // `.tl-preview` carries data-tokens, so a Swiss Moss token written on it would be the pinned one.
+    expect(declaration(".tl-preview", "border")).toBe("1px solid var(--tl-edge)");
+    expect(rule(".tl-first-preview")).toMatch(/--tl-edge:\s*var\(--sm-control-line\)/);
+    // The chip is the unpinned parent of the pinned sample span.
+    expect(declaration(".tl-swatch i", "border")).toBe("1px solid var(--sm-control-line)");
+  });
+
+  it("the numbers: light and dark", () => {
+    expect(APPEARANCES.map((a) => `${a}: card ${measured(".tl-preview", a).toFixed(2)}, chip ${measured(".tl-swatch i", a).toFixed(2)}`)).toEqual([
+      "light: card 3.33, chip 3.33",
+      "dark: card 3.46, chip 3.46",
+    ]);
+  });
+});
+
+describe("the Default swatch (L-046)", () => {
+  it("is half light-appearance moss and half dark-appearance moss, so it differs from Moss", () => {
+    const light = hexOf("light", REMINDER_PAIRS.theme.bg);
+    const dark = hexOf("dark", REMINDER_PAIRS.theme.bg);
+    expect(light).toBe(hexOf("light", REMINDER_PAIRS.moss.bg));
+    expect(dark).not.toBe(light);
+    // The two halves differ by more than hue.
+    expect(contrast(light, dark)).toBeGreaterThan(1.5);
+  });
+});
+
 describe("preview tokens (AC4.3, L-043)", () => {
   it("pins every choice but Default to the light block, so a dark window draws them with the light values", () => {
     for (const color of INTERRUPT_COLORS) {
