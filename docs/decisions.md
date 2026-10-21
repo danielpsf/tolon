@@ -256,3 +256,9 @@ The QA judge found that a Paper preview on the light page and an Ink preview on 
 - (overnight) The Default swatch is drawn half light-appearance moss and half dark-appearance moss, so it no longer looks identical to Moss in light and shows that it follows the appearance.
 - (overnight) The Appearance subtitle no longer says the alarm screen always follows the theme; it says so only for the Default colour.
 - (overnight) Calendars says "iCal link" everywhere, as first run does, not "iCal URL".
+
+## 2026-10-22 Interrupt windows are reused, not destroyed (L-047 measurement)
+On macOS, 50 test alarms closed with D left 50 off-screen interrupt windows alive (51 `TaoWindow`, `TaoView`, `WryWebViewParent` and delegate objects in `heap`; main footprint +12 MB). `destroy()` drops Tauri's handle, but the NSWindow is never closed or released. The cause below Tolon is not pinned down.
+- (overnight) Tolon keeps at most one interrupt window per screen for its whole run. Closing an interrupt hides it; the next alarm shows the same window again with the new alarm data, raised above everything as today. A window whose screen is gone is destroyed, and the screen count bounds the rest.
+- (overnight) A hidden interrupt window must not take keys, clicks or focus, and the scheduler's "is an interrupt open" state follows visibility, not window existence.
+- (overnight) Agents never fire test alarms on the owner's real screen while he is at the keyboard; on-screen checks run only when he says so.
