@@ -581,44 +581,76 @@ test("window rights: the settings window reads the pause and the current alarm, 
 
 // ---- First run (L-018) --------------------------------------------------------------------------
 // Every test above removes what it adds, so Tolon has no calendar again, as on a first launch. A launch on
-// no page opens the settings window on first run (AC10.1); the first calendar hides it, and the next launch
-// opens no window (AC10.2). The page's `document.visibilityState` is how WebDriver sees a hidden window,
-// and a hidden window is driven by script only. Runs last: the window stays hidden afterwards.
+// no page opens the settings window on first run (AC10.1); a first calendar that syncs hides it, and the
+// next launch opens no window (AC10.2). The page's `document.visibilityState` is how WebDriver sees a
+// hidden window, and a hidden window is driven by script only. Runs last: the window ends up hidden.
 
 const visibility = () => driver.executeScript(() => document.visibilityState);
 
-test("ac10_1 with no calendar Tolon opens on first run and its test alarm fires, and ac10_2 the first calendar closes it for good", async () => {
+/** Quits and starts Tolon on no page, as it starts itself; with no calendar that is first run. */
+async function launchOnFirstRun() {
+  await driver.quit();
+  await startApp("");
+  assert.equal(await (await find("#first-run-title")).getText(), "Never miss a meeting again.");
+  assert.equal(await visibility(), "visible");
+}
+
+test("ac10_1 with no calendar Tolon opens on first run and its test alarm fires; only the settings window may hide itself or ask where the tray is", async () => {
+  await launchOnFirstRun();
+  assert.equal((await driver.findElements(By.css('.tl-first .sm-steps[role="list"] > li'))).length, 3);
+  // No template tray icon on Linux or Windows, so the tray step says system tray.
+  await waitFor(
+    "the tray step",
+    async () => (await driver.findElement(By.css(".tl-first .sm-steps > li:last-child h2")).getText()) === "Tolon is in the system tray",
+  );
+  assert.deepEqual(await invoke("app_tray_place"), { answer: "tray" });
+  // "Paste an iCal link" has focus.
+  assert.equal(await driver.executeScript(() => document.activeElement?.textContent), "Paste an iCal link");
+
+  // "Try a test alarm" opens a real interrupt from this window; Esc closes it.
+  const main = await driver.getWindowHandle();
+  await (await find('button[data-action="test-alarm"]')).click();
+  const handles = await waitFor("the test interrupt", async () => {
+    const found = await interruptHandles(main);
+    return found.length > 0 && found;
+  });
+  await driver.switchTo().window(handles[0]);
+  // The first-run commands answer the settings window only, like notify_copy_set.
+  assert.deepEqual(await invoke("app_hide_settings"), { code: "not_found" });
+  assert.deepEqual(await invoke("app_tray_place"), { code: "not_found" });
+  await pressAndWaitForClose(main, Key.ESCAPE);
+  assert.equal(await visibility(), "visible");
+});
+
+test("ac10_2 a first link that fails to sync keeps the window and shows its error on the Calendars page", async () => {
+  const port = await closedPort();
+  const input = await openAddForm();
+  await input.sendKeys(`https://127.0.0.1:${port}/calendar/first-run/basic.ics`);
+  await (await find('#add-calendar button[type="submit"]')).click();
+  const row = await waitForRow();
+  assert.equal(await row.findElement(By.css(".tl-status.failed")).getText(), `Sync failed: ${english}`);
+  assert.equal((await driver.findElements(By.css("#first-run-title"))).length, 0);
+  assert.equal(await visibility(), "visible");
+  await removeCalendar("127.0.0.1");
+});
+
+test("skip: Skip for now hides first run, and the next launch without a calendar shows it again", async () => {
+  await launchOnFirstRun();
+  await (await find('button[data-action="skip"]')).click();
+  await waitFor("the window to hide", async () => (await visibility()) === "hidden");
+  await waitFor("first run to end", async () => (await driver.findElements(By.css("#first-run-title"))).length === 0);
+  await launchOnFirstRun();
+});
+
+test("ac10_2 the first calendar that syncs closes first run for good: the next launch opens no window", async () => {
   const { server, port } = await fixtureServer();
   try {
-    await driver.quit();
-    await startApp("");
-    assert.equal(await (await find("#first-run-title")).getText(), "Never miss a meeting again.");
-    assert.equal((await driver.findElements(By.css(".tl-first .sm-steps > li"))).length, 3);
-    // No template tray icon on Linux or Windows, so the tray step says system tray.
-    await waitFor(
-      "the tray step",
-      async () => (await driver.findElement(By.css(".tl-first .sm-steps > li:last-child h2")).getText()) === "Tolon is in the system tray",
-    );
-    assert.equal(await visibility(), "visible");
-
-    // "Try a test alarm" opens a real interrupt from this window; Esc closes it.
-    const main = await driver.getWindowHandle();
-    await (await find('button[data-action="test-alarm"]')).click();
-    const handles = await waitFor("the test interrupt", async () => {
-      const found = await interruptHandles(main);
-      return found.length > 0 && found;
-    });
-    await driver.switchTo().window(handles[0]);
-    await pressAndWaitForClose(main, Key.ESCAPE);
-
-    // The first calendar, through the form the Calendars page uses, hides the window.
     const input = await openAddForm();
     await input.sendKeys(`http://127.0.0.1:${port}/calendar/first-run/basic.ics`);
     await (await find('#add-calendar button[type="submit"]')).click();
     await waitFor("the window to hide", async () => (await visibility()) === "hidden");
     await waitFor("first run to end", async () => (await driver.findElements(By.css("#first-run-title"))).length === 0);
 
-    // The next launch, with a calendar, opens no window: the tray is the only trace.
     await driver.quit();
     await startApp("");
     await waitFor("the settings pages, loaded hidden", async () => (await driver.findElements(By.css(".tl-shell"))).length === 1);
