@@ -1,2 +1,3 @@
 # Fixture feeds and snapshots are compared byte for byte; never convert their line endings.
 fixtures/** -text
+*.plist text eol=lf
