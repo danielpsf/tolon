@@ -80,7 +80,7 @@ Tolon checks GitHub for a new version when it starts and then once a day. When i
 
 Nothing is installed until you click Install and restart. To check at once, click Check for updates in Settings, About.
 
-- Windows: the installer shows a small progress window, then Tolon starts again.
+- Windows: the installer shows a small progress window, then Tolon starts again. If you installed Tolon from the `.msi`, Windows asks for administrator approval first.
 - Linux: an update of the `.deb` asks for your password. The AppImage replaces itself.
 - macOS: if macOS warns again that it could not verify Tolon after an update, approve it once more with steps 2 to 4 above.
 
