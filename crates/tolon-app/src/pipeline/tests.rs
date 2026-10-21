@@ -535,7 +535,7 @@ fn local_zone_always_yields_a_zone() {
 
 /// Collects tracing output so a test can look at it.
 #[derive(Clone, Default)]
-struct Sink(Arc<Mutex<Vec<u8>>>);
+pub(crate) struct Sink(Arc<Mutex<Vec<u8>>>);
 
 impl Write for Sink {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -550,14 +550,14 @@ impl Write for Sink {
 }
 
 impl Sink {
-    fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         self.0
             .lock()
             .map(|v| String::from_utf8_lossy(&v).into_owned())
             .unwrap_or_default()
     }
 
-    fn capture(&self) -> tracing::subscriber::DefaultGuard {
+    pub(crate) fn capture(&self) -> tracing::subscriber::DefaultGuard {
         let sink = self.clone();
         tracing::subscriber::set_default(
             tracing_subscriber::fmt()

@@ -7,10 +7,13 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tolon_platform::secrets::Secrets;
 use tolon_platform::PlatformError;
+use tolon_sync::google::{DonePage, GoogleClient, GoogleError};
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
+use crate::google::{self, AccountDto, Pending};
 use crate::interrupt::{AlarmShow, InterruptState, LABEL_PREFIX};
 use crate::notify_copy::{self, NotifyCopy, NotifyCopyState};
 use crate::pipeline::{self, CalendarDto, Db, ListedDto};
@@ -101,6 +104,25 @@ async fn login_state(app: &AppHandle) -> Result<tolon_platform::StartAtLogin, Pl
 pub struct AppState {
     pub db: Db,
     pub fetcher: IcsFetcher,
+    /// `None` when this build has no Google client ID (F13).
+    pub google: Option<GoogleClient>,
+    pub secrets: Box<dyn Secrets>,
+    /// A Google sign-in whose calendars are not picked yet. Memory only.
+    pub google_pending: std::sync::Mutex<Option<Pending>>,
+    /// Ends the Google sign-in that is waiting for the browser.
+    pub google_cancel: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+}
+
+fn take<T>(slot: &std::sync::Mutex<Option<T>>) -> Option<T> {
+    slot.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+}
+
+fn put<T>(slot: &std::sync::Mutex<Option<T>>, value: T) {
+    *slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(value);
 }
 
 /// The state, or `not_ready` when startup failed and it was never set up.
@@ -127,9 +149,20 @@ pub fn notify(app: &AppHandle) {
 pub async fn sync_and_notify(app: &AppHandle, id: Option<&str>) -> anyhow::Result<()> {
     let state = state(app)?;
     let now = Utc::now();
+    let (db, google, secrets) = (&state.db, state.google.as_ref(), &*state.secrets);
     let result = match id {
-        Some(id) => pipeline::sync_one(&state.db, &state.fetcher, id, now).await,
-        None => pipeline::sync_all(&state.db, &state.fetcher, now).await,
+        Some(id) => {
+            let kind = pipeline::lock(db).calendars().get(id)?.map(|c| c.kind);
+            match kind.as_deref() {
+                Some(google::KIND) => google::sync_one(db, google, secrets, id, now).await,
+                _ => pipeline::sync_one(db, &state.fetcher, id, now).await,
+            }
+        }
+        None => {
+            let feeds = pipeline::sync_all(db, &state.fetcher, now).await;
+            let googles = google::sync_all(db, google, secrets, now).await;
+            feeds.and(googles)
+        }
     };
     notify(app);
     result
@@ -169,11 +202,124 @@ pub async fn calendars_remove(
     id: String,
 ) -> Result<(), CommandError> {
     main_only(window.label())?;
-    state(&app)
-        .and_then(|s| pipeline::remove(&s.db, &id))
-        .map_err(|e| command_error(&e))?;
+    let removed = async {
+        let s = state(&app)?;
+        google::remove(&s.db, s.google.as_ref(), &*s.secrets, &id).await
+    }
+    .await;
+    removed.map_err(|e| command_error(&e))?;
     notify(&app);
     Ok(())
+}
+
+/// Whether this build can sign in with Google (a client ID is configured). The UI shows
+/// "Sign in with Google" only then.
+#[tauri::command]
+pub async fn calendars_google_available(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<bool, CommandError> {
+    main_only(window.label())?;
+    let available = state(&app).map(|s| s.google.is_some());
+    available.map_err(|e| command_error(&e))
+}
+
+/// AC13.1: Google's consent page in the system browser, then the account's calendars to pick
+/// from. `title` and `body` are the page the browser shows afterwards, in the person's language.
+/// Calendars of this account already in Tolon get the new sign-in and sync at once.
+#[tauri::command]
+pub async fn calendars_google_sign_in(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    title: String,
+    body: String,
+) -> Result<AccountDto, CommandError> {
+    main_only(window.label())?;
+    let signed = async {
+        let s = state(&app)?;
+        let client = s.google.as_ref().ok_or(AppError::GOOGLE_UNAVAILABLE)?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        // A sign-in already waiting is replaced: its receiver sees the sender go and it ends.
+        put(&s.google_cancel, tx);
+        let open = |url: &str| tauri_plugin_opener::open_url(url, None::<&str>).is_ok();
+        let page = DonePage {
+            title: &title,
+            body: &body,
+        };
+        let result = tokio::select! {
+            r = client.sign_in(open, &page) => r.map_err(|e| match e {
+                GoogleError::Denied => AppError::GOOGLE_DENIED,
+                _ => AppError::GOOGLE_SIGN_IN,
+            }),
+            _ = rx => Err(AppError::GOOGLE_CANCELLED),
+        };
+        let signed = result?;
+        let (dto, pending, healed) = google::signed_in(&s.db, &*s.secrets, signed)?;
+        if let Some(old) = take(&s.google_pending) {
+            google::drop_pending(&s.db, s.google.as_ref(), old).await?;
+        }
+        put(&s.google_pending, pending);
+        anyhow::Ok((dto, healed))
+    }
+    .await;
+    let (dto, healed) = signed.map_err(|e| command_error(&e))?;
+    for id in healed {
+        if let Err(e) = sync_and_notify(&app, Some(&id)).await {
+            tracing::warn!(calendar = %id, error = %e, "sync after sign-in could not be saved");
+        }
+    }
+    Ok(dto)
+}
+
+/// Adds the picked calendars of the pending sign-in and syncs each once. Answers with the new rows.
+#[tauri::command]
+pub async fn calendars_add_google(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    ids: Vec<String>,
+) -> Result<Vec<CalendarDto>, CommandError> {
+    main_only(window.label())?;
+    let added = async {
+        let s = state(&app)?;
+        let pending = take(&s.google_pending).ok_or(AppError::NOT_FOUND)?;
+        let added = google::add(&s.db, &*s.secrets, &pending, &ids, Utc::now());
+        if added.is_err() {
+            put(&s.google_pending, pending);
+        }
+        added
+    }
+    .await;
+    let added = added.map_err(|e| command_error(&e))?;
+    for id in &added {
+        if let Err(e) = sync_and_notify(&app, Some(id)).await {
+            tracing::warn!(calendar = %id, error = %e, "first sync could not be saved");
+        }
+    }
+    let rows = state(&app).and_then(|s| pipeline::list(&s.db));
+    let rows = rows.map_err(|e| command_error(&e))?;
+    Ok(rows.into_iter().filter(|c| added.contains(&c.id)).collect())
+}
+
+/// Ends a sign-in waiting for the browser, or drops a finished one nobody picked calendars from
+/// (its grant is revoked unless calendars of that account are in Tolon).
+#[tauri::command]
+pub async fn calendars_google_cancel(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    let done = async {
+        let s = state(&app)?;
+        if let Some(cancel) = take(&s.google_cancel) {
+            let _ = cancel.send(());
+        }
+        match take(&s.google_pending) {
+            Some(pending) => google::drop_pending(&s.db, s.google.as_ref(), pending).await,
+            None => Ok(()),
+        }
+    }
+    .await;
+    done.map_err(|e| command_error(&e))
 }
 
 #[tauri::command]
@@ -780,6 +926,10 @@ mod tests {
         ("calendars_remove", "main_only"),
         ("calendars_set_enabled", "main_only"),
         ("calendars_sync_now", "main_only"),
+        ("calendars_google_available", "main_only"),
+        ("calendars_google_sign_in", "main_only"),
+        ("calendars_add_google", "main_only"),
+        ("calendars_google_cancel", "main_only"),
         ("occurrences_today", "main_or_panel"),
         ("occurrences_join", "main_or_panel"),
         ("occurrences_snooze", "panel_only"),

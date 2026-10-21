@@ -27,6 +27,16 @@ impl AppError {
     pub const UPDATE_CHECK: Self = Self("update_check");
     /// The update did not download, verify or install; Tolon keeps running the old version.
     pub const UPDATE_INSTALL: Self = Self("update_install");
+    /// This build has no Google client ID, so there is no Google sign-in.
+    pub const GOOGLE_UNAVAILABLE: Self = Self("google_unavailable");
+    /// The person refused access on Google's page.
+    pub const GOOGLE_DENIED: Self = Self("google_denied");
+    /// The sign-in was cancelled from Tolon, or another one replaced it.
+    pub const GOOGLE_CANCELLED: Self = Self("google_cancelled");
+    /// The sign-in did not finish: no browser, no answer in time, network or Google errors.
+    pub const GOOGLE_SIGN_IN: Self = Self("google_sign_in");
+    /// The system keychain could not store or read the sign-in.
+    pub const KEYCHAIN: Self = Self("keychain");
 }
 
 impl fmt::Display for AppError {

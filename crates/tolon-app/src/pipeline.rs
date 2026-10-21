@@ -16,6 +16,7 @@ use tolon_store::{Calendar, FeedEvent, Store};
 use tolon_sync::{normalize_url, redact_url, FetchError, FetchOutcome, IcsFetcher};
 
 use crate::errors::{fetch_code, AppError, SyncErrorDto};
+use crate::google;
 use crate::interrupt::JoinDto;
 use crate::settings;
 
@@ -39,18 +40,23 @@ pub struct CalendarDto {
     pub last_sync_at: Option<String>,
     /// `{ kind, status? }`, for example `{ "kind": "http", "status": 404 }`; the UI localises it.
     pub last_error: Option<SyncErrorDto>,
+    /// A Google calendar's account (its address); `None` for a feed.
+    pub account: Option<String>,
 }
 
 impl From<Calendar> for CalendarDto {
     fn from(c: Calendar) -> Self {
+        // A Google calendar's `url` is its Google calendar id, not a link: it is not shown.
+        let google = c.kind == google::KIND;
         Self {
             id: c.id,
             name: c.name,
-            kind: c.kind,
             enabled: c.enabled,
-            display_url: c.url.as_deref().map(redact_url),
+            display_url: c.url.as_deref().filter(|_| !google).map(redact_url),
             last_sync_at: c.last_sync_at,
             last_error: c.last_error.as_deref().map(SyncErrorDto::from_code),
+            account: c.account.filter(|_| google),
+            kind: c.kind,
         }
     }
 }
@@ -149,11 +155,14 @@ pub async fn sync_one(
     apply(db, id, result, now)
 }
 
-/// Every enabled calendar, one after the other. A failure on one never stops the rest; the first
-/// store error is returned at the end.
+/// Every enabled feed, one after the other (Google calendars: `google::sync_all`). A failure on
+/// one never stops the rest; the first store error is returned at the end.
 pub async fn sync_all(db: &Db, fetcher: &impl Fetch, now: DateTime<Utc>) -> anyhow::Result<()> {
     let mut first_err = None;
-    for cal in calendars(db)?.into_iter().filter(|c| c.enabled) {
+    for cal in calendars(db)?
+        .into_iter()
+        .filter(|c| c.enabled && c.kind != google::KIND)
+    {
         if let Err(e) = sync_one(db, fetcher, &cal.id, now).await {
             tracing::warn!(calendar = %cal.id, error = %e, "calendar sync could not be saved");
             first_err.get_or_insert(e);
@@ -360,4 +369,4 @@ pub fn today_judged(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
