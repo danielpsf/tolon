@@ -72,6 +72,11 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing, as for `remember_frontmost`.
+    fn forget_frontmost(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Tauri's inner size is already below the title bar here.
     fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
         Ok(0.0)
@@ -141,6 +146,7 @@ mod tests {
     fn l056_focus_calls_do_nothing() {
         assert_eq!(LinuxPlatform.remember_frontmost(), Ok(()));
         assert_eq!(LinuxPlatform.restore_previous(), Ok(()));
+        assert_eq!(LinuxPlatform.forget_frontmost(), Ok(()));
     }
 
     #[test]

@@ -42,8 +42,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 pub struct WindowsPlatform;
 
-/// The foreground window (`HWND` as an integer, so the static is `Sync`) when the interrupt opened.
-static PREVIOUS: Previous<isize> = Previous::new();
+/// The foreground window when the interrupt opened: the `HWND` as an integer (so the static is
+/// `Sync`) and the id of its process, which tells a reused handle from the window noted.
+static PREVIOUS: Previous<(isize, u32)> = Previous::new();
 
 fn os_error(call: &'static str, e: &windows::core::Error) -> PlatformError {
     // Reinterpret the HRESULT bits; `{:#010x}` in the message then reads like 0x80070005.
@@ -226,28 +227,45 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
-    /// `GetForegroundWindow`, unless it belongs to this process.
+    /// `GetForegroundWindow` and its process, unless the window is this process's: then what was
+    /// noted stays (a reminder that opens right after another).
     fn remember_frontmost(&self) -> Result<(), PlatformError> {
         // SAFETY: plain Win32 calls; a null result (no foreground window) is handled.
         let front = unsafe {
             let hwnd = GetForegroundWindow();
             let mut owner = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut owner));
-            (!hwnd.0.is_null() && owner != std::process::id()).then_some(hwnd.0 as isize)
+            (!hwnd.0.is_null() && owner != std::process::id()).then_some((hwnd.0 as isize, owner))
         };
-        PREVIOUS.remember(front);
+        if let Some(window) = front {
+            PREVIOUS.remember(window);
+        }
         Ok(())
     }
 
-    /// `SetForegroundWindow` on the noted window while it still exists. Windows may refuse; that
+    fn forget_frontmost(&self) -> Result<(), PlatformError> {
+        PREVIOUS.forget();
+        Ok(())
+    }
+
+    /// `SetForegroundWindow` on the noted window while it is still that window: `IsWindow`, and the
+    /// handle still belongs to the process noted (Windows reuses handles). Windows may refuse; that
     /// is ignored, the window then simply is not in front.
     fn restore_previous(&self) -> Result<(), PlatformError> {
-        let Some(raw) = PREVIOUS.take() else {
+        let Some((raw, owner)) = PREVIOUS.take() else {
             return Ok(());
         };
         let hwnd = HWND(raw as *mut c_void);
-        // SAFETY: IsWindow accepts any handle value and only reports whether it is a window.
-        if unsafe { IsWindow(Some(hwnd)) }.as_bool() && !take_foreground(hwnd) {
+        let mut now_owner = 0u32;
+        // SAFETY: IsWindow accepts any handle value and only reports whether it is a window; the
+        // process id goes to a live u32.
+        let same = unsafe {
+            IsWindow(Some(hwnd)).as_bool() && {
+                GetWindowThreadProcessId(hwnd, Some(&mut now_owner));
+                now_owner == owner
+            }
+        };
+        if same && !take_foreground(hwnd) {
             tracing::debug!("Windows refused to bring the previous window forward");
         }
         Ok(())
@@ -403,6 +421,7 @@ mod tests {
     #[test]
     fn l056_restoring_with_nothing_remembered_is_a_no_op() {
         assert_eq!(WindowsPlatform.restore_previous(), Ok(()));
+        assert_eq!(WindowsPlatform.forget_frontmost(), Ok(()));
     }
 
     #[test]

@@ -74,7 +74,8 @@ impl Platform for MacPlatform {
         Ok(())
     }
 
-    /// `NSWorkspace.frontmostApplication`, kept as a pid unless it is Tolon's own.
+    /// `NSWorkspace.frontmostApplication`, kept as a pid unless it is Tolon's own; then what was
+    /// noted stays (a reminder that opens right after another).
     fn remember_frontmost(&self) -> Result<(), PlatformError> {
         main_thread()?;
         let own = std::process::id();
@@ -82,7 +83,14 @@ impl Platform for MacPlatform {
             .frontmostApplication()
             .map(|app| app.processIdentifier())
             .filter(|pid| u32::try_from(*pid).ok() != Some(own));
-        PREVIOUS.remember(front);
+        if let Some(pid) = front {
+            PREVIOUS.remember(pid);
+        }
+        Ok(())
+    }
+
+    fn forget_frontmost(&self) -> Result<(), PlatformError> {
+        PREVIOUS.forget();
         Ok(())
     }
 
@@ -310,5 +318,7 @@ mod tests {
             MacPlatform.restore_previous(),
             Err(PlatformError::NotMainThread)
         );
+        // Dropping the noted pid touches no AppKit object, so it works anywhere.
+        assert_eq!(MacPlatform.forget_frontmost(), Ok(()));
     }
 }

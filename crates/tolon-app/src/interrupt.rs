@@ -337,8 +337,10 @@ pub trait Windows {
     fn destroy(&self, label: &str);
     /// Notes the app that is in front, before anything of Tolon's comes forward.
     fn remember_frontmost(&self);
-    /// Gives the front back to the app noted by `remember_frontmost`, after the windows are hidden.
+    /// Gives the front back to the app noted by `remember_frontmost`, once no window is left.
     fn restore_previous(&self);
+    /// Drops the app noted by `remember_frontmost` without bringing it forward.
+    fn forget_frontmost(&self);
 }
 
 struct TauriWindows<'a> {
@@ -461,11 +463,16 @@ impl Windows for TauriWindows<'_> {
     fn restore_previous(&self) {
         self.on_main_thread("restore the previous app", |p| p.restore_previous());
     }
+
+    fn forget_frontmost(&self) {
+        self.on_main_thread("forget the frontmost app", |p| p.forget_frontmost());
+    }
 }
 
 impl TauriWindows<'_> {
     /// Runs a platform call on the main thread. Calls queue in order, so a remember sent before the
-    /// windows are shown runs before they are raised, and a restore sent after the hides runs after them.
+    /// windows are shown runs before they are raised, and a restore sent after the hides and after
+    /// any hand-over to a waiting reminder runs last.
     fn on_main_thread(
         &self,
         what: &'static str,
@@ -491,7 +498,18 @@ fn is_visible(states: &[WindowState], label: &str) -> bool {
 /// raised, and a window that is already shown is raised again. A window whose screen is gone is
 /// destroyed; no other window ever is. If a window cannot be shown, the ones this call showed are
 /// hidden again and the error returned; windows that were already shown stay.
+///
+/// An open that fails with no window left on screen forgets the app noted for the front: nothing
+/// is up to give it back after, and a later notification action must not pull up a stale app.
 pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result<()> {
+    let opened = show_windows(windows, screens);
+    if opened.is_err() && !windows.states().iter().any(|s| s.visible) {
+        windows.forget_frontmost();
+    }
+    opened
+}
+
+fn show_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result<()> {
     anyhow::ensure!(!screens.is_empty(), "no screen to show the interrupt on");
     let specs = plan_windows(screens);
     let before = windows.states();
@@ -530,16 +548,6 @@ pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result
 pub fn hide_windows(windows: &dyn Windows) {
     for state in windows.states() {
         windows.hide(&state.label);
-    }
-}
-
-/// Closing: hides every window, then, when `restore_focus`, gives the front back to the app that
-/// was in front when the interrupt opened (decision 2026-10-22, "Closing a reminder gives focus
-/// back"). Hiding alone leaves Tolon the active app. Not after Join: the browser takes focus itself.
-pub fn close_windows(windows: &dyn Windows, restore_focus: bool) {
-    hide_windows(windows);
-    if restore_focus {
-        windows.restore_previous();
     }
 }
 
@@ -595,20 +603,33 @@ pub fn open_interrupts(
 }
 
 /// Hides every interrupt window and tells any listener (AC4.6: one action closes all screens).
-/// The windows stay for the next alarm. `restore_focus`: see [`close_windows`].
-pub fn close_all(app: &AppHandle, restore_focus: bool) {
+/// The windows stay for the next alarm. The front stays with Tolon: the scheduler settles it with
+/// [`settle_focus`] once it knows no waiting reminder takes the screen.
+pub fn close_all(app: &AppHandle) {
     if let Some(state) = app.try_state::<InterruptState>() {
         state.set(None);
     }
-    close_windows(
-        &TauriWindows {
-            app,
-            platform: native(),
-        },
-        restore_focus,
-    );
+    hide_windows(&TauriWindows {
+        app,
+        platform: native(),
+    });
     if let Err(e) = app.emit(HIDE_EVENT, ()) {
         tracing::warn!(event = HIDE_EVENT, error = %e, "could not emit event");
+    }
+}
+
+/// Ends a reminder's claim on the front (decision 2026-10-22, "Closing a reminder gives focus
+/// back"). `restore`: give the front back to the app that was in front when it opened. Otherwise
+/// (Join: the browser has focus) drop the note. Hiding alone leaves Tolon the active app.
+pub fn settle_focus(app: &AppHandle, restore: bool) {
+    let windows = TauriWindows {
+        app,
+        platform: native(),
+    };
+    if restore {
+        windows.restore_previous();
+    } else {
+        windows.forget_frontmost();
     }
 }
 
@@ -900,6 +921,9 @@ mod tests {
         fn restore_previous(&self) {
             self.calls.borrow_mut().push("restore".to_owned());
         }
+        fn forget_frontmost(&self) {
+            self.calls.borrow_mut().push("forget".to_owned());
+        }
     }
 
     #[test]
@@ -1045,7 +1069,8 @@ mod tests {
             .nth(1)
             .and_then(|rest| rest.split("\n}\n").next())
             .unwrap_or_default();
-        assert!(close.contains("close_windows("), "{close}");
+        assert!(close.contains("hide_windows("), "{close}");
+        assert!(!close.contains("restore_previous"), "{close}");
         assert!(!close.contains("destroy"), "{close}");
         assert_eq!(shipped.matches("windows.destroy(").count(), 1);
         assert!(shipped.contains("window.hide()"));
@@ -1098,28 +1123,38 @@ mod tests {
     }
 
     #[test]
-    fn l056_closing_hides_every_window_and_then_restores_the_front_app() {
-        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
-        close_windows(&windows, true);
-        assert_eq!(
-            windows.calls(),
-            ["hide interrupt-1", "hide interrupt-2", "restore"],
-            "restore comes after every hide, once"
-        );
+    fn l056_an_open_that_fails_with_nothing_on_screen_forgets_the_front_app() -> TestResult {
+        let windows = FakeWindows {
+            fail_open_of: Some("interrupt-1".to_owned()),
+            ..FakeWindows::default()
+        };
+        assert!(open_windows(&windows, &[screen(1, 0.0, 1.0)]).is_err());
+        assert_eq!(windows.calls().last().map(String::as_str), Some("forget"));
+        // No screen is a failed open too.
+        let windows = FakeWindows::default();
+        assert!(open_windows(&windows, &[]).is_err());
+        assert_eq!(windows.calls(), ["forget"]);
+        Ok(())
     }
 
     #[test]
-    fn l056_closing_after_join_restores_nothing() {
-        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
-        close_windows(&windows, false);
-        assert_eq!(windows.calls(), ["hide interrupt-1", "hide interrupt-2"]);
+    fn l056_an_open_that_fails_while_a_window_is_still_up_keeps_the_front_app() -> TestResult {
+        // Interrupt 1 is still shown: its close will give the front back.
+        let windows = FakeWindows {
+            fail_open_of: Some("interrupt-2".to_owned()),
+            ..FakeWindows::with(&["interrupt-1"], &[])
+        };
+        assert!(open_windows(&windows, &[screen(1, 0.0, 1.0), screen(2, 1920.0, 1.0)]).is_err());
+        assert!(!windows.calls().iter().any(|c| c == "forget"));
+        Ok(())
     }
 
     #[test]
     fn s4_2_no_screens_is_an_error_and_opens_nothing() {
         let windows = FakeWindows::default();
         assert!(open_windows(&windows, &[]).is_err());
-        assert!(windows.calls().is_empty());
+        // Nothing was opened or raised; only the noted front app is dropped.
+        assert_eq!(windows.calls(), ["forget"]);
     }
 
     #[test]
