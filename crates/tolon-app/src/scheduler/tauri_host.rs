@@ -145,8 +145,8 @@ impl Host for TauriHost {
         }
     }
 
-    fn close(&self) {
-        interrupt::close_all(&self.app);
+    fn close(&self, restore_focus: bool) {
+        interrupt::close_all(&self.app, restore_focus);
     }
 
     fn play(&self, sound: Sound) {

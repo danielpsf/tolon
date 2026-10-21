@@ -9,6 +9,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.2 Two monitors: both show the interrupt; Esc on either hides both.
 - [ ] L-048 Interrupt windows are reused, not leaked: fire 50 test alarms in a row (Settings, Appearance, "Show a test alarm", Esc each time) and count layer-1001 windows after 0, 10, 20, 30, 40 and 50 (`CGWindowList` or the L-047 script, or `heap Tolon | grep -c TaoWindow`); the count stays at one per screen (two displays: two), none of them on screen between alarms, and the footprint does not climb with each alarm. Also: right after Esc, typing goes to the app that was in front before (not to Tolon, no error beep); a second alarm shows its own title with focus on the primary button; unplug a display, fire an alarm and the window count drops to the screens still connected.
 - [ ] S4.3 Interrupt has focus on open; Enter joins; D dismisses; Space marks already there.
+- [ ] L-056 With TextEdit in front, show a test alarm and press Esc: the reminder hides and TextEdit is the front app again (menu bar, and the next keystroke types into its document). The same after D and after Space. After Join the browser is in front, not TextEdit. With Tolon's own settings window in front before the alarm, Esc leaves Tolon in front (no other app is raised). Quit TextEdit while the reminder is up, then press Esc: nothing happens and Tolon does not crash.
 - [ ] AC9.4 Start at login switch reflects System Settings, Login Items. Turning it off in System Settings and reopening the page shows the switch off with the hint to allow Tolon in Login Items; switching off twice shows no error.
 - [ ] AC9.4 A development build (`cargo run`) shows the switch off, and turning it on shows an error without a crash.
 - [ ] AC12.3 Fresh user account: install from the DMG following `docs/install.md` only; reach first run.
@@ -22,6 +23,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] AC9.4 Start at login appears in Task Manager, Startup apps. Disable it there, then turn the switch on in Tolon, and note what the switch shows (Windows keeps the Task Manager choice).
 - [ ] S4.4 When the interrupt cannot take focus, the fallback notification shows Snooze and Join; each acts on that meeting only.
 - [ ] L-044 Starting Tolon a second time from the Start menu brings the running settings window forward and starts no second copy.
+- [ ] L-056 With Notepad in front, show a test alarm and press Esc: Notepad is the foreground window again. Windows may refuse (foreground lock); then the taskbar button flashes and nothing breaks. After Join the browser stays in front.
 
 ## Linux
 - [ ] S4.4 On a Wayland session (GNOME), the fallback notification shows Join and Snooze and the sound plays.

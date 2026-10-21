@@ -1,6 +1,6 @@
 //! The scheduler against a fake clock and a fake host: no Tauri, no window, no sound.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex as StdMutex, PoisonError};
 
 use anyhow::anyhow;
@@ -31,6 +31,8 @@ struct Fake {
     notices: StdMutex<Vec<i32>>,
     /// Every `Host::paused` call, oldest first; kept out of `calls`.
     pauses: StdMutex<Vec<Option<DateTime<Utc>>>>,
+    /// How many closes asked to give the front back; kept out of `calls`.
+    restores: AtomicUsize,
     focused: AtomicBool,
     degraded: Option<&'static str>,
     fail_open: AtomicBool,
@@ -46,6 +48,7 @@ impl Fake {
             urls: StdMutex::default(),
             notices: StdMutex::default(),
             pauses: StdMutex::default(),
+            restores: AtomicUsize::new(0),
             focused: AtomicBool::new(true),
             degraded: None,
             fail_open: AtomicBool::new(false),
@@ -65,6 +68,11 @@ impl Fake {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    /// Closes that asked for the previous app to come back.
+    fn restores(&self) -> usize {
+        self.restores.load(Ordering::SeqCst)
     }
 
     fn count(&self, call: &str) -> usize {
@@ -136,8 +144,11 @@ impl Host for Fake {
         async move { focused }
     }
 
-    fn close(&self) {
+    fn close(&self, restore_focus: bool) {
         self.log("close");
+        if restore_focus {
+            self.restores.fetch_add(1, Ordering::SeqCst);
+        }
     }
 
     fn play(&self, _sound: Sound) {
@@ -649,6 +660,46 @@ async fn s4_3_join_opens_the_validated_url_and_already_there_opens_nothing() -> 
     assert!(rig.host().urls().is_empty());
     assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("joined"));
     assert_eq!(rig.host().count("close"), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_esc_d_and_space_close_and_give_the_front_back() -> TestResult {
+    // Esc is Snooze(5), D is Dismiss, Space is AlreadyThere.
+    for act in [Act::Snooze(5), Act::Dismiss, Act::AlreadyThere] {
+        let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+        rig.tick_at(at(13, 58, 5)).await;
+        let key = rig.key(0)?;
+        assert_eq!(
+            rig.host().restores(),
+            0,
+            "nothing to give back while it is up"
+        );
+        rig.act(at(13, 58, 10), &key, act).await?;
+        assert_eq!(rig.host().count("close"), 1, "{act:?}");
+        assert_eq!(rig.host().restores(), 1, "{act:?}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_join_closes_without_giving_the_front_back() -> TestResult {
+    let rig = Rig::new(&[with_link("call", "140000", MEET_LOCATION)], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().restores(), 0, "the browser takes focus itself");
+    Ok(())
+}
+
+#[tokio::test]
+async fn l056_quitting_closes_without_giving_the_front_back() -> TestResult {
+    let rig = Rig::new(&[STANDUP], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    rig.sched.shutdown(&rig.db).await;
+    assert_eq!(rig.host().count("close"), 1);
+    assert_eq!(rig.host().restores(), 0);
     Ok(())
 }
 

@@ -335,6 +335,10 @@ pub trait Windows {
     /// Closes a window for good. Only for a window whose screen is gone: closing leaks the
     /// native window on macOS (decision 2026-10-22, "Interrupt windows are reused").
     fn destroy(&self, label: &str);
+    /// Notes the app that is in front, before anything of Tolon's comes forward.
+    fn remember_frontmost(&self);
+    /// Gives the front back to the app noted by `remember_frontmost`, after the windows are hidden.
+    fn restore_previous(&self);
 }
 
 struct TauriWindows<'a> {
@@ -449,6 +453,34 @@ impl Windows for TauriWindows<'_> {
             }
         }
     }
+
+    fn remember_frontmost(&self) {
+        self.on_main_thread("remember the frontmost app", |p| p.remember_frontmost());
+    }
+
+    fn restore_previous(&self) {
+        self.on_main_thread("restore the previous app", |p| p.restore_previous());
+    }
+}
+
+impl TauriWindows<'_> {
+    /// Runs a platform call on the main thread. Calls queue in order, so a remember sent before the
+    /// windows are shown runs before they are raised, and a restore sent after the hides runs after them.
+    fn on_main_thread(
+        &self,
+        what: &'static str,
+        call: fn(&dyn Platform) -> Result<(), PlatformError>,
+    ) {
+        let platform = self.platform;
+        let sent = self.app.run_on_main_thread(move || {
+            if let Err(e) = call(platform) {
+                tracing::warn!(error = %e, "could not {what}");
+            }
+        });
+        if let Err(e) = sent {
+            tracing::warn!(error = %e, "could not reach the main thread to {what}");
+        }
+    }
 }
 
 fn is_visible(states: &[WindowState], label: &str) -> bool {
@@ -463,6 +495,11 @@ pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result
     anyhow::ensure!(!screens.is_empty(), "no screen to show the interrupt on");
     let specs = plan_windows(screens);
     let before = windows.states();
+    // A window that is already up means Tolon is in front: the app to give the front back to was
+    // noted when it first opened, and this call only adds a meeting to it.
+    if !before.iter().any(|s| s.visible) {
+        windows.remember_frontmost();
+    }
     for gone in before
         .iter()
         .filter(|s| !specs.iter().any(|spec| spec.label == s.label))
@@ -493,6 +530,16 @@ pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result
 pub fn hide_windows(windows: &dyn Windows) {
     for state in windows.states() {
         windows.hide(&state.label);
+    }
+}
+
+/// Closing: hides every window, then, when `restore_focus`, gives the front back to the app that
+/// was in front when the interrupt opened (decision 2026-10-22, "Closing a reminder gives focus
+/// back"). Hiding alone leaves Tolon the active app. Not after Join: the browser takes focus itself.
+pub fn close_windows(windows: &dyn Windows, restore_focus: bool) {
+    hide_windows(windows);
+    if restore_focus {
+        windows.restore_previous();
     }
 }
 
@@ -548,15 +595,18 @@ pub fn open_interrupts(
 }
 
 /// Hides every interrupt window and tells any listener (AC4.6: one action closes all screens).
-/// The windows stay for the next alarm.
-pub fn close_all(app: &AppHandle) {
+/// The windows stay for the next alarm. `restore_focus`: see [`close_windows`].
+pub fn close_all(app: &AppHandle, restore_focus: bool) {
     if let Some(state) = app.try_state::<InterruptState>() {
         state.set(None);
     }
-    hide_windows(&TauriWindows {
-        app,
-        platform: native(),
-    });
+    close_windows(
+        &TauriWindows {
+            app,
+            platform: native(),
+        },
+        restore_focus,
+    );
     if let Err(e) = app.emit(HIDE_EVENT, ()) {
         tracing::warn!(event = HIDE_EVENT, error = %e, "could not emit event");
     }
@@ -844,6 +894,12 @@ mod tests {
             self.calls.borrow_mut().push(format!("destroy {label}"));
             self.windows.borrow_mut().retain(|w| w.label != label);
         }
+        fn remember_frontmost(&self) {
+            self.calls.borrow_mut().push("remember".to_owned());
+        }
+        fn restore_previous(&self) {
+            self.calls.borrow_mut().push("restore".to_owned());
+        }
     }
 
     #[test]
@@ -853,6 +909,7 @@ mod tests {
         assert_eq!(
             windows.calls(),
             [
+                "remember",
                 "open interrupt-1",
                 "raise interrupt-1",
                 "open interrupt-2",
@@ -894,7 +951,10 @@ mod tests {
         assert!(!is_visible(&windows.states(), "interrupt-1"));
         open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
         // Not just raised: a hidden window has to be shown first.
-        assert_eq!(windows.calls(), ["open interrupt-1", "raise interrupt-1"]);
+        assert_eq!(
+            windows.calls(),
+            ["remember", "open interrupt-1", "raise interrupt-1"]
+        );
         assert_eq!(*windows.built.borrow(), Vec::<String>::new());
         assert_eq!(windows.shown(), ["interrupt-1"]);
         Ok(())
@@ -927,6 +987,7 @@ mod tests {
         assert_eq!(
             windows.calls(),
             [
+                "remember",
                 "destroy interrupt-2",
                 "open interrupt-1",
                 "raise interrupt-1"
@@ -984,7 +1045,7 @@ mod tests {
             .nth(1)
             .and_then(|rest| rest.split("\n}\n").next())
             .unwrap_or_default();
-        assert!(close.contains("hide_windows("), "{close}");
+        assert!(close.contains("close_windows("), "{close}");
         assert!(!close.contains("destroy"), "{close}");
         assert_eq!(shipped.matches("windows.destroy(").count(), 1);
         assert!(shipped.contains("window.hide()"));
@@ -1004,6 +1065,54 @@ mod tests {
         let emit = body.find(".emit(SHOW_EVENT").unwrap_or(usize::MAX);
         let open = body.find("open_windows(").unwrap_or(0);
         assert!(emit < open, "emit SHOW_EVENT, then open_windows: {body}");
+    }
+
+    #[test]
+    fn l056_a_fresh_open_remembers_the_front_app_before_it_shows_anything() -> TestResult {
+        let windows = FakeWindows::default();
+        open_windows(&windows, &[screen(1, 0.0, 2.0), screen(2, 1920.0, 1.0)])?;
+        assert_eq!(
+            windows.calls(),
+            [
+                "remember",
+                "open interrupt-1",
+                "raise interrupt-1",
+                "open interrupt-2",
+                "raise interrupt-2"
+            ]
+        );
+        // A reused (hidden) window is a fresh open too.
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
+        assert_eq!(windows.calls()[0], "remember");
+        Ok(())
+    }
+
+    #[test]
+    fn l056_a_meeting_added_to_a_shown_interrupt_does_not_remember_again() -> TestResult {
+        // Tolon is in front now; remembering it would replace the app to give the front back to.
+        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
+        open_windows(&windows, &[screen(1, 0.0, 2.0), screen(2, 1920.0, 1.0)])?;
+        assert!(!windows.calls().iter().any(|c| c == "remember"));
+        Ok(())
+    }
+
+    #[test]
+    fn l056_closing_hides_every_window_and_then_restores_the_front_app() {
+        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
+        close_windows(&windows, true);
+        assert_eq!(
+            windows.calls(),
+            ["hide interrupt-1", "hide interrupt-2", "restore"],
+            "restore comes after every hide, once"
+        );
+    }
+
+    #[test]
+    fn l056_closing_after_join_restores_nothing() {
+        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
+        close_windows(&windows, false);
+        assert_eq!(windows.calls(), ["hide interrupt-1", "hide interrupt-2"]);
     }
 
     #[test]

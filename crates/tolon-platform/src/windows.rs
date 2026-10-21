@@ -16,7 +16,8 @@
 use crate::login::{startup_approved_disabled, windows_run_value, windows_run_value_is};
 use crate::monitors::{screens_from, RawMonitor, BASE_DPI};
 use crate::{
-    hwnd_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover, TrayStyle,
+    hwnd_of, Focus, Platform, PlatformError, Previous, Raised, Screen, StartAtLogin, Takeover,
+    TrayStyle,
 };
 use raw_window_handle::HasWindowHandle;
 use std::ffi::c_void;
@@ -40,6 +41,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 pub struct WindowsPlatform;
+
+/// The foreground window (`HWND` as an integer, so the static is `Sync`) when the interrupt opened.
+static PREVIOUS: Previous<isize> = Previous::new();
 
 fn os_error(call: &'static str, e: &windows::core::Error) -> PlatformError {
     // Reinterpret the HRESULT bits; `{:#010x}` in the message then reads like 0x80070005.
@@ -222,6 +226,33 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    /// `GetForegroundWindow`, unless it belongs to this process.
+    fn remember_frontmost(&self) -> Result<(), PlatformError> {
+        // SAFETY: plain Win32 calls; a null result (no foreground window) is handled.
+        let front = unsafe {
+            let hwnd = GetForegroundWindow();
+            let mut owner = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut owner));
+            (!hwnd.0.is_null() && owner != std::process::id()).then_some(hwnd.0 as isize)
+        };
+        PREVIOUS.remember(front);
+        Ok(())
+    }
+
+    /// `SetForegroundWindow` on the noted window while it still exists. Windows may refuse; that
+    /// is ignored, the window then simply is not in front.
+    fn restore_previous(&self) -> Result<(), PlatformError> {
+        let Some(raw) = PREVIOUS.take() else {
+            return Ok(());
+        };
+        let hwnd = HWND(raw as *mut c_void);
+        // SAFETY: IsWindow accepts any handle value and only reports whether it is a window.
+        if unsafe { IsWindow(Some(hwnd)) }.as_bool() && !take_foreground(hwnd) {
+            tracing::debug!("Windows refused to bring the previous window forward");
+        }
+        Ok(())
+    }
+
     /// Tauri's inner size is already below the title bar here.
     fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
         Ok(0.0)
@@ -367,6 +398,11 @@ mod tests {
             && s.height > 0.0
             && s.scale_factor >= scale_from_dpi(BASE_DPI)));
         assert!(screens.first().is_none_or(|s| s.is_main));
+    }
+
+    #[test]
+    fn l056_restoring_with_nothing_remembered_is_a_no_op() {
+        assert_eq!(WindowsPlatform.restore_previous(), Ok(()));
     }
 
     #[test]

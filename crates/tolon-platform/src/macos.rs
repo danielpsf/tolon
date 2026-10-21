@@ -4,19 +4,23 @@ use crate::login::{from_sm_app_service_status, sm_call_for, sm_error_means_done,
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
 use crate::{
-    ns_view_of, Focus, Platform, PlatformError, Raised, Screen, StartAtLogin, Takeover, TrayStyle,
+    ns_view_of, Focus, Platform, PlatformError, Previous, Raised, Screen, StartAtLogin, Takeover,
+    TrayStyle,
 };
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSEvent, NSScreen, NSView, NSWindow,
-    NSWindowCollectionBehavior,
+    NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSEvent,
+    NSRunningApplication, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_foundation::{ns_string, NSError, NSNumber};
 use objc2_service_management::SMAppService;
 use raw_window_handle::HasWindowHandle;
 
 pub struct MacPlatform;
+
+/// The pid of the app that was in front when the interrupt opened.
+static PREVIOUS: Previous<i32> = Previous::new();
 
 fn main_thread() -> Result<MainThreadMarker, PlatformError> {
     MainThreadMarker::new().ok_or(PlatformError::NotMainThread)
@@ -67,6 +71,34 @@ impl Platform for MacPlatform {
         // As in `raise_above_everything`: the call checked on screen (L-042, L-044).
         #[allow(deprecated)]
         NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+        Ok(())
+    }
+
+    /// `NSWorkspace.frontmostApplication`, kept as a pid unless it is Tolon's own.
+    fn remember_frontmost(&self) -> Result<(), PlatformError> {
+        main_thread()?;
+        let own = std::process::id();
+        let front = NSWorkspace::sharedWorkspace()
+            .frontmostApplication()
+            .map(|app| app.processIdentifier())
+            .filter(|pid| u32::try_from(*pid).ok() != Some(own));
+        PREVIOUS.remember(front);
+        Ok(())
+    }
+
+    /// `NSRunningApplication.activateWithOptions` on the noted pid. No `activateIgnoringOtherApps`
+    /// option: it has no effect since macOS 14, and Tolon is the active app here, so the plain
+    /// request is honoured. An app that has quit gives `None` and nothing happens.
+    fn restore_previous(&self) -> Result<(), PlatformError> {
+        main_thread()?;
+        let Some(pid) = PREVIOUS.take() else {
+            return Ok(());
+        };
+        if let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
+            if !app.activateWithOptions(NSApplicationActivationOptions::empty()) {
+                tracing::debug!("the previous app did not accept the activation request");
+            }
+        }
         Ok(())
     }
 
@@ -268,6 +300,14 @@ mod tests {
         assert_eq!(MacPlatform.prepare_app(), Err(PlatformError::NotMainThread));
         assert_eq!(
             MacPlatform.activate_app(),
+            Err(PlatformError::NotMainThread)
+        );
+        assert_eq!(
+            MacPlatform.remember_frontmost(),
+            Err(PlatformError::NotMainThread)
+        );
+        assert_eq!(
+            MacPlatform.restore_previous(),
             Err(PlatformError::NotMainThread)
         );
     }

@@ -85,8 +85,10 @@ pub trait Host: Send + Sync {
     fn open(&self, show: &AlarmShow) -> impl Future<Output = anyhow::Result<Opened>> + Send;
     /// False when the interrupt has no keyboard focus, or the platform said it refused it.
     fn focused(&self) -> impl Future<Output = bool> + Send;
-    /// Closes every interrupt window and tells the pages.
-    fn close(&self);
+    /// Closes every interrupt window and tells the pages. `restore_focus`: also give the front back
+    /// to the app that was in front when the interrupt opened (decision 2026-10-22, "Closing a
+    /// reminder gives focus back"). False after Join, where the browser takes focus itself.
+    fn close(&self, restore_focus: bool);
     /// One shot of the alarm sound; failures are logged and ignored.
     fn play(&self, sound: Sound);
     fn stop_sound(&self);
@@ -759,7 +761,7 @@ impl<H: Host> Scheduler<H> {
         open.show.meetings.retain(|m| live.contains(&m.key));
         open.links.retain(|key, _| live.contains(key));
         if open.show.meetings.is_empty() {
-            self.close(inner);
+            self.close(inner, true);
         } else if open.show.meetings.len() != before {
             self.show_open(inner, now).await;
         }
@@ -794,9 +796,9 @@ impl<H: Host> Scheduler<H> {
         self.host.play(inner.sound);
     }
 
-    fn close(&self, inner: &mut Inner) {
+    fn close(&self, inner: &mut Inner, restore_focus: bool) {
         inner.open = None;
-        self.host.close();
+        self.host.close(restore_focus);
         self.host.stop_sound();
     }
 
@@ -860,7 +862,7 @@ impl<H: Host> Scheduler<H> {
         let mut inner = self.inner.lock().await;
         inner.stopped = true;
         if inner.open.is_some() {
-            self.close(&mut inner);
+            self.close(&mut inner, false);
         }
         self.host.stop_sound();
         drop(pipeline::lock(db));
@@ -981,7 +983,7 @@ impl<H: Host> Scheduler<H> {
         // A close may open a waiting minute and a partial join re-opens: new deadlines either way.
         self.wake();
         if rest.is_empty() {
-            self.close(inner);
+            self.close(inner, act != Act::Join);
             self.present_waiting(inner, db, now).await;
             return Ok(());
         }
