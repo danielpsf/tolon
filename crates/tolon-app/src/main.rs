@@ -82,9 +82,7 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         WindowEvent::CloseRequested { api, .. } if tray::hides_on_close(window.label()) => {
             api.prevent_close();
-            if let Err(e) = window.hide() {
-                tracing::warn!(error = %e, "could not hide the settings window");
-            }
+            tray::hide_settings(window.app_handle());
         }
         WindowEvent::Focused(false) if window.label() == tray::PANEL => {
             tray::hide_panel(window.app_handle());
@@ -139,6 +137,8 @@ fn main() -> anyhow::Result<()> {
             commands::app_show_settings,
             commands::app_hide_panel,
             commands::app_quit,
+            commands::app_hide_settings,
+            commands::app_tray_place,
             commands::tray_tooltip,
             commands::notify_copy_set,
             #[cfg(feature = "e2e-loopback")]
@@ -167,6 +167,17 @@ fn main() -> anyhow::Result<()> {
                         .blocking_show();
                     handle.exit(1);
                 });
+            } else {
+                // F10: the settings window was created hidden; it shows (and takes focus) only on
+                // first run. With a calendar Tolon starts in the tray and takes no focus (AC10.2).
+                let calendars = commands::state(app.handle())
+                    .and_then(|s| pipeline::list(&s.db))
+                    .map(|list| list.len())
+                    .inspect_err(|e| tracing::warn!(error = %e, "could not list the calendars"))
+                    .ok();
+                if tray::shows_at_start(calendars) {
+                    tray::show_settings(app.handle());
+                }
             }
             Ok(())
         })

@@ -15,7 +15,8 @@
         "label": "main",
         "title": "Tolon",
         "width": 960,
-        "height": 640
+        "height": 640,
+        "visible": false
       }
     ],
     "security": {

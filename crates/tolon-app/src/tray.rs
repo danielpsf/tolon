@@ -19,7 +19,7 @@ use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Rect, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use tolon_platform::{Placement, Platform, Screen, NATIVE};
+use tolon_platform::{Placement, Platform, Screen, TrayStyle, NATIVE};
 
 /// The panel's window label; `capabilities/panel.json` and the command checks use it.
 pub const PANEL: &str = "panel";
@@ -371,6 +371,39 @@ pub fn hides_on_close(label: &str) -> bool {
     label == MAIN
 }
 
+/// Hides the settings window and tells its page, which ends first run for the rest of the
+/// session (F10): a close before any calendar is the skip, and after the first calendar the
+/// window goes away (AC10.2). Either way the tray stays the way back.
+pub fn hide_settings(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(MAIN) {
+        if let Err(e) = window.hide() {
+            tracing::warn!(error = %e, "could not hide the settings window");
+        }
+    }
+    if let Err(e) = app.emit_to(MAIN, "settings:hidden", ()) {
+        tracing::debug!(error = %e, "could not tell the settings window it hid");
+    }
+}
+
+/// F10, whether the settings window shows at start, from the number of calendars (`None`: the
+/// store could not list them). The window always exists, hidden, because its page hands Rust the
+/// notification copy (L-038). With no calendar it shows on first run (AC10.1), on every launch
+/// until a calendar exists; with one or more nothing shows and the tray is the only trace
+/// (AC10.2). A list that failed shows the window, so the person is not left with nothing.
+pub fn shows_at_start(calendars: Option<usize>) -> bool {
+    calendars.is_none_or(|n| n == 0)
+}
+
+/// Where the tray icon lives, for the first-run copy (F10): `menu_bar` where the tray takes
+/// template images (the macOS menu bar), else `tray`. Read from the style, never the OS name.
+pub fn tray_place(style: TrayStyle) -> &'static str {
+    if style.template_icon {
+        "menu_bar"
+    } else {
+        "tray"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -573,6 +606,49 @@ mod tests {
         // No pointer and no icon: the main screen's corner, never a crash.
         assert!(panel_placement(&screens, None, None, false).is_some());
         assert_eq!(panel_placement(&[], None, None, false), None);
+    }
+
+    #[test]
+    fn ac10_1_no_calendar_shows_the_settings_window_on_first_run() {
+        assert!(shows_at_start(Some(0)));
+        // The store could not list the calendars: the window shows, so there is a way in.
+        assert!(shows_at_start(None));
+    }
+
+    #[test]
+    fn ac10_2_with_a_calendar_nothing_shows_at_start() {
+        for n in [1, 2, 40] {
+            assert!(!shows_at_start(Some(n)), "{n}");
+        }
+    }
+
+    #[test]
+    fn ac10_1_the_tray_step_names_the_menu_bar_only_where_the_tray_takes_template_images() {
+        let style = |template_icon, clicks| TrayStyle {
+            template_icon,
+            clicks,
+        };
+        assert_eq!(tray_place(style(true, true)), "menu_bar");
+        assert_eq!(tray_place(style(false, true)), "tray");
+        assert_eq!(tray_place(style(false, false)), "tray");
+    }
+
+    /// AC10.2: the settings window is created hidden (its page must load for L-038), and only
+    /// `main.rs` shows it, through `shows_at_start`, once the store is open.
+    #[test]
+    fn ac10_2_the_settings_window_is_created_hidden_and_shown_only_on_first_run(
+    ) -> anyhow::Result<()> {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))?;
+        let main = &conf["app"]["windows"][0];
+        assert_eq!(main["label"], serde_json::json!(MAIN));
+        assert_eq!(main["visible"], serde_json::json!(false));
+        let source = include_str!("main.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let start = shipped.find("start(app.handle())").unwrap_or(usize::MAX);
+        let decide = shipped.find("tray::shows_at_start(").unwrap_or(usize::MAX);
+        let show = shipped.find("tray::show_settings(").unwrap_or(0);
+        assert!(start < decide && decide < show, "start, decide, then show");
+        Ok(())
     }
 
     #[test]

@@ -524,6 +524,25 @@ pub async fn app_quit(app: AppHandle, window: tauri::WebviewWindow) -> Result<()
     Ok(())
 }
 
+/// First run (F10): the settings window hides itself once the first calendar is added (AC10.2).
+/// Its page is told (`settings:hidden`), as on a close, so first run ends for this session.
+#[tauri::command]
+pub async fn app_hide_settings(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    tray::hide_settings(&app);
+    Ok(())
+}
+
+/// First run's tray step (F10): `menu_bar` or `tray`, from the platform's tray style.
+#[tauri::command]
+pub async fn app_tray_place(window: tauri::WebviewWindow) -> Result<&'static str, CommandError> {
+    main_only(window.label())?;
+    Ok(tray::tray_place(crate::interrupt::native().tray_style()))
+}
+
 /// The tray tooltip, written by the settings window in the person's language (AC7.1). The text
 /// can hold a meeting title: it goes to the OS tooltip only, never to a log.
 #[tauri::command]
@@ -674,6 +693,8 @@ mod tests {
         ("app_show_settings", "panel_only"),
         ("app_hide_panel", "panel_only"),
         ("app_quit", "panel_only"),
+        ("app_hide_settings", "main_only"),
+        ("app_tray_place", "main_only"),
         ("tray_tooltip", "main_only"),
         ("notify_copy_set", "main_only"),
     ];
