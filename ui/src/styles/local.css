@@ -174,16 +174,13 @@
   cursor: default;
   user-select: none;
 }
-:root[data-theme="dark"] .tl-int {
-  --tl-ring: var(--sm-ink);
-}
-/* The quiet button border: a soft line where color-mix() exists, the solid token elsewhere (older WebKitGTK). */
+/*
+ * The quiet button border: a soft line where color-mix() exists, the solid token elsewhere (older
+ * WebKitGTK). 70% of the text colour over the fill keeps it at 3:1 or more (contrast.test.ts).
+ */
 @supports (color: color-mix(in srgb, red, blue)) {
   .tl-int {
-    --tl-ring: color-mix(in srgb, var(--sm-on-moss) 45%, transparent);
-  }
-  :root[data-theme="dark"] .tl-int {
-    --tl-ring: color-mix(in srgb, var(--sm-ink) 55%, transparent);
+    --tl-ring: color-mix(in srgb, var(--sm-on-moss) 70%, transparent);
   }
 }
 .tl-int :focus-visible {

@@ -56,7 +56,38 @@ const PAIRS: [string, [string, string], [string, string]][] = [
   ["preview primary button", [".tl-preview .sm-btn.tl-primary", "background"], [".tl-preview .sm-btn.tl-primary", "color"]],
 ];
 
+/** `fg` at `share` (0 to 1) over `bg`, as `color-mix(in srgb, fg share, transparent)` draws on that fill. */
+function mix(fg: string, bg: string, share: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return `#${[1, 3, 5]
+    .map((i) => Math.round(channel(fg, i) * share + channel(bg, i) * (1 - share)).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/** The token in a value such as `calc(3 * var(--tl-u)) solid var(--sm-on-moss)`. */
+const tokenIn = (value: string) => `var(${/var\((--sm-[\w-]+)\)/.exec(value)?.[1]})`;
+
 describe("interrupt contrast (AC4.3)", () => {
+  // D5: the quiet buttons' line, the primary button's edge and the focus ring are boundaries (3:1).
+  it.each(["light", "dark"] as const)("%s: every button boundary reaches 3:1", (theme) => {
+    const bg = resolve(theme, declaration(".tl-int", "background"));
+    const soft = /--tl-ring:\s*color-mix\(in srgb, (var\(--sm-[\w-]+\)) (\d+)%, transparent\)/.exec(local);
+    if (!soft) throw new Error("no soft --tl-ring");
+    const boundaries: [string, string][] = [
+      ["quiet button line", mix(resolve(theme, soft[1]), bg, Number(soft[2]) / 100)],
+      ["quiet button line without color-mix", resolve(theme, declaration(".tl-int", "--tl-ring"))],
+      ["primary button edge", resolve(theme, declaration(".tl-int .sm-btn.tl-primary", "background"))],
+      ["focus ring", resolve(theme, tokenIn(declaration(".tl-int :focus-visible", "outline")))],
+    ];
+    for (const [name, colour] of boundaries) expect(contrast(colour, bg), `${theme}: ${name}`).toBeGreaterThanOrEqual(3);
+  });
+
+  // D5: the hint, details and consequence lines take the full text colour; nothing dims them.
+  it.each([".tl-int-hint", ".tl-int-details", ".tl-int-consequence", ".tl-int-top"])("%s is not dimmed", (selector) => {
+    for (const property of ["color", "opacity"]) expect(() => declaration(selector, property)).toThrow();
+  });
+
+
   it.each(["light", "dark"] as const)("%s: every text pair reaches 4.5:1", (theme) => {
     for (const [name, [bgRule, bgProp], [fgRule, fgProp]] of PAIRS) {
       const ratio = contrast(resolve(theme, declaration(bgRule, bgProp)), resolve(theme, declaration(fgRule, fgProp)));
