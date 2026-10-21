@@ -553,18 +553,21 @@ const invoke = (command, args = {}) =>
     args,
   );
 
-test("ac7_3 the settings window reads the pause but only the tray panel may pause, quit or act ahead", async () => {
+test("window rights: the settings window reads the pause and the current alarm, but only the tray panel may pause, hide, quit or act ahead", async () => {
   assert.deepEqual(await invoke("app_status"), { answer: { paused_until: null } });
   for (const [command, args] of [
     ["app_pause", { minutes: 60 }],
     ["app_resume", {}],
     ["app_quit", {}],
     ["app_show_settings", {}],
+    ["app_hide_panel", {}],
     ["occurrences_snooze", { key: "x", minutes: 5 }],
     ["occurrences_dismiss", { key: "x" }],
   ]) {
     assert.deepEqual(await invoke(command, args), { code: "not_found" }, command);
   }
+  // The interrupt's commands answer the settings window too (no interrupt is up: null).
+  assert.deepEqual(await invoke("alarms_current"), { answer: null });
   // Still running, still not paused, and the tooltip command answers the settings window.
   assert.deepEqual(await invoke("app_status"), { answer: { paused_until: null } });
   assert.deepEqual(await invoke("tray_tooltip", { text: "Tolon" }), { answer: null });

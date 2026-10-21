@@ -219,10 +219,11 @@ mod tests {
         Ok(())
     }
 
+    /// A source check, not a behaviour test (WebDriver cannot send the window manager's close):
     /// S7.2 and AC7.4: closing the settings window hides it (`tray::hides_on_close`), and an
     /// exit nobody asked for keeps Tolon in the tray. Only the panel's Quit exits.
     #[test]
-    fn s7_2_close_is_not_quit() {
+    fn s7_2_main_rs_hides_the_settings_window_on_close_and_refuses_an_exit_without_a_code() {
         let source = include_str!("main.rs");
         let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
         for needed in [
