@@ -41,7 +41,7 @@ export const he: Messages = {
     kindOutlook: "יומן Outlook שפורסם",
     toggleLabel: (name) => `הפעלת היומן ${iso(name)}`,
     addCalendar: "הוספת יומן",
-    pasteIcalUrl: "הדבקת כתובת URL של iCal",
+    pasteIcalUrl: "הדבקת קישור iCal",
     ignoreHeading: "התעלמות",
     ignoreAllDay: "אירועים של יום שלם",
     ignoreDeclined: "אירועים שדחיתי",
@@ -58,7 +58,7 @@ export const he: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon שומר את הקישור במחשב הזה ורק קורא ממנו.",
     adding: "היומן מתווסף",
-    empty: "אין עדיין יומנים. אפשר להדביק כתובת URL של iCal כדי להוסיף יומן.",
+    empty: "אין עדיין יומנים. אפשר להדביק קישור iCal כדי להוסיף יומן.",
   },
   settings: {
     sameAsSystem: "כמו במערכת",
@@ -97,7 +97,7 @@ export const he: Messages = {
       removeKeyword: (word) => `הסרת ${iso(word)}`,
     },
     appearance: {
-      subtitle: "גם מסך ההתראה פועל לפי ההגדרה הזו.",
+      subtitle: "מסך ההתראה פועל לפי ההגדרה הזו כשהצבע שלו הוא ברירת מחדל.",
       theme: "ערכת נושא",
       light: "בהיר",
       dark: "כהה",

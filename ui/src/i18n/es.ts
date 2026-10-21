@@ -26,7 +26,7 @@ export const es: Messages = {
     kindOutlook: "Calendario de Outlook publicado",
     toggleLabel: (name) => `Activar el calendario ${name}`,
     addCalendar: "Agregar calendario",
-    pasteIcalUrl: "Pegar una URL de iCal",
+    pasteIcalUrl: "Pegar un enlace iCal",
     ignoreHeading: "Ignorar",
     ignoreAllDay: "Eventos de todo el día",
     ignoreDeclined: "Eventos que rechacé",
@@ -43,7 +43,7 @@ export const es: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon guarda el enlace en este equipo y solo lee de él.",
     adding: "Agregando calendario",
-    empty: "Aún no hay calendarios. Pega una URL de iCal para agregar uno.",
+    empty: "Aún no hay calendarios. Pega un enlace iCal para agregar uno.",
   },
   settings: {
     sameAsSystem: "Igual que el sistema",
@@ -82,7 +82,7 @@ export const es: Messages = {
       removeKeyword: (word) => `Quitar ${word}`,
     },
     appearance: {
-      subtitle: "La pantalla de alarma también sigue este ajuste.",
+      subtitle: "La pantalla de alarma sigue este ajuste cuando su color es Predeterminado.",
       theme: "Tema",
       light: "Claro",
       dark: "Oscuro",

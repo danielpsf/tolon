@@ -25,7 +25,7 @@ export const ja: Messages = {
     kindOutlook: "公開された Outlook カレンダー",
     toggleLabel: (name) => `カレンダー「${name}」を有効にする`,
     addCalendar: "カレンダーを追加",
-    pasteIcalUrl: "iCal URL を貼り付け",
+    pasteIcalUrl: "iCal リンクを貼り付け",
     ignoreHeading: "除外",
     ignoreAllDay: "終日の予定",
     ignoreDeclined: "辞退した予定",
@@ -42,7 +42,7 @@ export const ja: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon はリンクをこのコンピュータに保存し、読み取りにだけ使います。",
     adding: "カレンダーを追加しています",
-    empty: "カレンダーはまだありません。iCal URL を貼り付けて追加してください。",
+    empty: "カレンダーはまだありません。iCal リンクを貼り付けて追加してください。",
   },
   settings: {
     sameAsSystem: "システムに合わせる",
@@ -81,7 +81,7 @@ export const ja: Messages = {
       removeKeyword: (word) => `「${word}」を削除`,
     },
     appearance: {
-      subtitle: "アラーム画面もこの設定に従います。",
+      subtitle: "アラームの色がデフォルトのとき、アラーム画面もこの設定に従います。",
       theme: "テーマ",
       light: "ライト",
       dark: "ダーク",

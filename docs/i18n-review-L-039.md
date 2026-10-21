@@ -509,3 +509,34 @@ A pt-PT round 2 call was also sent by mistake; its prompt was the same as round 
 | zh-CN | gemini | 1 | `firstRun.trayHiddenMenuBar` | The zh-CN macOS name for Spotlight is "聚焦", not "聚焦搜索". | Accepted: "如果菜单栏遮住了图标，从访达或聚焦再次打开 Tolon，即可重新显示此窗口。" Round 2 ok. |
 
 Native review is still required before release.
+
+## L-046
+
+Changed strings of L-046, drafted by the implementing agent (Claude Opus 5.5) in all 12 catalogues (en-US is the source): `settings.appearance.subtitle` now says the alarm screen follows the Theme setting only when its colour is Default (it used to say it always follows it, which is false for the pinned colours), and `calendars.pasteIcalUrl` and `calendars.empty` say "iCal link" as first run does, not "iCal URL".
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`, reachable on the VPN), temperature 0, `max_tokens` 16000, at most 2 rounds.
+- One locale per call (the 11 locales other than en-US). Each prompt held the three changed keys as en-US source and translation with where each one shows, the locale's neighbours for consistent terms (`appearance.theme`, `appearance.colors.theme`, `calendars.addBody`, `firstRun.pasteIcal`), and the copy rules (no URL: the word is "link").
+- Strict JSON answer `{"issues":[{"key","problem","suggestion"}],"verdict":"ok|fix"}`.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-GB | 1 | 810 | 274 (251) | 1084 | 2.9 | 0 | ok |
+| de | 1 | 816 | 565 (542) | 1381 | 3.8 | 0 | ok |
+| es | 1 | 806 | 463 (440) | 1269 | 3.4 | 0 | ok |
+| pt-BR | 1 | 822 | 489 (480) | 1311 | 4.6 | 0 | ok |
+| pt-PT | 1 | 825 | 727 (718) | 1552 | 6.1 | 0 | ok |
+| ar | 1 | 812 | 1814 (1791) | 2626 | 15.8 | 0 | ok |
+| he | 1 | 847 | 546 (523) | 1393 | 5.3 | 0 | ok |
+| hi | 1 | 816 | 662 (639) | 1478 | 5.7 | 0 | ok |
+| ja | 1 | 813 | 559 (536) | 1372 | 6.0 | 0 | ok |
+| tr | 1 | 812 | 647 (624) | 1459 | 5.0 | 0 | ok |
+| zh-CN | 1 | 814 | 535 (512) | 1349 | 5.1 | 0 | ok |
+| All (11 calls) | | 9093 | 7281 | 16374 | | 0 | |
+
+### Issues and decisions
+
+Round 1 raised no issue in any locale, so no catalogue changed and round 2 was not needed. Native review is still required before release.

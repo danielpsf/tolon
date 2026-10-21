@@ -26,7 +26,7 @@ export const ptPT: Messages = {
     kindOutlook: "Calendário do Outlook publicado",
     toggleLabel: (name) => `Ativar o calendário ${name}`,
     addCalendar: "Adicionar calendário",
-    pasteIcalUrl: "Colar um URL iCal",
+    pasteIcalUrl: "Colar uma ligação iCal",
     ignoreHeading: "Ignorar",
     ignoreAllDay: "Eventos de dia inteiro",
     ignoreDeclined: "Eventos que recusei",
@@ -43,7 +43,7 @@ export const ptPT: Messages = {
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "O Tolon guarda a ligação neste computador e só lê o calendário.",
     adding: "A adicionar calendário",
-    empty: "Ainda não há calendários. Cole um URL iCal para adicionar um.",
+    empty: "Ainda não há calendários. Cole uma ligação iCal para adicionar um.",
   },
   settings: {
     sameAsSystem: "Igual ao sistema",
@@ -82,7 +82,7 @@ export const ptPT: Messages = {
       removeKeyword: (word) => `Remover ${word}`,
     },
     appearance: {
-      subtitle: "O ecrã de alarme também segue esta definição.",
+      subtitle: "O ecrã de alarme segue esta definição quando a cor é Predefinida.",
       theme: "Tema",
       light: "Claro",
       dark: "Escuro",
