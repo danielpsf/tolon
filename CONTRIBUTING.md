@@ -30,6 +30,7 @@ cargo xtask ci          # the full check; must be green before any merge
 cargo test -p tolon-core
 cargo xtask fixtures    # regenerate expected JSON for fixtures, then read the diff
 npm --prefix ui run dev | build | lint | test
+npm --prefix ui run readme-shots   # re-render docs/images/app-*.png from the built UI with sample data (headless Chrome, nothing opens on screen)
 ```
 
 Quit an installed Tolon before `make dev` or `cargo run -p tolon-app`. Both use the same app id (`dev.tolon.desktop`), so the development build hands over to the Tolon that is already running, which only shows its window, and then exits.

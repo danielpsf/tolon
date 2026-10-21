@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "node --test e2e/smoke.mjs",
+    "readme-shots": "node scripts/readme-shots.mjs",
     "tauri": "node scripts/tauri.mjs"
   },
   "dependencies": {
