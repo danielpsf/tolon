@@ -55,6 +55,14 @@ export function primaryLabel(c: Copy, meeting: MeetingDto): string {
   }
 }
 
+/** The primary label split around the host, so the page can shorten a long host (D3): [before, host, after]. */
+export function primaryParts(c: Copy, meeting: MeetingDto): [string, string, string] {
+  const label = primaryLabel(c, meeting);
+  const host = joinHost(meeting.join);
+  const at = host ? label.lastIndexOf(host) : -1;
+  return host && at >= 0 ? [label.slice(0, at), host, label.slice(at + host.length)] : [label, "", ""];
+}
+
 /** The display-xl title is 112 design pixels: fine to about 36 characters, then it steps down so a long title still fits. */
 export function titleSize(title: string): "xl" | "long" | "longer" {
   const length = [...title].length;

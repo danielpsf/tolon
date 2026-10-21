@@ -294,6 +294,19 @@
   font-size: calc(19 * var(--tl-u));
   font-weight: 600;
 }
+/*
+ * D3: an unknown host on Join is cut to about the width of Snooze, so the buttons stay together. The
+ * ellipsis goes at the start (rtl box, ltr text inside), so the end of the host, which names the site, shows.
+ */
+.tl-int .tl-host {
+  display: inline-block;
+  max-width: calc(240 * var(--tl-u));
+  overflow: hidden;
+  direction: rtl;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
 .tl-int .sm-btn.tl-primary:hover {
   background: var(--sm-on-moss);
   color: var(--sm-moss-deep);

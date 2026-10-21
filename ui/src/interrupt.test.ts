@@ -8,6 +8,7 @@ import {
   handlesKey,
   hintText,
   joinHost,
+  primaryParts,
   keyAction,
   nextFocusIndex,
   perform,
@@ -162,6 +163,16 @@ describe("join host (decisions.md, join links are untrusted)", () => {
 
   it.each(LOCALES)("%s names the host in the button label", (locale) => {
     expect(primaryLabel(createCopy(locale), meeting(link("example.com", false)))).toContain("example.com");
+  });
+
+  // D3: the page shortens a long host with an ellipsis at its start, so the end that names the site stays.
+  it.each(LOCALES)("%s splits the label around the host and nothing else (D3)", (locale) => {
+    const c = createCopy(locale);
+    const m = meeting(link("video.conferencing.example.com", false));
+    const [before, host, after] = primaryParts(c, m);
+    expect(host).toBe("video.conferencing.example.com");
+    expect(before + host + after).toBe(primaryLabel(c, m));
+    expect(primaryParts(c, meeting(link("meet.google.com", true)))).toEqual([c.t.interrupt.joinCall, "", ""]);
   });
 });
 

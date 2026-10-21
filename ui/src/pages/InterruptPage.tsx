@@ -12,7 +12,7 @@ import {
   nextFocusIndex,
   perform,
   primaryAction,
-  primaryLabel,
+  primaryParts,
   SNOOZE_MINUTES,
   startClock,
   titleSize,
@@ -152,16 +152,26 @@ function InterruptView({ alarm, first, screen }: { alarm: AlarmShowDto; first: M
   const titleOf = (m: MeetingDto) => (alarm.test ? t.testTitle : m.title);
   const start = Date.parse(first.start);
 
-  const joinButton = (m: MeetingDto, size: "xl" | "lg") => (
-    <button
-      type="button"
-      className={`sm-btn tl-primary ${size}`}
-      data-action={primaryAction(m.join)}
-      onClick={() => void run(primaryAction(m.join), m)}
-    >
-      {primaryLabel(c, m)}
-    </button>
-  );
+  const joinButton = (m: MeetingDto, size: "xl" | "lg") => {
+    const [before, host, after] = primaryParts(c, m);
+    return (
+      <button
+        type="button"
+        className={`sm-btn tl-primary ${size}`}
+        data-action={primaryAction(m.join)}
+        onClick={() => void run(primaryAction(m.join), m)}
+      >
+        {before}
+        {host && (
+          // D3: a long host loses its start to an ellipsis; its end, the site, stays readable.
+          <span className="tl-host">
+            <bdi dir="ltr">{host}</bdi>
+          </span>
+        )}
+        {after}
+      </button>
+    );
+  };
 
   return (
     <main
