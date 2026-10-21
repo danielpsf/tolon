@@ -197,20 +197,38 @@ export function AddCalendarForm({
   );
 }
 
+/**
+ * Asks Rust whether this build can sign in with Google and tells `set` only when it can. Without a
+ * client ID, or when the question fails, `set` is never called, so the button stays hidden. Returns
+ * the cleanup that drops a late answer.
+ */
+export function watchGoogleAvailable(set: (available: true) => void): () => void {
+  let live = true;
+  api.calendarsGoogleAvailable().then(
+    (ok) => {
+      if (live && ok) set(true);
+    },
+    () => undefined,
+  );
+  return () => {
+    live = false;
+  };
+}
+
 /** True once Rust says this build can sign in with Google (a client ID is configured). */
 export function useGoogleAvailable(): boolean {
   const [available, setAvailable] = useState(false);
-  useEffect(() => {
-    let live = true;
-    api.calendarsGoogleAvailable().then(
-      (ok) => live && setAvailable(ok),
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
+  useEffect(() => watchGoogleAvailable(setAvailable), []);
   return available;
+}
+
+/**
+ * Whether going away now leaves a sign-in open in Rust: one still waiting for the browser, or a
+ * finished one whose calendars are on offer. Rust then ends it and revokes the grant nobody
+ * picked calendars from. Not while adding: `calendars_add_google` has taken the grant by then.
+ */
+export function opensSignIn(step: "idle" | "waiting" | "adding", hasAccount: boolean): boolean {
+  return step === "waiting" || (hasAccount && step !== "adding");
 }
 
 /**
@@ -224,6 +242,18 @@ export function GoogleSignIn({ onAdded }: { onAdded: (first: CalendarDto) => voi
   const [account, setAccount] = useState<GoogleAccountDto | null>(null);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  // The picker going away (the page changes, the window closes) abandons what is open.
+  const abandoned = useRef(false);
+  useEffect(() => {
+    abandoned.current = opensSignIn(step, account !== null);
+  }, [step, account]);
+  useEffect(
+    () => () => {
+      if (abandoned.current) void api.calendarsGoogleCancel().catch(() => undefined);
+    },
+    [],
+  );
 
   async function signIn() {
     if (step !== "idle") return;
