@@ -579,6 +579,88 @@ test("window rights: the settings window reads the pause and the current alarm, 
   assert.deepEqual(await invoke("notify_copy_set", { copy: {} }), { code: "invalid:notify_copy" });
 });
 
+// ---- Updates (L-019) ----------------------------------------------------------------------------
+// A debug build never checks for updates. The e2e build may point the updater at a `latest.json` on
+// 127.0.0.1 (`update_e2e_endpoint`, compiled only with the fetch seam). The signature is not one the
+// pubkey made, so Install downloads the file and then refuses it: Tolon keeps running. Versions grow
+// with the clock, because Windows keeps the skipped version in its data dir between runs.
+
+const TARGETS = ["linux", "windows", "darwin"].flatMap((os) => ["x86_64", "aarch64"].map((arch) => `${os}-${arch}`));
+
+/** Serves `latest.json` offering `state.version`, and the package it points at. */
+async function updateServer(state) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push(req.url);
+    const port = server.address().port;
+    if (req.url === "/latest.json") {
+      const platform = { signature: Buffer.from("not a minisign signature").toString("base64"), url: `http://127.0.0.1:${port}/tolon.bin` };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ version: state.version, notes: "", pub_date: new Date().toISOString(), platforms: Object.fromEntries(TARGETS.map((t) => [t, platform])) }));
+    } else {
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      res.end(Buffer.from("not an update"));
+    }
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { server, requests, port: server.address().port };
+}
+
+const byText = (text) => driver.findElements(By.xpath(`//*[normalize-space()=${JSON.stringify(text)}]`));
+/** Clicks the button once it is there and enabled (the page disables them while a command runs). */
+async function clickButton(text) {
+  const found = await driver.wait(until.elementLocated(By.xpath(`//button[normalize-space()=${JSON.stringify(text)}]`)), WAIT);
+  await driver.wait(until.elementIsEnabled(found), WAIT);
+  await found.click();
+}
+const shows = (step, text) => waitFor(step, async () => (await byText(text)).length > 0);
+
+test("ac11_1 a debug build does not check; a found update asks first, Later and Skip this version hold, a newer one asks again, and a bad signature installs nothing", async () => {
+  const run = Math.floor(Date.now() / 1000);
+  const state = { version: `9.${run}.0` };
+  const { server, requests, port } = await updateServer(state);
+  try {
+    assert.deepEqual(await invoke("update_status"), { answer: { available: null, installing: false } });
+    // No endpoint set: a debug build never asks the network.
+    assert.deepEqual(await invoke("update_check_now"), { answer: { available: null, installing: false } });
+    assert.deepEqual(requests, []);
+    // The test endpoint is loopback http only.
+    assert.deepEqual(await invoke("update_e2e_endpoint", { url: "https://example.com/latest.json" }), { code: "invalid_url" });
+    assert.deepEqual(await invoke("update_e2e_endpoint", { url: `http://127.0.0.1:${port}/latest.json` }), { answer: null });
+
+    await driver.executeScript(() => {
+      window.location.hash = "#/about";
+    });
+    await clickButton("Check for updates");
+    await shows("the offer", `Tolon ${state.version} is available.`);
+    assert.ok(requests.includes("/latest.json"));
+
+    // Later hides the prompt until the next check.
+    await clickButton("Later");
+    await clickButton("Check for updates");
+    await shows("the offer again after a check", `Tolon ${state.version} is available.`);
+
+    // Install downloads the package, the signature check refuses it, and Tolon keeps running.
+    await clickButton("Install and restart");
+    await shows("the refused install", "The update did not install. Tolon keeps running this version.");
+    assert.ok(requests.includes("/tolon.bin"), JSON.stringify(requests));
+    assert.equal((await invoke("update_status")).answer.installing, false);
+
+    // Skip this version is remembered; a newer version asks again.
+    await clickButton("Skip this version");
+    await clickButton("Check for updates");
+    await shows("no offer for the skipped version", "There is no new version to install.");
+    assert.deepEqual(await invoke("update_status"), { answer: { available: null, installing: false } });
+    state.version = `9.${run}.1`;
+    await clickButton("Check for updates");
+    await shows("the newer version", `Tolon ${state.version} is available.`);
+    await clickButton("Skip this version");
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 // ---- First run (L-018) --------------------------------------------------------------------------
 // Every test above removes what it adds, so Tolon has no calendar again, as on a first launch. A launch on
 // no page opens the settings window on first run (AC10.1); a first calendar that syncs hides it, and the
