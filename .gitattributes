@@ -1,3 +1,4 @@
+# Check text out with LF on every OS: tests read sources with include_str! and match line breaks.
+* text=auto eol=lf
 # Fixture feeds and snapshots are compared byte for byte; never convert their line endings.
 fixtures/** -text
-*.plist text eol=lf
