@@ -309,3 +309,7 @@ Choices made while building F13, adopted as the author recommended (overnight):
 ## 2026-10-22 Windows betas ship the NSIS installer only (first release run)
 The first `v0.1.0-beta.1` release run failed on Windows: WiX refuses a non-numeric pre-release in the MSI version ("optional pre-release identifier in app version must be numeric-only"). Overriding it (`bundle.windows.wix.version`) does not help, because MSI upgrades compare only the first three fields, so beta.1 to beta.2 would not upgrade an MSI install.
 - (Daniel approved the release plan; detail by the orchestrator) Pre-release versions build Windows as NSIS (`Tolon_<version>_x64-setup.exe`) only; the `.msi` comes back with the first plain version (`0.1.0`). This deviates from AC12.1 for the betas. `docs/install.md`, the README table and the release workflow follow. The first group of testers is macOS only anyway.
+
+## 2026-10-22 Release notes say what is new
+The first draft's notes were only `docs/install.md`, with a relative link that breaks on GitHub, and nothing about what the release contains.
+- (Daniel asked) Every release's notes are `docs/releases/<tag>.md` (what is new, known limits, how to report) followed by `docs/install.md` with its relative links rewritten to absolute `blob/<tag>/docs/...` links. The release workflow fails in preflight when `docs/releases/<tag>.md` is missing, so no tag ships without notes.
