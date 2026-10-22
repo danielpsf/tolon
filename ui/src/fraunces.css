@@ -1,0 +1,52 @@
+/*
+ * Peek's display face (L-050), Latin and Latin Extended (SIL OFL 1.1, @fontsource/fraunces). The package's own
+ * CSS also lists a .woff fallback per face; every webview Tolon targets (WKWebView, WebView2, WebKitGTK) loads
+ * woff2, so only that is shipped (L-062, about 135 KB less in dist). Other scripts keep the :lang() stacks in local.css.
+ */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(../node_modules/@fontsource/fraunces/files/fraunces-latin-400-normal.woff2) format("woff2");
+}
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(../node_modules/@fontsource/fraunces/files/fraunces-latin-600-normal.woff2) format("woff2");
+}
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(../node_modules/@fontsource/fraunces/files/fraunces-latin-700-normal.woff2) format("woff2");
+}
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(../node_modules/@fontsource/fraunces/files/fraunces-latin-ext-400-normal.woff2) format("woff2");
+}
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(../node_modules/@fontsource/fraunces/files/fraunces-latin-ext-600-normal.woff2) format("woff2");
+}
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(../node_modules/@fontsource/fraunces/files/fraunces-latin-ext-700-normal.woff2) format("woff2");
+}
