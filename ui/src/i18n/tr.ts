@@ -34,6 +34,7 @@ export const tr: Messages = {
     toggleLabel: (name) => `${name} takvimini etkinleştir`,
     addCalendar: "Takvim ekle",
     pasteIcalUrl: "iCal bağlantısı yapıştır",
+    secretAddressHelp: "Gizli adresini nasıl bulursun.",
     ignoreHeading: "Yok say",
     ignoreAllDay: "Tüm gün süren etkinlikler",
     ignoreDeclined: "Reddettiğim etkinlikler",

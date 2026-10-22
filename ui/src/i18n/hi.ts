@@ -35,6 +35,7 @@ export const hi: Messages = {
     toggleLabel: (name) => `कैलेंडर ${name} चालू करें`,
     addCalendar: "कैलेंडर जोड़ें",
     pasteIcalUrl: "iCal लिंक चिपकाएं",
+    secretAddressHelp: "अपना गुप्त पता कैसे ढूँढें।",
     ignoreHeading: "अनदेखा करें",
     ignoreAllDay: "पूरे दिन के इवेंट",
     ignoreDeclined: "जिन इवेंट को मैंने अस्वीकार किया",

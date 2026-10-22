@@ -35,6 +35,7 @@ export const enGB: Messages = {
     toggleLabel: (name) => `Enable calendar ${name}`,
     addCalendar: "Add calendar",
     pasteIcalUrl: "Paste an iCal link",
+    secretAddressHelp: "How to find your secret address.",
     ignoreHeading: "Ignore",
     ignoreAllDay: "All-day events",
     ignoreDeclined: "Events I declined",

@@ -584,6 +584,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn s1_3_a_look_alike_host_with_a_404_keeps_the_plain_status() {
+        for look_alike in [
+            "https://evil-google.com/calendar/ical/abc/public/basic.ics",
+            "https://calendar.google.com.evil.example/calendar/ical/abc/public/basic.ics",
+            "https://notcalendar.google.com/calendar/ical/abc/public/basic.ics",
+            "https://google.com/calendar/ical/abc/public/basic.ics",
+            // The host is what follows the @.
+            "https://calendar.google.com@evil.example/calendar/ical/abc/public/basic.ics",
+        ] {
+            let url = Url::parse(look_alike).unwrap();
+            let google = is_google_public_address(&url);
+            assert!(!google, "{look_alike}");
+            for status in [StatusCode::NOT_FOUND, StatusCode::FORBIDDEN] {
+                assert_eq!(
+                    status_error(status, google),
+                    FetchError::Status(status.as_u16()),
+                    "{look_alike}"
+                );
+            }
+        }
+    }
+
     #[tokio::test]
     async fn s1_5_sends_if_none_match_and_304_is_not_modified() {
         let (base, seen) = serve(vec![http("304 Not Modified", "", "")]).await;

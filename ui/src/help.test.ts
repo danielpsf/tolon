@@ -112,6 +112,13 @@ describe("the bundled help", () => {
   });
 });
 
+describe("the not-public message's help link", () => {
+  it("lands on a heading that exists in the bundled iCal guide (L-066)", () => {
+    const guide = sections.find((s) => s.id === "ical-links");
+    expect(guide?.html).toMatch(/<h\d id="help-google-calendar" tabindex="-1">Google Calendar<\/h\d>/);
+  });
+});
+
 describe("no markdown parser ships", () => {
   it("is a devDependency only, and nothing under src/ imports it", () => {
     const runtime = pkg.dependencies as Record<string, string>;

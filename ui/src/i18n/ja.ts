@@ -34,6 +34,7 @@ export const ja: Messages = {
     toggleLabel: (name) => `カレンダー「${name}」を有効にする`,
     addCalendar: "カレンダーを追加",
     pasteIcalUrl: "iCal リンクを貼り付け",
+    secretAddressHelp: "シークレット アドレスの見つけ方。",
     ignoreHeading: "除外",
     ignoreAllDay: "終日の予定",
     ignoreDeclined: "辞退した予定",
