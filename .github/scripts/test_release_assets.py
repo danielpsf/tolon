@@ -102,6 +102,57 @@ class Tag(unittest.TestCase):
         self.assertTrue(any("version" in e for e in ra.check_tag("v9.9.9")))
 
 
+class StampInstall(unittest.TestCase):
+    SRC = 'tolon_install() {\n  version="@TOLON_VERSION@"\n  case "$version" in "") ;; @*) ;; esac\n}\n'
+
+    def files(self, text):
+        d = Path(tempfile.mkdtemp())
+        (d / "install.sh").write_text(text)
+        return d / "install.sh", d / "out.sh"
+
+    def test_the_tag_version_replaces_the_placeholder_and_nothing_else(self):
+        src, out = self.files(self.SRC)
+        self.assertEqual(ra.stamp_install(src, out, "v0.1.0-beta.2"), [])
+        self.assertEqual(out.read_text(), self.SRC.replace("@TOLON_VERSION@", "0.1.0-beta.2"))
+
+    def test_a_missing_stamp_is_an_error_and_writes_nothing(self):
+        src, out = self.files('version="0.0.1"\n')
+        errors = ra.stamp_install(src, out, "v0.1.0")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("@TOLON_VERSION@", errors[0])
+        self.assertFalse(out.exists())
+
+    def test_two_stamps_are_an_error(self):
+        src, out = self.files(self.SRC + self.SRC)
+        self.assertEqual(len(ra.stamp_install(src, out, "v0.1.0")), 1)
+        self.assertFalse(out.exists())
+
+    def test_a_bad_tag_is_an_error(self):
+        src, out = self.files(self.SRC)
+        self.assertEqual(len(ra.stamp_install(src, out, '0.1.0"; rm -rf ~; "')), 1)
+        self.assertFalse(out.exists())
+
+    def test_the_repository_copy_holds_exactly_one_stamp(self):
+        self.assertEqual(len(ra.INSTALL_STAMP.findall(ra.INSTALL_SH.read_text())), 1)
+
+    def test_check_tag_reports_a_missing_stamp(self):
+        _, bare = self.files("tolon_install() { :; }\n")
+        with mock.patch.object(ra, "INSTALL_SH", bare.parent / "install.sh"):
+            self.assertTrue(any("install.sh" in e for e in ra.check_tag("v9.9.9")))
+
+
+class ReleaseWorkflow(unittest.TestCase):
+    def test_install_sh_is_stamped_before_the_checksums_are_written_and_is_uploaded(self):
+        text = (ra.ROOT / ".github/workflows/release.yml").read_text()
+        stamp = text.index("release_assets.py stamp-install install.sh dist/install.sh ")
+        sums = text.index("name: Write SHA256SUMS")
+        create = text.index("gh release create")
+        self.assertLess(stamp, sums)
+        self.assertLess(sums, create)
+        # `dist/*` is every file in dist, so dist/install.sh and SHA256SUMS go up with the installers.
+        self.assertIn("dist/*", text[create:].splitlines()[0])
+
+
 class Notes(unittest.TestCase):
     B = "https://github.com/o/r/blob/v1.0.0/"
 

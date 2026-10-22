@@ -4,6 +4,8 @@ mod ci;
 mod fixtures;
 mod fsutil;
 mod ids;
+#[cfg(test)]
+mod install_script;
 mod layers;
 mod release_features;
 mod scenario_ids;
