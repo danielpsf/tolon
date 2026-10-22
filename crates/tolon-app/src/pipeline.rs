@@ -110,10 +110,19 @@ pub fn set_enabled(db: &Db, id: &str, enabled: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// What a typed name becomes: control characters dropped, trimmed, cut to 80 characters. `None`
+/// Direction marks, embeddings, overrides and isolates: a name must not reorder the text around it.
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// What a typed name becomes: control and direction characters dropped, trimmed, cut to 80
+/// characters. The cut is by `char`, not by grapheme (that needs a new dependency). `None`
 /// (blank) clears the custom name.
 pub fn clean_name(raw: &str) -> Option<String> {
-    let name: String = raw.chars().filter(|c| !c.is_control()).collect();
+    let name: String = raw
+        .chars()
+        .filter(|c| !c.is_control() && !is_bidi_control(*c))
+        .collect();
     let name: String = name.trim().chars().take(MAX_NAME_CHARS).collect();
     let name = name.trim_end();
     (!name.is_empty()).then(|| name.to_owned())

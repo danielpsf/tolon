@@ -203,6 +203,14 @@ fn l067_rename_validates_the_id_and_the_name() -> TestResult {
     assert_eq!(clean_name(" \t\n "), None);
     assert_eq!(clean_name(""), None);
     assert_eq!(clean_name("Wor\nk\u{0}"), Some("Work".to_owned()));
+    // Direction marks, embeddings, overrides and isolates cannot reorder the text around the name.
+    assert_eq!(
+        clean_name("\u{202E}Wo\u{200F}rk\u{2066}\u{2069}\u{200E}\u{202A}"),
+        Some("Work".to_owned())
+    );
+    assert_eq!(clean_name("\u{202E}\u{2067}"), None);
+    // Arabic letters stay.
+    assert_eq!(clean_name("عمل"), Some("عمل".to_owned()));
     // Cut by characters, never in the middle of one; a cut that ends on a space drops it.
     let long = "é".repeat(200);
     assert_eq!(

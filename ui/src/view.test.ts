@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { asCommandError } from "./api";
 import type { CalendarDto } from "./api-types";
 import { createCopy } from "./copy";
-import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusOf, titleOf } from "./view";
+import { cancelsRename, errorText, titleParts, MAX_NAME_LENGTH, renameValue, statusOf, titleOf } from "./view";
 
 const en = createCopy("en-US");
 const now = Date.parse("2026-10-20T10:00:00Z");
@@ -115,6 +115,12 @@ describe("renaming a calendar (L-067)", () => {
 
   it("shows the custom name in the row title, as the core sends it in `name`", () => {
     expect(titleOf(calendar({ name: "Standups" }), en)).toBe("Standups, iCal subscription");
+  });
+
+  it("splits the title around the name so the page can isolate it", () => {
+    expect(titleParts(calendar({ name: "Standups" }), en)).toEqual(["", "Standups", ", iCal subscription"]);
+    expect(titleParts(calendar({ name: "Team", kind: "google" }), en)).toEqual(["", "Team", ", Google Calendar, signed in"]);
+    expect(titleParts(calendar({ name: "Team", kind: "other" }), en)).toEqual(["", "Team", ""]);
   });
 
   it("has the strings in the catalogue", () => {

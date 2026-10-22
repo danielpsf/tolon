@@ -24,6 +24,17 @@ export function titleOf(calendar: CalendarDto, c: Copy): string {
   return calendar.name;
 }
 
+const NAME_MARK = "\u0001";
+
+/**
+ * The row title as three parts, so the component can isolate the name: the locale decides where the
+ * name goes (and may isolate it too, ar and he do), the page keeps it from reordering the words around it.
+ */
+export function titleParts(calendar: CalendarDto, c: Copy): [before: string, name: string, after: string] {
+  const [before = "", after = ""] = titleOf({ ...calendar, name: NAME_MARK }, c).split(NAME_MARK);
+  return [before, calendar.name, after];
+}
+
 /** The longest custom calendar name; Rust cuts at 80 characters too. */
 export const MAX_NAME_LENGTH = 80;
 

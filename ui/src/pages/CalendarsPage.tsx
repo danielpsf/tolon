@@ -3,7 +3,7 @@ import { api, asCommandError } from "../api";
 import type { CalendarDto, GoogleAccountDto } from "../api-types";
 import { copy } from "../copy";
 import { useCalendars } from "../store";
-import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusOf, titleOf } from "../view";
+import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusOf, titleParts } from "../view";
 
 const TICK_MS = 30_000;
 
@@ -37,6 +37,7 @@ function Row({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const renameButton = useRef<HTMLButtonElement>(null);
+  const field = useRef<HTMLInputElement>(null);
   // The edit replaces the Rename button, so focus goes back to it once the edit has closed.
   const backToRow = useRef(false);
   useEffect(() => {
@@ -69,16 +70,28 @@ function Row({
       closeEdit();
     } catch (err) {
       setError(errorText(err, c));
+      // The field is read only while saving, so it keeps the focus; a click on Save moved it away.
+      field.current?.focus();
     }
     setBusy(false);
   }
 
+  const [before, shownName, after] = titleParts(calendar, c);
   return (
     <li className="sm-card tl-row">
       <span className={`sm-badge dot ${dot}`} aria-hidden="true" />
       {editing ? (
-        <form className="tl-edit sm-cluster" aria-busy={busy} onSubmit={(e) => void save(e)}>
+        <form
+          className="tl-edit sm-cluster"
+          aria-busy={busy}
+          onSubmit={(e) => void save(e)}
+          // Esc cancels from the input and from Save and Cancel alike.
+          onKeyDown={(e) => {
+            if (cancelsRename(e.nativeEvent)) closeEdit();
+          }}
+        >
           <input
+            ref={field}
             className="sm-input"
             type="text"
             autoComplete="off"
@@ -89,11 +102,8 @@ function Row({
             placeholder={t.renamePlaceholder}
             aria-invalid={error !== null}
             value={draft}
-            disabled={busy}
+            readOnly={busy}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (cancelsRename(e.nativeEvent)) closeEdit();
-            }}
           />
           <button type="submit" className="sm-btn primary sm" aria-disabled={busy}>
             {t.renameSave}
@@ -110,7 +120,9 @@ function Row({
       ) : (
         <span className="tl-text">
           <span className="tl-name" onClick={startEdit}>
-            {titleOf(calendar, c)}
+            {before}
+            <bdi>{shownName}</bdi>
+            {after}
           </span>
           {calendar.display_url && <span className="sm-caption">{calendar.display_url}</span>}
           {calendar.account && (
@@ -120,7 +132,7 @@ function Row({
           )}
         </span>
       )}
-      <span className={`tl-status${status.failed ? " failed" : ""}`}>{status.text}</span>
+      {!editing && <span className={`tl-status${status.failed ? " failed" : ""}`}>{status.text}</span>}
       <span className="tl-remove">
         <button
           ref={renameButton}
