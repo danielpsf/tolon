@@ -4,8 +4,10 @@
 //! Steps:
 //! 1. Put an app in native full screen on one display: QuickTime (play any file, View, Enter Full
 //!    Screen), Keynote (Play), or `raise -- fullscreen` below.
-//! 2. From a terminal, start the control: `cargo run -p tolon-platform --example raise -- plain`.
+//! 2. From a terminal, start the control: `cargo run -p tolon-platform --example raise -- plain --regular`.
 //!    Expected: nothing appears over the full-screen app. The windows stay hidden behind it.
+//!    (Plain `plain` now shows over full screen too, because `prepare_app` makes Tolon an
+//!    accessory app since L-042; only `--regular` reproduces the hidden case.)
 //! 3. Run the real call: `cargo run -p tolon-platform --example raise -- raise`.
 //!    Expected: a moss green window with the label "Tolon raise test" covers every display,
 //!    including the one with the full-screen app.
