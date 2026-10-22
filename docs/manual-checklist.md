@@ -18,6 +18,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] AC12.3 Fresh user account: install from the DMG following `docs/install.md` only; reach first run.
 - [ ] AC11.2 Install an update through the in-app updater; note whether Gatekeeper asks again.
 - [ ] L-044 With Tolon running and its menu bar icon hidden behind the notch, opening Tolon again from Finder or Spotlight brings the settings window to the front.
+- [ ] L-068 Cmd-Tab lists Tolon (and the Dock shows its icon) while the Settings window is open, and does not after closing it (red button or Cmd+W). Open Settings, then let a real alarm fire over a full-screen app (QuickTime full screen, event 3 min ahead from a local `.ics`): the reminder still covers the full-screen Space (L-042). After Esc with Settings still open, Tolon is listed in Cmd-Tab again; with `TOLON_LOG=debug` the line "settle: the settings window is shown, Regular again" appears.
 - [ ] AC3.4 Sleep the Mac across an alarm time with a full-screen app open; after wake the interrupt shows over it within 15 s. NOT RUN on macOS (macOS 27.0.1, debug build of 9d7d3dc (`--features e2e-loopback`), L-033, 2026-10-22): the Mac was not put to sleep.
 
 ## Windows
