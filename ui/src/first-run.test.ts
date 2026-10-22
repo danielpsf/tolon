@@ -193,6 +193,36 @@ describe("first run (F10)", () => {
     expect(t.trayMenuBar).not.toBe(t.traySystemTray);
   });
 
+  // L-062: "Click the Tolon / icon" broke after "Tolon". The name of the icon is joined with no-break spaces in
+  // every locale (where a script has spaces), and the sentence ends on it.
+  const ICON: Record<(typeof LOCALES)[number], string> = {
+    "en-US": "Tolon\u00a0icon",
+    "en-GB": "Tolon\u00a0icon",
+    de: "Symbol\u00a0von\u00a0Tolon",
+    es: "icono\u00a0de\u00a0Tolon",
+    "pt-BR": "ícone\u00a0do\u00a0Tolon",
+    "pt-PT": "ícone\u00a0do\u00a0Tolon",
+    ar: "أيقونة\u00a0Tolon",
+    tr: "Tolon\u00a0simgesine",
+    hi: "Tolon\u00a0आइकन",
+    he: "הסמל\u00a0של\u00a0Tolon",
+    ja: "Tolon\u00a0のアイコン",
+    "zh-CN": "Tolon\u00a0图标",
+  };
+
+  it.each(LOCALES)("%s step 3 keeps the name of the Tolon icon on one line", (locale) => {
+    const body = createCopy(locale).t.firstRun.trayBody;
+    expect(body).toContain(ICON[locale]);
+    // No plain space is left between the words of the phrase.
+    expect(body).not.toContain(ICON[locale].replaceAll("\u00a0", " "));
+    expect(body.trim()).toBe(body);
+  });
+
+  it("covers every locale and ends the English sentence on the icon", () => {
+    expect(Object.keys(ICON).sort()).toEqual([...LOCALES].sort());
+    for (const locale of ["en-US", "en-GB"] as const) expect(createCopy(locale).t.firstRun.trayBody).toMatch(/click the Tolon\u00a0icon\.$/);
+  });
+
   it.each(LOCALES)("%s step 3 says how to bring the window back when the tray icon is hidden", (locale) => {
     const t = createCopy(locale).t.firstRun;
     expect(trayHidden(t, "menu_bar")).toBe(t.trayHiddenMenuBar);

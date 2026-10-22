@@ -196,7 +196,7 @@ export const enGB: Messages = {
     tryBody: "A test alarm shows you exactly what will happen. Esc snoozes, Enter joins.",
     trayMenuBar: "Tolon is in the menu bar",
     traySystemTray: "Tolon is in the system tray",
-    trayBody: "This window closes once you add a calendar. Click the Tolon icon to see today's meetings, pause alarms or open the settings.",
+    trayBody: "This window closes once you add a calendar. To see today's meetings, pause alarms or open the settings, click the Tolon\u00a0icon.",
     trayHiddenMenuBar: "If the menu bar hides the icon, open Tolon again from Finder or Spotlight to bring this window back.",
     trayHiddenSystemTray: "If the icon is hidden, open Tolon again from your list of apps to bring this window back.",
     pasteIcal: "Paste an iCal link",

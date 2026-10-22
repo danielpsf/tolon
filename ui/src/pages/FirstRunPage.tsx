@@ -52,6 +52,7 @@ export function FirstRunPage() {
   const [testing, setTesting] = useTestAlarmOpen();
   const paste = useRef<HTMLButtonElement>(null);
   const color = colorAttr(useSettings((s) => s.settings?.interrupt_color));
+  const peek = useSettings((s) => s.settings?.style) === "peek";
   const google = useGoogleAvailable();
 
   // Focus on the primary button, never "Try a test alarm" (Enter would take over the screen), and
@@ -163,8 +164,8 @@ export function FirstRunPage() {
         {google && <GoogleSignIn onAdded={(calendar) => void firstCalendarAdded(calendar)} />}
         <p className="sm-caption">{t.footer}</p>
       </div>
-      {/* In the reminder colour the person chose (L-043), as the test alarm will be. */}
-      <AlarmPreview color={color} />
+      {/* In the reminder colour and style the person chose (L-043, L-062), as the test alarm will be. */}
+      <AlarmPreview color={color} peek={peek} />
     </main>
   );
 }

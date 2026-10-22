@@ -566,3 +566,36 @@ Round 1 raised no issue in any locale, so no catalogue changed and round 2 was n
 ### Issues and decisions
 
 Round 1 raised no issue in any locale, so no round 2 was needed. Native review is still required before release.
+
+## L-062
+
+One changed string of L-062: `firstRun.trayBody`, step 3 of first run, in all 12 catalogues. "Click the Tolon / icon" broke after "Tolon". The second sentence now gives the purpose first and the click last ("To see today's meetings, pause alarms or open the settings, click the Tolon icon."), and the name of the icon is joined with no-break spaces (U+00A0, written ` ` in the catalogues) so it never splits: `Tolon icon`, `Symbol von Tolon`, `icono de Tolon`, `ícone do Tolon`, `أيقونة Tolon`, `Tolon simgesine`, `Tolon आइकन`, `הסמל של Tolon`, `Tolon のアイコン`, `Tolon 图标`. Drafted by the implementing agent (Claude Opus 5.5). en-US is the source.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, at most 2 rounds.
+- One locale per call, 12 calls (en-US is judged as English). Each prompt holds the string with where it shows (the no-break space is shown as `<NBSP>` and explained as deliberate), the en-US source, the locale's neighbouring strings (`trayMenuBar`, `traySystemTray`, `addBody`, `tryBody`, `trayHiddenMenuBar`) and the copy rules.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-US | 1 | 521 | 308 (285) | 829 | 6.3 | 0 | ok |
+| en-GB | 1 | 515 | 297 (285) | 812 | 5.2 | 0 | ok |
+| pt-BR | 1 | 540 | 448 (425) | 988 | 7.3 | 0 | ok |
+| pt-PT | 1 | 543 | 420 (397) | 963 | 9.2 | 0 | ok |
+| de | 1 | 545 | 1037 (1014) | 1582 | 11.5 | 0 | ok |
+| es | 1 | 535 | 381 (374) | 916 | 11.4 | 0 | ok |
+| ar | 1 | 549 | 415 (408) | 964 | 4.4 | 0 | ok |
+| tr | 1 | 540 | 398 (375) | 938 | 5.7 | 0 | ok |
+| hi | 1 | 538 | 377 (370) | 915 | 6.9 | 0 | ok |
+| zh-CN | 1 | 522 | 405 (382) | 927 | 5.6 | 0 | ok |
+| ja | 1 | 538 | 552 (529) | 1090 | 6.9 | 0 | ok |
+| he | 1 | 589 | 531 (514) | 1120 | 6.1 | 0 | ok |
+| All (12 calls) | | 6475 | 5569 | 12044 | | 0 | |
+
+### Issues and decisions
+
+Round 1 raised no issue in any locale (four answers left out the empty `issues` list and said `ok`), so no catalogue changed and round 2 was not needed. Native review is still required before release.
+
+Wrapping, measured in headless Chromium at 1040 x 760 (the 554 px step column): the phrase sits on one line in all 12 locales. Step 3's first paragraph takes 2 lines in en-US, en-GB, es, pt-PT, ar, tr, hi, zh-CN and he, and 3 lines in de, pt-BR and ja. Japanese and Chinese have no word spaces, so only the Latin name and the particle or first character are joined; a break inside the katakana word or between two Han characters stays possible.

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { InterruptColor } from "../api-types";
 
 /**
@@ -9,22 +10,34 @@ export const peekColor = (color: InterruptColor): InterruptColor => (color === "
 /**
  * The moss hill with the Peek character, after the poll's mockup (decision "The poll picks Peek"). Inline
  * SVG drawn with Swiss Moss tokens only (local.css, `.tl-peek`); decorative, so hidden from screen readers.
- * The coordinates are design pixels at 1280 wide; the art scales with the window's width. No motion.
+ * The coordinates are design pixels at 1280 wide; the art scales with the window's width. No motion: the
+ * fireflies are still, soft glows (a radial gradient of the text colour), so nothing needs a reduced-motion
+ * variant. `card` is the small picture in the Appearance and first-run previews (L-062).
  */
-export function PeekScene({ color, say }: { color: InterruptColor; say: string }) {
+export function PeekScene({ color, say, card = false }: { color: InterruptColor; say: string; card?: boolean }) {
+  const glow = `tl-peek-glow-${useId().replace(/:/g, "")}`;
   return (
-    <div className="tl-peek" aria-hidden="true" data-color={peekColor(color)} data-tokens="light">
+    <div className={card ? "tl-peek tl-peek-card" : "tl-peek"} aria-hidden="true" data-color={peekColor(color)} data-tokens="light">
       <svg className="tl-peek-art" viewBox="0 0 1280 600" focusable="false">
+        <defs>
+          <radialGradient id={glow}>
+            <stop className="tl-peek-glow-core" offset="0" />
+            <stop className="tl-peek-glow-mid" offset="0.35" />
+            <stop className="tl-peek-glow-rim" offset="1" />
+          </radialGradient>
+        </defs>
         <ellipse className="tl-peek-mound" cx="205" cy="476" rx="215" ry="260" />
         <ellipse className="tl-peek-mound" cx="1075" cy="476" rx="215" ry="260" />
         <ellipse className="tl-peek-shade" cx="240" cy="500" rx="185" ry="204" />
         <ellipse className="tl-peek-shade" cx="1040" cy="500" rx="185" ry="204" />
         {/* The page bulges into the hill and points at Peek. */}
         <path className="tl-peek-page" d="M0 -2H1280V0Q640 106 0 0ZM676 44L640 78L604 44Z" />
-        <g className="tl-peek-glow">
-          <circle cx="310" cy="92" r="10" />
-          <circle cx="210" cy="138" r="10" />
-          <circle cx="1055" cy="152" r="10" />
+        {/* The page's edge, so a hill the colour of the page (Ink on dark, Paper on light) still reads. The pointer's top is not stroked. */}
+        <path className="tl-peek-edge" d="M0 0Q306.7 50.8 613.4 52.9L640 78L666.6 52.9Q973.3 50.8 1280 0" />
+        <g className="tl-peek-glow" fill={`url(#${glow})`}>
+          <circle cx="310" cy="92" r="30" />
+          <circle cx="210" cy="138" r="30" />
+          <circle cx="1055" cy="152" r="30" />
         </g>
         <g className="tl-peek-fly">
           <circle cx="310" cy="92" r="3.5" />

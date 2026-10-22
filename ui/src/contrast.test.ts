@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { INTERRUPT_COLORS, type InterruptColor } from "./api-types";
-import { peekColor } from "./pages/PeekScene";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { peekColor, PeekScene } from "./pages/PeekScene";
 import { LINE_MIX, PREVIEW_TOKENS, REMINDER_PAIRS, tokensFor } from "./reminder-colors";
 import local from "./styles/local.css?raw";
 import tokens from "swiss-moss/tokens/tokens.css?raw";
@@ -281,21 +283,33 @@ describe("preview tokens (AC4.3, L-043)", () => {
 const PEEK = '[data-style="peek"]';
 const HINT = `.tl-int-hint,\n${PEEK} .tl-int-consequence`;
 
-/** A Peek value as hex: `--sm-*` in `theme`, `--tl-*` from the pinned pair of `color`, `--pk-*` from the page. */
-function peekResolve(theme: Theme, color: InterruptColor, value: string): string {
+/** A Peek value as hex: `--sm-*` in `theme`, `--tl-*` from the pinned pair of `color`, `--pk-*` from the page (`scope`: the reminder, or the preview card). */
+function peekResolve(theme: Theme, color: InterruptColor, value: string, scope = ".tl-int"): string {
   const name = /^var\((--(?:sm|tl|pk)-[\w-]+)\)$/.exec(value)?.[1];
   if (!name) throw new Error(`${value} is not a token`);
-  if (name.startsWith("--pk-")) return peekResolve(theme, color, declaration(`${PEEK} .tl-int`, name));
+  if (name.startsWith("--pk-")) return peekResolve(theme, color, declaration(`${PEEK} ${scope}`, name), scope);
   const field = TL[name as keyof typeof TL];
   return field ? hexOf("light", REMINDER_PAIRS[peekColor(color)][field]) : hexOf(theme, name);
 }
 
 type At = [selector: string, property: string];
-const peekHex = (theme: Theme, color: InterruptColor, [selector, property]: At) =>
-  peekResolve(theme, color, declaration(`${PEEK} ${selector}`, property));
+const peekHex = (theme: Theme, color: InterruptColor, [selector, property]: At, scope?: string) =>
+  peekResolve(theme, color, declaration(`${PEEK} ${selector}`, property), scope);
+/** The same for a rule inside the pinned hill (`data-tokens="light"`): its `--sm-*` tokens are the light ones in a dark window too (L-062). */
+const pinnedHex = (color: InterruptColor, at: At) => peekHex("light", color, at);
 const PAGE: At = [".tl-int", "background"];
 
-// [what it is, background, text]; Join, the chip and the bubble are pinned, the rest follow the page.
+/**
+ * The page's soft radial top (L-062) reaches `--sm-paper-deep` at this share over paper, towards the sides. Text can
+ * sit anywhere, so every pair on the page is measured on the darkest tone, and every edge on both tones.
+ */
+const VIGNETTE = Number(/color-mix\(in srgb, var\(--sm-paper-deep\) (\d+)%, transparent\)/.exec(declaration(`${PEEK} .tl-int`, "background-image"))?.[1]);
+const pageTones = (theme: Theme) => [hexOf(theme, "--sm-paper"), mix(hexOf(theme, "--sm-paper-deep"), hexOf(theme, "--sm-paper"), VIGNETTE / 100)] as const;
+/** Against the worse of the page's two tones. */
+const onPage = (theme: Theme, colour: string) => Math.min(...pageTones(theme).map((page) => contrast(colour, page)));
+
+// [what it is, background, text]; Join and the chip are pinned through --tl-*, the speech bubble through its
+// ancestor's data-tokens (PINNED below), the rest follow the page.
 const PEEK_PAIRS: [string, At, At][] = [
   ["title and page text", PAGE, [".tl-int", "color"]],
   ["details", PAGE, [".tl-int-details", "color"]],
@@ -309,6 +323,14 @@ const PEEK_PAIRS: [string, At, At][] = [
   ["the Enter chip", [".tl-peek-key", "background"], [".tl-peek-key", "color"]],
   ["the speech bubble", [".tl-peek-say", "background"], [".tl-peek-say", "color"]],
 ];
+
+/** Pairs drawn inside the hill's `data-tokens="light"` block: they resolve in the light tokens whatever the appearance. */
+const PINNED = new Set(["the speech bubble"]);
+const peekPair = (theme: Theme, color: InterruptColor, [name, bg, fg]: [string, At, At]) => {
+  if (PINNED.has(name)) return contrast(pinnedHex(color, bg), pinnedHex(color, fg));
+  const text = peekHex(theme, color, fg);
+  return bg === PAGE ? onPage(theme, text) : contrast(peekHex(theme, color, bg), text);
+};
 
 // Every button's edge and the focus ring sit on the page, so they are measured against it (3:1).
 const PEEK_EDGES: [string, At][] = [
@@ -325,15 +347,19 @@ describe("Peek contrast in light and dark (AC4.3, L-050)", () => {
   });
 
   it.each(PEEK_EVERY)("%s in %s: every text pair reaches 4.5:1", (color, theme) => {
-    for (const [name, bg, fg] of PEEK_PAIRS) {
-      expect(contrast(peekHex(theme, color, bg), peekHex(theme, color, fg)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(4.5);
-    }
+    for (const pair of PEEK_PAIRS) expect(peekPair(theme, color, pair), `${color} ${theme}: ${pair[0]}`).toBeGreaterThanOrEqual(4.5);
   });
 
   it.each(PEEK_EVERY)("%s in %s: button edges and the focus ring reach 3:1 on the page", (color, theme) => {
     for (const [name, edge] of PEEK_EDGES) {
-      expect(contrast(peekHex(theme, color, edge), peekHex(theme, color, PAGE)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(3);
+      expect(onPage(theme, peekHex(theme, color, edge)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it("the speech bubble sits inside the hill's light-pinned block, so it is measured in light tokens (L-062)", () => {
+    const html = renderToStaticMarkup(createElement(PeekScene, { color: "theme", say: "It's time." }));
+    expect(html).toMatch(/^<div class="tl-peek"[^>]* data-tokens="light"[\s\S]*<p class="tl-peek-say">/);
+    expect(PINNED.has("the speech bubble")).toBe(true);
   });
 
   it("uses Swiss Moss tokens only, no hex, in the Peek block", () => {
@@ -347,14 +373,135 @@ describe("Peek contrast in light and dark (AC4.3, L-050)", () => {
   // The table for the L-050 report (Default): a token change shows up here as a diff.
   it("has these ratios for Default in light and dark", () => {
     const rows = APPEARANCES.map((theme) => {
-      const r = (bg: At, fg: At) => contrast(peekHex(theme, "theme", bg), peekHex(theme, "theme", fg)).toFixed(2);
-      const text = PEEK_PAIRS.map(([name, bg, fg]) => `${name} ${r(bg, fg)}`);
-      const edges = PEEK_EDGES.map(([name, edge]) => `${name} ${r(PAGE, edge)}`);
+      const text = PEEK_PAIRS.map((pair) => `${pair[0]} ${peekPair(theme, "theme", pair).toFixed(2)}`);
+      const edges = PEEK_EDGES.map(([name, edge]) => `${name} ${onPage(theme, peekHex(theme, "theme", edge)).toFixed(2)}`);
       return `${theme}: ${[...text, ...edges].join(", ")}`;
     });
     expect(rows).toEqual([
-      "light: title and page text 16.64, details 4.71, key hint and consequence 4.98, countdown in the time pill 15.08, clock on the moss chip 7.74, Snooze and Dismiss 15.08, Snooze and Dismiss hovered 13.40, Join 7.74, Join hovered 5.00, the Enter chip 7.74, the speech bubble 15.08, Snooze and Dismiss edge 3.33, Join edge 3.33, focus ring 16.64",
-      "dark: title and page text 14.26, details 8.61, key hint and consequence 7.15, countdown in the time pill 13.03, clock on the moss chip 11.11, Snooze and Dismiss 13.03, Snooze and Dismiss hovered 9.67, Join 7.74, Join hovered 5.00, the Enter chip 7.74, the speech bubble 13.03, Snooze and Dismiss edge 3.46, Join edge 3.46, focus ring 14.26",
+      "light: title and page text 16.05, details 4.55, key hint and consequence 4.80, countdown in the time pill 15.08, clock on the moss chip 7.74, Snooze and Dismiss 15.08, Snooze and Dismiss hovered 13.40, Join 7.74, Join hovered 5.00, the Enter chip 7.74, the speech bubble 15.08, Snooze and Dismiss edge 3.21, Join edge 3.21, focus ring 16.05",
+      "dark: title and page text 13.75, details 8.30, key hint and consequence 6.89, countdown in the time pill 13.03, clock on the moss chip 11.11, Snooze and Dismiss 13.03, Snooze and Dismiss hovered 9.67, Join 7.74, Join hovered 5.00, the Enter chip 7.74, the speech bubble 15.08, Snooze and Dismiss edge 3.34, Join edge 3.34, focus ring 13.75",
+    ]);
+  });
+});
+
+// ---- The hill against the page (L-062) ------------------------------------------------------------------
+// Ink on a dark page and Paper on a light one draw a hill the colour of the page (1.0x), so the cream bulge, the
+// pointer and Join's fill had nothing to stand against. The page's edge is a 2px stroke of the control line, which
+// reaches 3:1 on the page; it sits on every colour, so none depends on a ratio that happens to be high enough.
+
+describe("the hill reads against the page for every colour (L-062)", () => {
+  const hill = (color: InterruptColor) => hexOf("light", REMINDER_PAIRS[peekColor(color)].bg);
+
+  it("draws the page's edge as an unfilled stroke of the page's control line that keeps its width", () => {
+    const edge = rule(`${PEEK} .tl-peek-edge`);
+    expect(edge).toContain("fill: none;");
+    expect(edge).toContain("stroke: var(--pk-line);");
+    expect(edge).toContain("vector-effect: non-scaling-stroke;");
+    expect(declaration(`${PEEK} .tl-int`, "--pk-line")).toBe("var(--sm-control-line)");
+    const html = renderToStaticMarkup(createElement(PeekScene, { color: "ink", say: "It's time." }));
+    expect(html).toContain('class="tl-peek-edge"');
+  });
+
+  it.each(PEEK_EVERY)("%s in %s: the edge reaches 3:1 on the page, so the bulge and the pointer show", (color, theme) => {
+    const line = peekResolve(theme, color, declaration(`${PEEK} .tl-peek-edge`, "stroke"));
+    expect(onPage(theme, line), `${color} ${theme}`).toBeGreaterThanOrEqual(3);
+    // The bulge is flat paper, the page's lighter tone, where the radial top is nearly clear.
+    expect(contrast(line, peekResolve(theme, color, declaration(`${PEEK} .tl-peek-page`, "fill")))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the numbers: the hill on the page, with and without the edge", () => {
+    const rows = PEEK_EVERY.map(([color, theme]) => {
+      const [paper] = pageTones(theme);
+      const line = peekResolve(theme, color, declaration(`${PEEK} .tl-peek-edge`, "stroke"));
+      return `${color} ${theme}: hill ${contrast(hill(color), paper).toFixed(2)}, edge ${contrast(line, paper).toFixed(2)}`;
+    });
+    expect(rows).toEqual([
+      "theme light: hill 7.29, edge 3.33",
+      "theme dark: hill 2.29, edge 3.46",
+      "moss light: hill 4.71, edge 3.33",
+      "moss dark: hill 3.54, edge 3.46",
+      "moss-deep light: hill 7.29, edge 3.33",
+      "moss-deep dark: hill 2.29, edge 3.46",
+      "ink light: hill 16.64, edge 3.33",
+      "ink dark: hill 1.00, edge 3.46",
+      "paper light: hill 1.00, edge 3.33",
+      "paper dark: hill 16.71, edge 3.46",
+      "info light: hill 6.75, edge 3.33",
+      "info dark: hill 2.48, edge 3.46",
+      "signal light: hill 5.02, edge 3.33",
+      "signal dark: hill 3.33, edge 3.46",
+      "danger light: hill 6.43, edge 3.33",
+      "danger dark: hill 2.60, edge 3.46",
+    ]);
+  });
+});
+
+describe("the page's soft radial top (L-062)", () => {
+  it("is Swiss Moss's paper-deep at most 40% over paper, in the background-image, never the fill the pairs are read from", () => {
+    expect(VIGNETTE).toBe(40);
+    expect(declaration(`${PEEK} .tl-int`, "background")).toBe("var(--sm-paper)");
+    expect(declaration(`${PEEK} .tl-int`, "background-image")).toMatch(/^radial-gradient\(ellipse [\d.]+% [\d.]+% at 50% \d+%, transparent \d+%, color-mix\(/);
+  });
+
+  it("is still: the scene and the Peek block have no animation, transition or keyframes, so prefers-reduced-motion has nothing to stop", () => {
+    const block = local.slice(local.indexOf(" * Peek (L-050"), local.indexOf(" * Right to left"));
+    expect(block).not.toMatch(/animation|transition|@keyframes/);
+    const scene = renderToStaticMarkup(createElement(PeekScene, { color: "theme", say: "It's time." }));
+    expect(scene).not.toMatch(/<animate|<set\b|animation|transition/);
+    // The fireflies are a radial gradient of the text colour: a token stop colour, a still halo and a still core.
+    expect(scene).toMatch(/<radialGradient id="tl-peek-glow-\w+">/);
+    expect(scene).toMatch(/<g class="tl-peek-glow" fill="url\(#tl-peek-glow-\w+\)">/);
+    for (const stop of ["core", "mid", "rim"]) expect(rule(`${PEEK} .tl-peek-glow-${stop}`)).toContain("stop-color: var(--tl-fg);");
+    expect(rule(`${PEEK} .tl-peek-glow-rim`)).toContain("stop-opacity: 0;");
+  });
+});
+
+// ---- Peek in the previews (L-062) ---------------------------------------------------------------------------
+// The Appearance and first-run previews draw a small Peek card when Peek is chosen: the page follows the card's
+// tokens, the hill, Join and the bubble are the reminder colour pinned to light. The card keeps L-046's border.
+
+const CARD = ".tl-preview-peek";
+const cardHex = (theme: Theme, color: InterruptColor, [selector, property]: At) => peekHex(theme, color, [selector, property], CARD);
+const CARD_PAGE: At = [CARD, "background"];
+const CARD_PAIRS: [string, At, At][] = [
+  ["card text", CARD_PAGE, [CARD, "color"]],
+  ["details", CARD_PAGE, [`${CARD} .tl-preview-details`, "color"]],
+  ["countdown in the pill", [`${CARD} .tl-preview-top`, "background"], [CARD, "color"]],
+  ["clock chip", [`${CARD} .tl-preview-top > :first-child`, "background"], [`${CARD} .tl-preview-top > :first-child`, "color"]],
+  ["Snooze and Dismiss", [`${CARD} .sm-btn`, "background"], [`${CARD} .sm-btn`, "color"]],
+  ["Join", [`${CARD} .sm-btn.tl-primary`, "background"], [`${CARD} .sm-btn.tl-primary`, "color"]],
+];
+const CARD_EDGES: [string, At][] = [
+  ["Snooze and Dismiss edge", [`${CARD} .sm-btn`, "border-color"]],
+  ["Join edge", [`${CARD} .sm-btn.tl-primary`, "border-color"]],
+];
+
+describe("Peek previews in light and dark (L-062)", () => {
+  it.each(PEEK_EVERY)("%s in %s: every text pair of the card reaches 4.5:1 and every edge 3:1 on the card's page", (color, theme) => {
+    for (const [name, bg, fg] of CARD_PAIRS) {
+      expect(contrast(cardHex(theme, color, bg), cardHex(theme, color, fg)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const [name, edge] of CARD_EDGES) {
+      expect(contrast(cardHex(theme, color, edge), cardHex(theme, color, CARD_PAGE)), `${color} ${theme}: ${name}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("the card's page and edge are resolved on the card, in its own tokens, and the hill below draws them", () => {
+    expect(declaration(`${PEEK} ${CARD}`, "--pk-page")).toBe("var(--sm-paper)");
+    expect(declaration(`${PEEK} ${CARD}`, "--pk-line")).toBe("var(--sm-control-line)");
+    // L-046: the card keeps its border, read against the window's page.
+    expect(declaration(".tl-preview", "border")).toBe("1px solid var(--tl-edge)");
+  });
+
+  it("the numbers: Default in light and dark", () => {
+    const rows = APPEARANCES.map((theme) => {
+      const text = CARD_PAIRS.map(([name, bg, fg]) => `${name} ${contrast(cardHex(theme, "theme", bg), cardHex(theme, "theme", fg)).toFixed(2)}`);
+      const edges = CARD_EDGES.map(([name, edge]) => `${name} ${contrast(cardHex(theme, "theme", edge), cardHex(theme, "theme", CARD_PAGE)).toFixed(2)}`);
+      return `${theme}: ${[...text, ...edges].join(", ")}`;
+    });
+    expect(rows).toEqual([
+      "light: card text 16.64, details 4.71, countdown in the pill 15.08, clock chip 7.74, Snooze and Dismiss 15.08, Join 7.74, Snooze and Dismiss edge 3.33, Join edge 3.33",
+      "dark: card text 14.26, details 8.61, countdown in the pill 13.03, clock chip 11.11, Snooze and Dismiss 13.03, Join 7.74, Snooze and Dismiss edge 3.46, Join edge 3.46",
     ]);
   });
 });
@@ -376,29 +523,31 @@ describe("the mark's outline reaches 3:1 against what it sits on (L-052)", () =>
   it.each(PEEK_EVERY)("Peek reminder, %s in %s: the outline reaches 3:1 on the time pill and on the page", (color, theme) => {
     const edge = peekHex(theme, color, [".tl-int-count", "--tl-mark-edge"]);
     expect(contrast(edge, peekHex(theme, color, [".tl-int-top", "background"])), `${color} ${theme}: pill`).toBeGreaterThanOrEqual(3);
-    expect(contrast(edge, peekHex(theme, color, PAGE)), `${color} ${theme}: page`).toBeGreaterThanOrEqual(3);
+    expect(onPage(theme, edge), `${color} ${theme}: page`).toBeGreaterThanOrEqual(3);
   });
 
   it.each(APPEARANCES)("settings sidebar, tray panel and first run in %s: the default outline reaches 3:1", (theme) => {
     const edge = hexOf(theme, "--sm-muted");
     expect(declaration(".tl-mark-edge", "stroke")).toBe("var(--tl-mark-edge, var(--sm-muted))");
-    // The sidebar is paper-deep (.tl-side); the panel and first run sit on the paper.
-    expect(declaration(".tl-side", "background")).toBe("var(--sm-paper-deep)");
-    for (const page of ["--sm-paper-deep", "--sm-paper"]) {
+    // The sidebar is paper-deep (.tl-side), the panel is --sm-card (.tl-panel, L-062) and first run sits on the paper.
+    const surface = (selector: string) => /^var\((--sm-[\w-]+)\)$/.exec(declaration(selector, "background"))?.[1] ?? "";
+    expect([surface(".tl-side"), surface(".tl-panel")]).toEqual(["--sm-paper-deep", "--sm-card"]);
+    for (const page of ["--sm-paper-deep", "--sm-card", "--sm-paper"]) {
       expect(contrast(edge, hexOf(theme, page)), `${theme}: ${page}`).toBeGreaterThanOrEqual(3);
     }
   });
 
-  it("the numbers: Default light and dark, Peek pill, sidebar", () => {
+  it("the numbers: Default light and dark, Peek pill, sidebar, panel", () => {
     const rows = APPEARANCES.map((theme) => {
       const swiss = contrast(hexOf(theme, REMINDER_PAIRS.theme.fg), hexOf(theme, REMINDER_PAIRS.theme.bg));
       const pill = contrast(peekHex(theme, "theme", [".tl-int-count", "--tl-mark-edge"]), peekHex(theme, "theme", [".tl-int-top", "background"]));
       const side = contrast(hexOf(theme, "--sm-muted"), hexOf(theme, "--sm-paper-deep"));
-      return `${theme}: reminder ${swiss.toFixed(2)}, Peek pill ${pill.toFixed(2)}, sidebar ${side.toFixed(2)}`;
+      const panel = contrast(hexOf(theme, "--sm-muted"), hexOf(theme, "--sm-card"));
+      return `${theme}: reminder ${swiss.toFixed(2)}, Peek pill ${pill.toFixed(2)}, sidebar ${side.toFixed(2)}, panel ${panel.toFixed(2)}`;
     });
     expect(rows).toEqual([
-      "light: reminder 5.00, Peek pill 4.51, sidebar 4.51",
-      "dark: reminder 8.61, Peek pill 6.53, sidebar 6.53",
+      "light: reminder 5.00, Peek pill 4.51, sidebar 4.51, panel 5.28",
+      "dark: reminder 8.61, Peek pill 6.53, sidebar 6.53, panel 6.26",
     ]);
   });
 });

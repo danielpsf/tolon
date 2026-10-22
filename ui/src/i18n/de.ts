@@ -196,7 +196,7 @@ export const de: Messages = {
     tryBody: "Ein Testalarm zeigt dir genau, was passieren wird. Esc: schlummern, Enter: teilnehmen.",
     trayMenuBar: "Tolon ist in der Menüleiste",
     traySystemTray: "Tolon ist im Infobereich",
-    trayBody: "Dieses Fenster schließt sich, sobald du einen Kalender hinzufügst. Klicke auf das Tolon-Symbol, um die heutigen Termine zu sehen, Alarme zu pausieren oder die Einstellungen zu öffnen.",
+    trayBody: "Dieses Fenster schließt sich, sobald du einen Kalender hinzufügst. Um die heutigen Termine zu sehen, Alarme zu pausieren oder die Einstellungen zu öffnen, klicke auf das Symbol\u00a0von\u00a0Tolon.",
     trayHiddenMenuBar: "Verdeckt die Menüleiste das Symbol, öffne Tolon erneut über den Finder oder Spotlight, dann erscheint dieses Fenster wieder.",
     trayHiddenSystemTray: "Ist das Symbol ausgeblendet, öffne Tolon erneut über deine App-Liste, dann erscheint dieses Fenster wieder.",
     pasteIcal: "iCal-Link einfügen",

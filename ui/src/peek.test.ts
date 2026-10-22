@@ -163,8 +163,8 @@ describe("the Peek reminder (AC4.3, AC4.4, L-050)", () => {
     expect(scene).toContain('<svg class="tl-peek-art" viewBox="0 0 1280 600" focusable="false">');
     for (const part of ["eye", "pupil", "shine", "cheek", "smile", "dome"]) expect(scene).toContain(`tl-peek-${part}`);
     expect(scene).toContain('<p class="tl-peek-say">It&#x27;s time.</p>');
-    // Colours come from local.css: no fill or stroke in the markup, and nothing moves.
-    expect(scene).not.toMatch(/fill=|stroke=|style=|#[0-9A-Fa-f]{3,6}/);
+    // Colours come from local.css: no fill or stroke in the markup but the fireflies' gradient reference (L-062), and nothing moves.
+    expect(scene).not.toMatch(/fill="(?!url\(#tl-peek-glow-\w+\)")|stroke=|style=|#[0-9A-Fa-f]{3,6}\b/);
     expect(local.slice(local.indexOf(" * Peek (L-050"), local.indexOf(" * Right to left"))).not.toMatch(/animation|transition|@keyframes/);
   });
 
