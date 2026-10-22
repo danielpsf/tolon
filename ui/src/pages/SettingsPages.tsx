@@ -483,10 +483,10 @@ export function AppearancePage() {
             </div>
             <div className="tl-color-preview">
               <style>{PREVIEW_TOKENS}</style>
-              <AlarmPreview color={color} tokens={tokens} />
+              <AlarmPreview color={color} tokens={tokens} peek={s.style === "peek"} />
               <div className="sm-cluster">
-                {/* Only Default changes with the appearance; the other colours look the same in both. */}
-                {color === "theme" && (
+                {/* Only Default changes with the appearance; the other colours look the same in both. In Peek the page follows it whatever the colour. */}
+                {(color === "theme" || s.style === "peek") && (
                   <button
                     type="button"
                     className="sm-btn"

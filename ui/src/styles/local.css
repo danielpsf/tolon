@@ -756,6 +756,12 @@
   justify-items: center;
   padding: calc(40 * var(--tl-u)) 0 0;
   background: var(--sm-paper);
+  /*
+   * The poll's soft radial top: the page is paper in the middle and up to 40% paper-deep towards the sides. The
+   * bulge below stays flat paper, where the gradient is nearly clear. A webview without color-mix draws the flat page.
+   * contrast.test.ts measures every text pair on the 40% mix, the darkest page there is.
+   */
+  background-image: radial-gradient(ellipse 58% 85% at 50% 22%, transparent 42%, color-mix(in srgb, var(--sm-paper-deep) 40%, transparent) 100%);
   color: var(--sm-ink);
   text-align: center;
 }
@@ -941,13 +947,30 @@
   stroke-width: 7;
   stroke-linecap: round;
 }
+/* The page's edge (L-062): the control line, which reaches 3:1 on the page, in a 2 px stroke that keeps its width as the art scales. */
+[data-style="peek"] .tl-peek-edge {
+  fill: none;
+  stroke: var(--pk-line);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+/* Fireflies (L-062): a still core and a soft halo, a radial gradient from the text colour to nothing. No motion, so nothing changes under prefers-reduced-motion. */
 [data-style="peek"] .tl-peek-fly {
   fill: var(--tl-fg);
-  opacity: 0.55;
+  opacity: 0.85;
 }
-[data-style="peek"] .tl-peek-glow {
-  fill: var(--tl-fg);
-  opacity: 0.12;
+[data-style="peek"] .tl-peek-glow-core {
+  stop-color: var(--tl-fg);
+  stop-opacity: 0.5;
+}
+[data-style="peek"] .tl-peek-glow-mid {
+  stop-color: var(--tl-fg);
+  stop-opacity: 0.16;
+}
+[data-style="peek"] .tl-peek-glow-rim {
+  stop-color: var(--tl-fg);
+  stop-opacity: 0;
 }
 /* "It's time." beside Peek (198 and 80 design pixels from the top centre, at 1280 wide). */
 [data-style="peek"] .tl-peek-say {
@@ -976,6 +999,94 @@
 }
 :root[dir="rtl"][data-style="peek"] .tl-peek-say::before {
   clip-path: polygon(100% 100%, 55% 0, 0 30%);
+}
+
+/*
+ * The Appearance and first-run previews in Peek (L-062): a small card with the page above and the hill below, after
+ * the reminder. The page follows the card's tokens (the window's, or the other appearance on "Preview in dark"); the
+ * hill, Join and the bubble take the reminder colour pinned to light, as the reminder does. The border is the card's
+ * own, resolved against the window's page (L-046).
+ */
+[data-style="peek"] .tl-preview-peek {
+  /* Resolved here, in the card's tokens, so the pinned hill below draws the card's page and edge. */
+  --pk-page: var(--sm-paper);
+  --pk-line: var(--sm-control-line);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--sm-paper);
+  color: var(--sm-ink);
+  text-align: center;
+}
+[data-style="peek"] .tl-preview-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sm-space-2);
+  padding: var(--sm-space-5) var(--sm-space-4) var(--sm-space-4);
+}
+[data-style="peek"] .tl-preview-page > p {
+  margin: 0;
+}
+[data-style="peek"] .tl-preview-peek .tl-preview-top {
+  justify-content: center;
+  gap: var(--sm-space-2);
+  margin-bottom: var(--sm-space-1);
+  padding: 3px;
+  padding-inline-end: var(--sm-space-3);
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-paper-deep);
+  font-family: var(--sm-font-display);
+  font-weight: 600;
+}
+[data-style="peek"] .tl-preview-peek .tl-preview-top > :first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sm-space-1);
+  padding: 3px var(--sm-space-2);
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-moss-deep);
+  color: var(--sm-on-moss);
+}
+[data-style="peek"] .tl-preview-peek .tl-preview-top > :first-child::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sm-signal);
+}
+[data-style="peek"] .tl-preview-peek .tl-preview-title {
+  font-weight: 700;
+}
+[data-style="peek"] .tl-preview-peek .tl-preview-details {
+  color: var(--sm-moss);
+  font-family: var(--sm-font-display);
+}
+[data-style="peek"] .tl-preview-peek .tl-preview-actions {
+  justify-content: center;
+  margin-top: var(--sm-space-2);
+}
+[data-style="peek"] .tl-preview-peek .sm-btn {
+  border-color: var(--pk-line);
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-paper-deep);
+  color: var(--sm-ink);
+  font-family: var(--sm-font-display);
+  font-weight: 600;
+}
+[data-style="peek"] .tl-preview-peek .sm-btn.tl-primary {
+  border-color: var(--pk-line);
+  background: var(--tl-bg);
+  color: var(--tl-fg);
+}
+/* The hill, cropped to Peek's head: the bulge, the eyes and the cheeks; the bubble is placed in percent of the card. */
+[data-style="peek"] .tl-peek-card {
+  --tl-c: 0.6px;
+  aspect-ratio: 1280 / 340;
+}
+[data-style="peek"] .tl-peek-card .tl-peek-say {
+  top: 23.5%;
+  inset-inline-start: calc(50% + 15.5%);
 }
 
 /*
