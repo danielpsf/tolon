@@ -31,6 +31,9 @@ jobs:
             echo "::error title=Release secrets missing::Add these repository secrets, then push the tag again:$missing. Settings, Secrets and variables, Actions. Create the key once with: npm --prefix ui run tauri -- signer generate -w ~/.tauri/tolon.key"
             exit 1
           fi
+      - name: Release notes exist
+        run: |
+          [ -s "docs/releases/$GITHUB_REF_NAME.md" ] || { echo "::error title=Release notes missing::Write docs/releases/$GITHUB_REF_NAME.md (what is new, known limits, how to report), merge it, then move the tag."; exit 1; }
       - name: Release helper tests
         run: python3 -m unittest discover -s .github/scripts
       - name: Tag, versions and updater config agree
@@ -150,7 +153,9 @@ jobs:
           find . -maxdepth 1 -type f -printf '%f\n' | sort | xargs sha256sum > "$RUNNER_TEMP/SHA256SUMS"
           mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
           cat SHA256SUMS
-      - name: Create the draft release with docs/install.md as its notes
+      - name: Write the release notes
+        run: python3 .github/scripts/release_assets.py notes "$GITHUB_REF_NAME" docs/install.md "$RUNNER_TEMP/notes.md" "$GITHUB_REPOSITORY"
+      - name: Create the draft release with docs/releases/TAG.md and docs/install.md as its notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -162,4 +167,4 @@ jobs:
             exit 1
           fi
           # Not marked pre-release: the updater endpoint is releases/latest/download/latest.json, and GitHub's "latest" skips pre-releases.
-          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --title "Tolon $GITHUB_REF_NAME" --notes-file docs/install.md
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --title "Tolon $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
