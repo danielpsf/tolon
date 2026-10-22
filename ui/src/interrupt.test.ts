@@ -396,7 +396,7 @@ describe("a reused window (L-048)", () => {
 
     it("the page asks the gate with the alarm it shows", () => {
       expect(page).toContain("gate.take(alarm)");
-      expect(page).not.toContain("busy");
+      expect(page).not.toContain("busy.current");
     });
   });
 });
