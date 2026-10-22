@@ -462,19 +462,23 @@ for (const [name, keys] of KEY_CASES) {
 
 const stamp = (date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
-function alarmFeed(uid, title, start) {
+function alarmFeed(uid, title, start, twin = null) {
+  const event = (id, summary) => [
+    "BEGIN:VEVENT",
+    `UID:${id}@example.com`,
+    `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART:${stamp(start)}`,
+    `DTEND:${stamp(new Date(start.getTime() + 30 * 60_000))}`,
+    `SUMMARY:${summary}`,
+    "END:VEVENT",
+  ];
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Tolon e2e//EN",
     "X-WR-CALNAME:Alarm fixture",
-    "BEGIN:VEVENT",
-    `UID:${uid}@example.com`,
-    `DTSTAMP:${stamp(new Date())}`,
-    `DTSTART:${stamp(start)}`,
-    `DTEND:${stamp(new Date(start.getTime() + 30 * 60_000))}`,
-    `SUMMARY:${title}`,
-    "END:VEVENT",
+    ...event(uid, title),
+    ...(twin ? event(twin.uid, twin.title) : []),
     "END:VCALENDAR",
     "",
   ].join("\r\n");
@@ -486,9 +490,12 @@ const alarmRows = () =>
     window.__TAURI_INTERNALS__.invoke("alarms_e2e_state").then(done, (e) => done(JSON.stringify(e)));
   });
 
-/** Adds the feed, waits for its interrupt, runs `body` on it, then closes up. `body` gets the main handle. */
-async function withImminentMeeting(uid, title, body) {
-  const { server, port } = await fixtureServer(alarmFeed(uid, title, new Date(Date.now() + 90_000)));
+/**
+ * Adds the feed, waits for its interrupt, runs `body` on it, then closes up. `body` gets the main handle.
+ * A `twin` ({ uid, title }) starts in the same minute, so one reminder shows both meetings.
+ */
+async function withImminentMeeting(uid, title, body, twin = null) {
+  const { server, port } = await fixtureServer(alarmFeed(uid, title, new Date(Date.now() + 90_000), twin));
   const main = await driver.getWindowHandle();
   try {
     const input = await openAddForm();
@@ -499,7 +506,8 @@ async function withImminentMeeting(uid, title, body) {
       return found.length > 0 && found;
     });
     await driver.switchTo().window(handles[0]);
-    assert.equal(await (await find(".tl-int-title")).getText(), title);
+    if (twin) await find(".tl-int-list");
+    else assert.equal(await (await find(".tl-int-title")).getText(), title);
     await body(main);
   } finally {
     await driver.switchTo().window(main).catch(() => undefined);
@@ -542,6 +550,39 @@ test("s3_3 D dismisses the alarm for good", async () => {
     assert.equal((await leadOf("e2e-dismiss")).state, "dismissed");
   });
 });
+
+// L-059: two meetings in the same minute share one reminder. Settling one keeps the window (and, since L-048,
+// the page with its focus), and the meeting that is left must take its keys at once.
+for (const [name, key, state] of [
+  ["D", "d", "dismissed"],
+  ["Esc", Key.ESCAPE, "snoozed"],
+]) {
+  test(`l059 after one of two same-minute meetings is settled, ${name} still works on the other`, async () => {
+    const [a, b] = [`e2e-twin-a-${name}`, `e2e-twin-b-${name}`];
+    await withImminentMeeting(
+      a,
+      "Twin A",
+      async (main) => {
+        await driver.switchTo().window((await interruptHandles(main))[0]);
+        const titles = await driver.executeScript(() => [...document.querySelectorAll(".tl-int-item h2")].map((h) => h.textContent));
+        assert.deepEqual([...titles].sort(), ["Twin A", "Twin B"]);
+        // No join link in the feed: each primary button is "I am already there", a partial join without a browser.
+        await (await find('.tl-int-item [data-action="already_there"]')).click();
+        await waitFor("the other meeting to be the only one left", async () => {
+          if ((await driver.findElements(By.css(".tl-int-list"))).length > 0) return false;
+          return (await (await find(".tl-int-title")).getText()) === titles[1];
+        });
+        assert.equal((await interruptHandles(main)).length, 1);
+        await driver.switchTo().window((await interruptHandles(main))[0]);
+        await pressAndWaitForClose(main, key);
+        const rows = await alarmRows();
+        const lead = (uid) => rows.find((r) => r.key.includes(`:${uid}@`) && r.kind === "lead");
+        assert.deepEqual([lead(a).state, lead(b).state].sort(), ["joined", state].sort());
+      },
+      { uid: b, title: "Twin B" },
+    );
+  });
+}
 
 // The windows are kept between alarms (L-048): one per screen for the whole run, hidden on close and
 // shown again for the next alarm, which shows its own meeting and starts with the focus on the primary button.

@@ -4,6 +4,7 @@ import type { JoinDto, MeetingDto } from "./api-types";
 import { createCopy, LOCALES } from "./copy";
 import {
   countdownText,
+  createActionGate,
   detailsText,
   handlesKey,
   hintText,
@@ -338,5 +339,64 @@ describe("a reused window (L-048)", () => {
     expect(page).not.toContain("key={first.key}");
     // `alarm:hide` only clears the alarm: the window outlives it and listens for the next one.
     expect(page).toContain('onAlarmHide(() => dispatch({ type: "hide" }))');
+  });
+
+  // L-059: a partial join keeps the view (same `shown`), so what blocks a second action must not outlive the alarm it was taken on.
+  describe("after a partial join (L-059)", () => {
+    const pair = () => ({
+      test: false,
+      meetings: [
+        meeting(link("meet.google.com", true), { title: "First", key: "cal:a@2026-10-20T14:00:00Z" }),
+        meeting(link("meet.google.com", true), { title: "Second", key: "cal:b@2026-10-20T14:00:00Z" }),
+      ],
+    });
+    const [, second] = pair().meetings;
+
+    /** The page's sequence: join the first meeting, then the backend sends the group without it. */
+    const afterPartialJoin = () => {
+      const gate = createActionGate();
+      let view = nextAlarmView(NO_ALARM, { type: "show", alarm: pair() });
+      const group = view.alarm;
+      expect(group && gate.take(group)).toBe(true);
+      view = nextAlarmView(view, { type: "show", alarm: { test: false, meetings: second ? [second] : [] } });
+      expect(view.shown).toBe(1);
+      return { gate, rest: view.alarm, group };
+    };
+
+    it("D works on the meeting that is left", () => {
+      const { gate, rest } = afterPartialJoin();
+      expect(rest && gate.take(rest)).toBe(true);
+    });
+
+    it("Esc works on the meeting that is left, once", () => {
+      const { gate, rest } = afterPartialJoin();
+      expect(rest && gate.take(rest)).toBe(true);
+      expect(rest && gate.take(rest)).toBe(false);
+    });
+
+    it("a press while an action is in flight, or after it went through, is ignored", () => {
+      const { gate, group } = afterPartialJoin();
+      expect(group && gate.take(group)).toBe(false);
+    });
+
+    it("a failed action opens its alarm again", () => {
+      const gate = createActionGate();
+      const alarm = pair();
+      expect(gate.take(alarm)).toBe(true);
+      gate.release(alarm);
+      expect(gate.take(alarm)).toBe(true);
+    });
+
+    it("a late failure of the first press does not unlock an alarm that was acted on since", () => {
+      const { gate, rest, group } = afterPartialJoin();
+      expect(rest && gate.take(rest)).toBe(true);
+      if (group) gate.release(group);
+      expect(rest && gate.take(rest)).toBe(false);
+    });
+
+    it("the page asks the gate with the alarm it shows", () => {
+      expect(page).toContain("gate.take(alarm)");
+      expect(page).not.toContain("busy");
+    });
   });
 });

@@ -164,6 +164,26 @@ export function perform(action: Action, key: string): Promise<void> {
 }
 
 /**
+ * One action per alarm on screen. A second press on the same alarm while the first is in flight, or after
+ * it went through, is ignored: the window closes on success, so it must not send a second command. An
+ * update of the alarm (`alarm:show` while it is up, as after a partial join) is a new object, so the
+ * meetings that remain can be acted on at once. A failed action opens its alarm again.
+ */
+export function createActionGate() {
+  let held: AlarmShowDto | null = null;
+  return {
+    take(alarm: AlarmShowDto): boolean {
+      if (held === alarm) return false;
+      held = alarm;
+      return true;
+    },
+    release(alarm: AlarmShowDto): void {
+      if (held === alarm) held = null;
+    },
+  };
+}
+
+/**
  * What one interrupt window knows. The window is reused for every alarm (it is hidden on close, not
  * destroyed), so `shown` counts the alarms it was told to show. The view is keyed by it: every
  * alarm that follows a hide, even a repeat of the same meeting after a snooze, starts a fresh view
