@@ -14,7 +14,15 @@ export const zhCN: Messages = {
     appearance: "外观",
     language: "语言",
     startup: "启动",
+    help: "帮助",
     about: "关于",
+  },
+  help: {
+    subtitle: "帮助目前仅提供英文。",
+    sectionsLabel: "帮助章节",
+    install: "安装",
+    icalLinks: "获取 iCal 链接",
+    diagnostics: "诊断",
   },
   calendars: {
     title: "日历",

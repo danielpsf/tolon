@@ -26,7 +26,15 @@ export const ar: Messages = {
     appearance: "المظهر",
     language: "اللغة",
     startup: "بدء التشغيل",
+    help: "المساعدة",
     about: "حول",
+  },
+  help: {
+    subtitle: "المساعدة متوفرة بالإنجليزية فقط في الوقت الحالي.",
+    sectionsLabel: "أقسام المساعدة",
+    install: "التثبيت",
+    icalLinks: "الحصول على رابط iCal",
+    diagnostics: "التشخيص",
   },
   calendars: {
     title: "التقويمات",

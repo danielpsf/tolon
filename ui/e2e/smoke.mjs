@@ -12,6 +12,7 @@ import { after, before, test } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { Builder, By, error, Key, until } from "selenium-webdriver";
+import { readDocs } from "../help/docs.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const application = join(root, "target", "debug", process.platform === "win32" ? "tolon-app.exe" : "tolon-app");
@@ -1001,6 +1002,40 @@ test("ac11_1 a debug build does not check; a found update asks first, Later and 
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+// ---- Help (L-071) ------------------------------------------------------------------------------
+// The release's own docs, converted when the UI was built. Under the app's CSP, so a bundled image that loads
+// proves img-src. A web address goes to the system browser through `app_open_url`; this suite only checks the
+// command refuses what is not one, so no browser opens on the runner.
+
+test("l071 Help shows the install guide of this commit, a link inside it opens the iCal guide, and only web addresses leave Tolon", async () => {
+  await driver.executeScript(() => {
+    window.location.hash = "#/help";
+  });
+  const article = await find(".tl-help");
+  await waitFor("the install heading", async () => (await article.findElement(By.css("h2")).getText()) === "Install Tolon");
+  // Staleness: the hash inside the build is the hash of the docs this suite runs from.
+  assert.equal(await article.getAttribute("data-docs-hash"), readDocs(join(root, "docs")).hash);
+  const imagesLoaded = await driver.executeAsyncScript((done) => {
+    const images = [...document.querySelectorAll(".tl-help img")];
+    Promise.all(images.map((i) => i.decode().then(() => i.naturalWidth > 0, () => false))).then((ok) => done(images.length > 0 && ok.every(Boolean)));
+  });
+  assert.ok(imagesLoaded, "the install guide's images did not load");
+
+  await (await find('.tl-help a[href="#/help/ical-links"]')).click();
+  await waitFor("the iCal guide", async () => (await (await find(".tl-help h2")).getText()) === "Get an iCal link for your calendar");
+  assert.equal(await driver.executeScript(() => window.location.hash), "#/help/ical-links");
+  assert.equal(await (await find('.sm-tabs a[aria-current="page"]')).getText(), "Get an iCal link");
+  const external = await driver.findElements(By.css(".tl-help a[data-external]"));
+  assert.ok(external.length > 0, "the iCal guide has web links that open in the system browser");
+
+  for (const url of ["javascript:alert(1)", "file:///etc/passwd", "ftp://example.com/x", "https://example.com/a b"]) {
+    assert.deepEqual(await invoke("app_open_url", { url }), { code: "invalid_url" }, url);
+  }
+  await driver.executeScript(() => {
+    window.location.hash = "#/calendars";
+  });
 });
 
 // ---- First run (L-018) --------------------------------------------------------------------------

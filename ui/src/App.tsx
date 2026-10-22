@@ -5,6 +5,7 @@ import { startFirstRunWatch, useFirstRun } from "./first-run";
 import { AboutPage } from "./pages/AboutPage";
 import { CalendarsPage } from "./pages/CalendarsPage";
 import { FirstRunPage } from "./pages/FirstRunPage";
+import { HelpPage } from "./pages/HelpPage";
 import {
   AlarmsPage,
   AppearancePage,
@@ -26,14 +27,15 @@ export const PAGES = [
   { id: "appearance", key: "appearance", Page: AppearancePage },
   { id: "language", key: "language", Page: LanguagePage },
   { id: "startup", key: "startup", Page: StartupPage },
+  { id: "help", key: "help", Page: HelpPage },
   { id: "about", key: "about", Page: AboutPage },
 ] as const;
 
 type PageId = (typeof PAGES)[number]["id"];
 
-/** `#/alarms` to "alarms"; anything unknown is Calendars. */
+/** `#/alarms` to "alarms", `#/help/ical-links` to "help" (the rest of the path is the page's own); anything unknown is Calendars. */
 function routeOf(hash: string): PageId {
-  const id = hash.replace(/^#\/?/, "");
+  const id = hash.replace(/^#\/?/, "").split("/")[0];
   return PAGES.find((p) => p.id === id)?.id ?? "calendars";
 }
 

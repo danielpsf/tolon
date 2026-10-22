@@ -702,6 +702,33 @@ pub async fn tray_tooltip(
     Ok(())
 }
 
+/// Longest address `app_open_url` opens; the docs' links are far shorter.
+const OPEN_URL_MAX: usize = 2048;
+
+/// Only a web address: `http://` or `https://`, no spaces or control characters. Anything else
+/// (`javascript:`, `file:`, a program's own scheme) is not opened.
+fn is_web_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    (lower.starts_with("https://") || lower.starts_with("http://"))
+        && url.len() <= OPEN_URL_MAX
+        && !url.chars().any(|c| c.is_control() || c.is_whitespace())
+}
+
+/// A link in Settings, Help (L-071) opens in the default browser through `tauri-plugin-opener`,
+/// called here in Rust: the plugin is not registered, so the webview has no opener command of its
+/// own and can only ask for a web address through this one.
+#[tauri::command]
+pub async fn app_open_url(window: tauri::WebviewWindow, url: String) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    if !is_web_url(&url) {
+        return Err(command_error(&AppError::INVALID_URL.into()));
+    }
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|_| {
+        tracing::warn!(url = %tolon_sync::redact_url(&url), "could not open a help link in the browser");
+        command_error(&AppError::INTERNAL.into())
+    })
+}
+
 /// The fallback notification's wording in the person's language, handed over by the settings
 /// window (the only one with the catalogues) when it loads and when the language changes (L-038).
 /// Validated and stored whole; a bundle that is not valid is `invalid:notify_copy` and changes
@@ -918,6 +945,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn help_links_open_only_web_addresses() {
+        for ok in [
+            "https://example.com/a?b=1#c",
+            "http://example.com",
+            "HTTPS://Example.com",
+        ] {
+            assert!(is_web_url(ok), "{ok}");
+        }
+        let too_long = format!("https://example.com/{}", "a".repeat(OPEN_URL_MAX));
+        for bad in [
+            "",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/html,x",
+            "mailto:a@example.com",
+            "webcal://example.com/a.ics",
+            "//example.com",
+            "/relative",
+            "https://example.com/a b",
+            "https://example.com/\n",
+            " https://example.com",
+            too_long.as_str(),
+        ] {
+            assert!(!is_web_url(bad), "{bad:?}");
+        }
+    }
+
     /// The window check each command starts with (decision "Tray panel, pause and window rights").
     const CHECKED: &[(&str, &str)] = &[
         ("calendars_list", "main_only"),
@@ -951,6 +1006,7 @@ mod tests {
         ("app_hide_settings", "main_only"),
         ("app_tray_place", "main_only"),
         ("tray_tooltip", "main_only"),
+        ("app_open_url", "main_only"),
         ("notify_copy_set", "main_only"),
         ("update_status", "main_or_panel"),
         ("update_check_now", "main_only"),
