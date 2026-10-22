@@ -39,7 +39,7 @@ xattr -dr com.apple.quarantine /Applications/Tolon.app
 One line in the Terminal installs Tolon and skips the Open Anyway steps:
 
 ```
-curl -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
 ```
 
 The copy of `install.sh` on each release installs that release. Here is what it does, in order:
@@ -49,14 +49,14 @@ The copy of `install.sh` on each release installs that release. Here is what it 
 3. It checks the `.dmg` against its line in `SHA256SUMS`. If the line is missing or the checksum does not match, it stops and deletes the download.
 4. It opens the `.dmg` read-only at a temporary mount point.
 5. It copies Tolon into `/Applications`, or into `Applications` in your home folder when you cannot write to `/Applications`. If Tolon is already installed and running, it quits Tolon first and then replaces it.
-6. It closes the `.dmg`, deletes the temporary folder, tells you where Tolon is installed and opens it.
+6. It tells you where Tolon is installed and opens it. Then it closes the `.dmg` and deletes the temporary folder.
 
 It never asks for your password and never uses `sudo`.
 
 To read the script before you run it, save it, look at it, and run the saved copy:
 
 ```
-curl -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh -o install.sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh -o install.sh
 less install.sh
 sh install.sh
 ```
@@ -132,7 +132,7 @@ If Tolon does something wrong, such as an alarm that did not ring or a calendar 
 
 ## Known limits
 
-- macOS: the first start needs the Open Anyway step above.
+- macOS: the first start needs the Open Anyway step above. The Terminal install skips that prompt, because it checks the file itself.
 - macOS: the alarm covers every screen and every desktop, and it sits above apps in full screen. It stays up when you switch desktops. Join, snooze or dismiss it to close it on all screens.
 - Windows: Windows may not let Tolon take the keyboard from the program you are using. Tolon always shows the alarm on top. But Enter, Esc, D and Space may do nothing until you click the alarm or press Alt+Tab to it. The buttons always work. A program in full-screen mode, such as some games, may still draw over the alarm.
 - Linux with Wayland: the system may not let Tolon cover the whole screen. Tolon then shows a notification with Join and Snooze and plays the alarm sound instead. Sessions that use X11 get the full-screen alarm.

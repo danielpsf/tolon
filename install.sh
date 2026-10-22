@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs Tolon on macOS:  curl -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
+# Installs Tolon on macOS:  curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
 # What it does, and how to read it first: docs/install.md, "Install from the Terminal".
 # The whole script is one function, called on the last line, so a download that is cut off runs nothing.
 # The copy attached to a release is stamped with that release's version (release_assets.py stamp-install).
@@ -12,8 +12,10 @@ tolon_install() {
   repo="danielpsf/tolon"
   version="@TOLON_VERSION@"
   apps="${TOLON_APPLICATIONS:-/Applications}"
+  uid=$(id -u)
 
   say() { printf '%s\n' "$*"; }
+  fetch() { curl --proto '=https' --tlsv1.2 -fsSL "$@"; }
   fail() { printf 'Tolon was not installed. %s\n' "$*" >&2; exit 1; }
 
   if [ "$(uname -s)" != "Darwin" ]; then
@@ -24,7 +26,7 @@ tolon_install() {
   case "$version" in
     ""|@*)
       say "Looking up the latest version of Tolon."
-      version=$(curl -fsSL "https://github.com/$repo/releases/latest/download/latest.json" |
+      version=$(fetch "https://github.com/$repo/releases/latest/download/latest.json" |
         sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1) || version=""
       ;;
   esac
@@ -36,14 +38,14 @@ tolon_install() {
 
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/tolon-install.XXXXXX") || fail "Could not create a temporary folder."
   mounted=0
-  trap 'if [ "$mounted" = 1 ]; then hdiutil detach -quiet "$tmp/mnt" >/dev/null 2>&1 || hdiutil detach -force -quiet "$tmp/mnt" >/dev/null 2>&1 || true; fi; rm -rf "$tmp"' EXIT
+  trap 'if [ "$mounted" = 1 ]; then hdiutil detach -quiet "$tmp/mnt" >/dev/null 2>&1 </dev/null || hdiutil detach -force -quiet "$tmp/mnt" >/dev/null 2>&1 </dev/null || true; fi; rm -rf "$tmp"' EXIT
   trap 'exit 1' HUP INT TERM
 
   say "Downloading Tolon $version."
-  curl -fsSL "$base/$dmg" -o "$tmp/$dmg" || fail "The download of $dmg failed. Check your connection and try again."
-  curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS" || fail "The download of SHA256SUMS failed. Check your connection and try again."
+  fetch "$base/$dmg" -o "$tmp/$dmg" || fail "The download of $dmg failed. Check your connection and try again."
+  fetch "$base/SHA256SUMS" -o "$tmp/SHA256SUMS" || fail "The download of SHA256SUMS failed. Check your connection and try again."
 
-  awk -v f="$dmg" '$2 == f || $2 == "*" f' "$tmp/SHA256SUMS" > "$tmp/SHA256SUMS.dmg"
+  awk -v f="$dmg" 'length($1) == 64 && ($2 == f || $2 == "*" f)' "$tmp/SHA256SUMS" > "$tmp/SHA256SUMS.dmg"
   [ -s "$tmp/SHA256SUMS.dmg" ] || fail "SHA256SUMS has no line for $dmg, so the download cannot be checked."
   (cd "$tmp" && shasum -a 256 -c SHA256SUMS.dmg >/dev/null 2>&1) ||
     fail "The checksum of $dmg does not match SHA256SUMS. The download was deleted. Try again, and report it if it keeps happening."
@@ -61,11 +63,11 @@ tolon_install() {
   fi
   dest="$apps/Tolon.app"
 
-  if [ -e "$dest" ] && pgrep -x tolon-app >/dev/null 2>&1; then
+  if [ -e "$dest" ] && pgrep -U "$uid" -x tolon-app >/dev/null 2>&1; then
     say "Quitting Tolon so it can be replaced."
-    pkill -x tolon-app >/dev/null 2>&1 || true
+    pkill -U "$uid" -x tolon-app >/dev/null 2>&1 || true
     waited=0
-    while pgrep -x tolon-app >/dev/null 2>&1; do
+    while pgrep -U "$uid" -x tolon-app >/dev/null 2>&1; do
       [ "$waited" -lt 20 ] || fail "Tolon is still running. Quit it from its menu bar icon, then run this command again."
       sleep 0.5
       waited=$((waited + 1))
@@ -75,12 +77,12 @@ tolon_install() {
   say "Installing Tolon $version."
   staged="$apps/.Tolon.app.new"
   rm -rf "$staged"
-  ditto "$tmp/mnt/Tolon.app" "$staged" || { rm -rf "$staged"; fail "Could not copy Tolon into $apps."; }
-  rm -rf "$dest"
+  ditto "$tmp/mnt/Tolon.app" "$staged" </dev/null || { rm -rf "$staged"; fail "Could not copy Tolon into $apps."; }
+  rm -rf "$dest" || { rm -rf "$staged"; fail "Could not replace the Tolon in $apps. Delete it by hand, then run this command again."; }
   mv "$staged" "$dest" || fail "Could not move Tolon into place in $apps."
 
   say "Installed Tolon $version in $dest."
-  open "$dest" || say "Tolon did not open. Open it from $apps."
+  open "$dest" </dev/null || say "Tolon did not open. Open it from $apps."
 }
 
 tolon_install "$@"

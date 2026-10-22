@@ -8,9 +8,10 @@
 
 use anyhow::{Context, Result};
 use std::fs;
+use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const VERSION: &str = "1.2.3";
@@ -75,6 +76,17 @@ impl Sandbox {
     }
 
     fn run(&self, script: &Path, apps: &Path, extra: &[(&str, &str)]) -> Result<Output> {
+        self.run_with_stdin(script, apps, extra, "")
+    }
+
+    /// `stdin` is what the script's own stdin holds, as when it arrives through `curl | sh`.
+    fn run_with_stdin(
+        &self,
+        script: &Path,
+        apps: &Path,
+        extra: &[(&str, &str)],
+        stdin: &str,
+    ) -> Result<Output> {
         let path = format!(
             "{}:{}",
             self.path("stubs").display(),
@@ -92,7 +104,15 @@ impl Sandbox {
         for (k, v) in extra {
             cmd.env(k, v);
         }
-        cmd.output().context("cannot run sh")
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = cmd.spawn().context("cannot run sh")?;
+        if let Some(mut pipe) = child.stdin.take() {
+            // A script that never reads its stdin closes the pipe early; that is not an error here.
+            let _ = pipe.write_all(stdin.as_bytes());
+        }
+        child.wait_with_output().context("cannot wait for sh")
     }
 
     fn log(&self) -> String {
@@ -106,6 +126,11 @@ impl Sandbox {
 
 impl Drop for Sandbox {
     fn drop(&mut self) {
+        // A test may leave a read-only folder behind on purpose.
+        let _ = Command::new("chmod")
+            .args(["-R", "u+w"])
+            .arg(&self.root)
+            .status();
         let _ = fs::remove_dir_all(&self.root);
     }
 }
@@ -129,7 +154,7 @@ const STUBS: &[(&str, &str)] = &[
         r#"echo "curl $*" >> "$LOG"
 out=""; url=""
 while [ $# -gt 0 ]; do
-  case "$1" in -o) out="$2"; shift ;; -*) ;; *) url="$1" ;; esac
+  case "$1" in -o) out="$2"; shift ;; --proto) shift ;; -*) ;; *) url="$1" ;; esac
   shift
 done
 f="$SERVER/${url##*/}"
@@ -139,6 +164,7 @@ if [ -n "$out" ]; then cp "$f" "$out"; else cat "$f"; fi"#,
     (
         "hdiutil",
         r#"echo "hdiutil $*" >> "$LOG"
+if read -r leak; then echo "LEAK hdiutil $leak" >> "$LOG"; fi
 if [ "$1" = attach ]; then
   mp=""
   while [ $# -gt 0 ]; do [ "$1" = -mountpoint ] && mp="$2"; shift; done
@@ -146,13 +172,25 @@ if [ "$1" = attach ]; then
   echo new > "$mp/Tolon.app/Contents/MacOS/tolon-app"
 fi"#,
     ),
-    ("ditto", r#"echo "ditto $*" >> "$LOG"; cp -R "$1" "$2""#),
-    ("open", r#"echo "open $*" >> "$LOG""#),
+    (
+        "ditto",
+        r#"echo "ditto $*" >> "$LOG"
+if read -r leak; then echo "LEAK ditto $leak" >> "$LOG"; fi
+cp -R "$1" "$2""#,
+    ),
+    (
+        "open",
+        r#"echo "open $*" >> "$LOG"
+if read -r leak; then echo "LEAK open $leak" >> "$LOG"; fi"#,
+    ),
     (
         "pkill",
         r#"echo "pkill $*" >> "$LOG"; rm -f "$STUBS/running""#,
     ),
-    ("pgrep", r#"[ -f "$STUBS/running" ]"#),
+    (
+        "pgrep",
+        r#"echo "pgrep $*" >> "$LOG"; [ -f "$STUBS/running" ]"#,
+    ),
 ];
 
 fn code_lines(script: &str) -> Vec<&str> {
@@ -259,7 +297,7 @@ fn installs_into_home_applications_when_the_system_folder_is_not_writable() -> R
     assert!(!stdout(&out).contains('!'), "no exclamation marks");
     let log = sb.log();
     let url = format!(
-        "curl -fsSL https://github.com/danielpsf/tolon/releases/download/v{VERSION}/{DMG} -o "
+        "curl --proto =https --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/download/v{VERSION}/{DMG} -o "
     );
     let order: Vec<Option<usize>> = [
         &url,
@@ -312,7 +350,18 @@ fn a_running_tolon_is_quit_before_it_is_replaced() -> Result<()> {
     let out = sb.run(&sb.stamped()?, &apps, &[])?;
     assert!(out.status.success(), "{}", stderr(&out));
     let log = sb.log();
-    assert!(log.contains("pkill -x tolon-app"), "{log}");
+    let uid = String::from_utf8(Command::new("id").arg("-u").output()?.stdout)?;
+    let uid = uid.trim();
+    // Only this user's Tolon: every pgrep and pkill is limited with -U.
+    let wanted = format!("-U {uid} -x tolon-app");
+    let calls: Vec<&str> = log
+        .lines()
+        .filter(|l| l.starts_with("pgrep") || l.starts_with("pkill"))
+        .collect();
+    assert!(calls.iter().any(|l| l.starts_with("pkill")), "{log}");
+    for l in calls {
+        assert_eq!(l.split_once(' ').map(|x| x.1), Some(wanted.as_str()), "{l}");
+    }
     assert!(position(&log, "pkill") < position(&log, "ditto"), "{log}");
     assert_eq!(
         fs::read_to_string(apps.join("Tolon.app/Contents/MacOS/tolon-app"))?,
@@ -353,5 +402,92 @@ fn without_a_version_it_stops_before_downloading_an_installer() -> Result<()> {
     assert!(!out.status.success());
     assert!(stderr(&out).contains("which version"), "{}", stderr(&out));
     assert!(!sb.log().contains(".dmg"));
+    Ok(())
+}
+
+#[test]
+fn only_https_with_tls_1_2_is_asked_for() -> Result<()> {
+    let text = fs::read_to_string(repo_script()?)?;
+    for line in code_lines(&text).into_iter().filter(|l| l.contains("curl")) {
+        assert!(line.contains("--proto '=https' --tlsv1.2"), "{line}");
+    }
+    let sb = Sandbox::new()?;
+    let out = sb.run(&sb.stamped()?, &sb.path("apps"), &[])?;
+    assert!(out.status.success(), "{}", stderr(&out));
+    let log = sb.log();
+    let curls: Vec<&str> = log.lines().filter(|l| l.starts_with("curl")).collect();
+    assert_eq!(curls.len(), 2, "{log}");
+    for l in curls {
+        assert!(l.starts_with("curl --proto =https --tlsv1.2 "), "{l}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_checksum_line_that_is_not_sha_256_fails_closed() -> Result<()> {
+    let sb = Sandbox::new()?;
+    // A SHA-1 sized line for the right file name must not count.
+    fs::write(
+        sb.path("server/SHA256SUMS"),
+        format!("{}  {DMG}\n", "a".repeat(40)),
+    )?;
+    let out = sb.run(&sb.stamped()?, &sb.path("apps"), &[])?;
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("no line for"), "{}", stderr(&out));
+    assert!(!sb.log().contains("ditto"));
+    assert!(sb.tmp_is_empty()?);
+    Ok(())
+}
+
+#[test]
+fn the_scripts_own_stdin_never_reaches_a_tool() -> Result<()> {
+    let sb = Sandbox::new()?;
+    let out = sb.run_with_stdin(
+        &sb.stamped()?,
+        &sb.path("apps"),
+        &[],
+        "rest of the piped script\nmore\n",
+    )?;
+    assert!(out.status.success(), "{}", stderr(&out));
+    let log = sb.log();
+    assert!(
+        !log.contains("LEAK"),
+        "a tool read the script's stdin: {log}"
+    );
+    // The stubs do read stdin when it is there: the test can fail.
+    assert!(log.contains("hdiutil attach") && log.contains("ditto "));
+    Ok(())
+}
+
+#[test]
+fn a_swap_that_cannot_remove_the_old_copy_fails_and_leaves_no_staging_folder() -> Result<()> {
+    let uid = String::from_utf8(Command::new("id").arg("-u").output()?.stdout)?;
+    if uid.trim() == "0" {
+        println!("skipped: root can delete a read-only folder");
+        return Ok(());
+    }
+    let sb = Sandbox::new()?;
+    let apps = sb.path("apps");
+    let locked = apps.join("Tolon.app/locked");
+    fs::create_dir_all(&locked)?;
+    fs::write(locked.join("file"), "old")?;
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o555))?;
+    let out = sb.run(&sb.stamped()?, &apps, &[])?;
+    assert!(!out.status.success());
+    assert!(
+        stderr(&out).contains("Could not replace the Tolon"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(
+        !apps.join(".Tolon.app.new").exists(),
+        "the staged copy is removed"
+    );
+    assert!(!stdout(&out).contains("Installed"), "{}", stdout(&out));
+    assert!(
+        !sb.log().contains("open "),
+        "Tolon was opened after a failed swap"
+    );
+    assert!(sb.tmp_is_empty()?);
     Ok(())
 }

@@ -141,6 +141,18 @@ class StampInstall(unittest.TestCase):
             self.assertTrue(any("install.sh" in e for e in ra.check_tag("v9.9.9")))
 
 
+class ReleaseWorkflow(unittest.TestCase):
+    def test_install_sh_is_stamped_before_the_checksums_are_written_and_is_uploaded(self):
+        text = (ra.ROOT / ".github/workflows/release.yml").read_text()
+        stamp = text.index("release_assets.py stamp-install install.sh dist/install.sh ")
+        sums = text.index("name: Write SHA256SUMS")
+        create = text.index("gh release create")
+        self.assertLess(stamp, sums)
+        self.assertLess(sums, create)
+        # `dist/*` is every file in dist, so dist/install.sh and SHA256SUMS go up with the installers.
+        self.assertIn("dist/*", text[create:].splitlines()[0])
+
+
 class Notes(unittest.TestCase):
     B = "https://github.com/o/r/blob/v1.0.0/"
 
