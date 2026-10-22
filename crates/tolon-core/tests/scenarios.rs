@@ -753,6 +753,44 @@ fn ac2_2_keep_from_drops_old_single_events_only() -> TestResult {
 }
 
 #[test]
+fn ac2_2_keep_from_keeps_a_floating_event_that_may_not_be_over_and_one_that_straddles_the_cutoff(
+) -> TestResult {
+    // Cutoff 21 Oct 08:00 UTC. A floating 00:00 to 00:30 on 21 Oct is over in Berlin (UTC+2) but
+    // not in UTC-12, where it ends at 12:30 UTC: it must stay (the +12 h allowance).
+    let floating = vevent(
+        "floating",
+        "DTSTART:20261021T000000\nDTEND:20261021T003000\n",
+    );
+    // Starts before the cutoff and ends after it: DTEND counts, not only DTSTART.
+    let straddle = vevent(
+        "straddle",
+        "DTSTART:20261021T060000Z\nDTEND:20261021T100000Z\n",
+    );
+    // Control: the same two shapes one day earlier are over everywhere and go.
+    let floating_old = vevent(
+        "floating-old",
+        "DTSTART:20261019T000000\nDTEND:20261019T003000\n",
+    );
+    let straddle_old = vevent(
+        "straddle-old",
+        "DTSTART:20261019T060000Z\nDTEND:20261019T100000Z\n",
+    );
+    let feed = wrap(&[floating, straddle, floating_old, straddle_old].concat());
+    let opts = ParseOptions {
+        keep_from: Some(utc(2026, 10, 21, 8, 0)?),
+        ..ParseOptions::default()
+    };
+    let mut uids: Vec<String> = parse_ics(&feed, &cal(), &opts)
+        .events
+        .into_iter()
+        .map(|e| e.uid)
+        .collect();
+    uids.sort_unstable();
+    assert_eq!(uids, ["floating", "straddle"]);
+    Ok(())
+}
+
+#[test]
 fn max_events_stops_reading_a_feed_with_too_many_kept_events() -> TestResult {
     let feed = wrap(
         &(0..5)
