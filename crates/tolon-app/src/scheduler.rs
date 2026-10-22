@@ -65,7 +65,7 @@ pub const FOCUS_RECHECK: Duration = Duration::milliseconds(500);
 pub const SNOOZE_MINUTES: u32 = 5;
 /// How far back occurrences are expanded: a meeting whose alarm fell due while the machine slept
 /// is still found, so its alarm is marked Expired instead of silently dropped (S3.5).
-const LOOKBACK: Duration = Duration::days(1);
+pub(crate) const LOOKBACK: Duration = Duration::days(1);
 
 /// Settings keys read every tick. JSON values; a missing key means the default.
 pub const LEAD_MINUTES: &str = "lead_minutes";

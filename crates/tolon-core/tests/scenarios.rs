@@ -433,6 +433,7 @@ ATTENDEE;PARTSTAT=DECLINED:mailto:Me@Example.com\nATTENDEE;PARTSTAT=ACCEPTED:mai
     );
     let with_owner = ParseOptions {
         owner_emails: vec!["me@example.com".to_string()],
+        ..ParseOptions::default()
     };
     let events = parse_ics(&feed, &cal(), &with_owner).events;
     let on = ExpandOptions::default();
@@ -642,5 +643,139 @@ fn recurrence_lines_parse_as_in_a_feed() -> TestResult {
         parse_recurrence(&["RRULE:FREQ=SOMETIMES".to_string()], &start),
         None
     );
+    Ok(())
+}
+
+fn vevent(uid: &str, extra: &str) -> String {
+    format!("BEGIN:VEVENT\nUID:{uid}\nSUMMARY:{uid}\n{extra}END:VEVENT\n")
+}
+
+#[test]
+fn ac2_2_keep_from_drops_old_single_events_only() -> TestResult {
+    let feed = wrap(
+        &[
+            vevent("old", "DTSTART:20210105T090000Z\nDTEND:20210105T100000Z\n"),
+            vevent(
+                "old-berlin",
+                "DTSTART;TZID=Europe/Berlin:20260101T090000\nDTEND;TZID=Europe/Berlin:20260101T100000\n",
+            ),
+            vevent("old-all-day", "DTSTART;VALUE=DATE:20260101\n"),
+            vevent("old-floating", "DTSTART:20260101T090000\nDTEND:20260101T100000\n"),
+            // An old master still makes future occurrences: it keeps its EXDATE and its override.
+            vevent(
+                "series",
+                "DTSTART:20210105T090000Z\nDTEND:20210105T100000Z\nRRULE:FREQ=WEEKLY;BYDAY=TU\nEXDATE:20261027T090000Z\n",
+            ),
+            vevent(
+                "series",
+                "RECURRENCE-ID:20210112T090000Z\nDTSTART:20210112T110000Z\nDTEND:20210112T120000Z\n",
+            ),
+            // An override whose master is not in the feed.
+            vevent(
+                "lonely",
+                "RECURRENCE-ID:20210112T090000Z\nDTSTART:20210112T110000Z\nDTEND:20210112T120000Z\n",
+            ),
+            vevent("recent", "DTSTART:20261021T180000Z\nDTEND:20261021T190000Z\n"),
+            // Floating: over in UTC+14 but not yet in UTC-12, so it stays.
+            vevent("edge-floating", "DTSTART:20261021T090000\nDTEND:20261021T093000\n"),
+            vevent("future", "DTSTART:20270301T090000Z\nDTEND:20270301T100000Z\n"),
+            // An RDATE-only series is a series too (RDATE is not expanded, but its overrides need
+            // the master's title and key).
+            vevent(
+                "rdate-series",
+                "DTSTART:20210105T090000Z\nDTEND:20210105T100000Z\nRDATE:20261023T090000Z\nSTATUS:CANCELLED\n",
+            ),
+            vevent(
+                "rdate-series",
+                "RECURRENCE-ID:20261023T090000Z\nDTSTART:20261023T100000Z\nDTEND:20261023T110000Z\n",
+            ),
+            // A malformed DTEND before DTSTART must not drop a future event.
+            vevent(
+                "backwards",
+                "DTSTART:20270301T090000Z\nDTEND:20210101T090000Z\n",
+            ),
+            "BEGIN:VEVENT\nUID:broken\nSUMMARY:no start\nEND:VEVENT\n".to_string(),
+        ]
+        .concat(),
+    );
+    let opts = ParseOptions {
+        keep_from: Some(utc(2026, 10, 21, 8, 0)?),
+        ..ParseOptions::default()
+    };
+    let parsed = parse_ics(&feed, &cal(), &opts);
+    let mut uids: Vec<&str> = parsed.events.iter().map(|e| e.uid.as_str()).collect();
+    uids.sort_unstable();
+    assert_eq!(
+        uids,
+        [
+            "backwards",
+            "edge-floating",
+            "future",
+            "lonely#20210112T090000Z",
+            "rdate-series",
+            "recent",
+            "series"
+        ]
+    );
+    let rdate = parsed
+        .events
+        .iter()
+        .find(|e| e.uid == "rdate-series")
+        .ok_or("rdate-series")?;
+    assert_eq!(rdate.status, EventStatus::Cancelled);
+    assert_eq!(rdate.overrides.len(), 1);
+    assert_eq!(rdate.overrides[0].event.title, "rdate-series");
+    // Dropped events are not skipped components: only the broken one counts.
+    assert_eq!(parsed.skipped_components, 1);
+    let series = parsed
+        .events
+        .iter()
+        .find(|e| e.uid == "series")
+        .ok_or("series")?;
+    assert_eq!(series.overrides.len(), 1);
+    assert_eq!(series.exdates.len(), 1);
+    // Without a cutoff everything stays.
+    assert_eq!(parse(&feed).len(), 11);
+    // The old master still makes this week's Tuesday occurrences, minus the EXDATE.
+    let occ = expand_window(
+        &parsed.events,
+        utc(2026, 10, 26, 0, 0)?,
+        utc(2026, 11, 4, 0, 0)?,
+        LOCAL,
+        &ExpandOptions::default(),
+    );
+    let days: Vec<String> = occ
+        .iter()
+        .map(|o| o.start.format("%m-%d").to_string())
+        .collect();
+    assert_eq!(days, ["11-03"]);
+    Ok(())
+}
+
+#[test]
+fn max_events_stops_reading_a_feed_with_too_many_kept_events() -> TestResult {
+    let feed = wrap(
+        &(0..5)
+            .map(|i| vevent(&format!("e{i}"), "DTSTART:20270301T090000Z\n"))
+            .collect::<String>(),
+    );
+    let at = |max| ParseOptions {
+        max_events: Some(max),
+        ..ParseOptions::default()
+    };
+    let within = parse_ics(&feed, &cal(), &at(5));
+    assert!(!within.over_event_cap);
+    assert_eq!(within.events.len(), 5);
+    let over = parse_ics(&feed, &cal(), &at(4));
+    assert!(over.over_event_cap);
+    assert!(over.events.is_empty());
+    // Dropped old events do not count against the cap.
+    let old = wrap(&vevent("old", "DTSTART:20210105T090000Z\n").repeat(10));
+    let opts = ParseOptions {
+        keep_from: Some(utc(2026, 10, 21, 8, 0)?),
+        max_events: Some(1),
+        ..ParseOptions::default()
+    };
+    assert!(!parse_ics(&old, &cal(), &opts).over_event_cap);
     Ok(())
 }

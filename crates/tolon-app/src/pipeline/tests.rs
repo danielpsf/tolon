@@ -9,6 +9,7 @@ use serde_json::json;
 use super::*;
 use crate::errors::{command_error, CommandError};
 
+mod big_feed;
 
 type TestResult = anyhow::Result<()>;
 
