@@ -161,6 +161,48 @@ async fn s1_1_add_names_calendar_from_x_wr_calname() -> TestResult {
 }
 
 #[tokio::test]
+async fn l067_rename_shows_everywhere_and_clearing_restores_the_feed_name() -> TestResult {
+    let db = db()?;
+    let fake = Fake::new(vec![modified(basic_feed(Some("Team calendar")), None)]);
+    let dto = add_ics(&db, &fake, SECRET_URL, now()).await?;
+
+    rename(&db, &dto.id, "  Standups  ")?;
+    assert_eq!(list(&db)?.first().map(|c| c.name.as_str()), Some("Standups"));
+    // A sync keeps the custom name; the feed's name stays underneath it.
+    let again = Fake::new(vec![modified(basic_feed(Some("Renamed upstream")), None)]);
+    sync_one(&db, &again, &dto.id, now()).await?;
+    assert_eq!(list(&db)?.first().map(|c| c.name.as_str()), Some("Standups"));
+    assert_eq!(calendars(&db)?.first().map(|c| c.name.as_str()), Some("Team calendar"));
+
+    rename(&db, &dto.id, "   ")?;
+    assert_eq!(
+        list(&db)?.first().map(|c| c.name.as_str()),
+        Some("Team calendar")
+    );
+    Ok(())
+}
+
+#[test]
+fn l067_rename_validates_the_id_and_the_name() -> TestResult {
+    let db = db()?;
+    let Err(e) = rename(&db, "no-such-calendar", "Work") else {
+        return Err(anyhow!("an unknown id should be rejected"));
+    };
+    assert_eq!(command_error(&e), CommandError { code: "not_found" });
+
+    assert_eq!(clean_name("  Work  "), Some("Work".to_owned()));
+    assert_eq!(clean_name(" \t\n "), None);
+    assert_eq!(clean_name(""), None);
+    assert_eq!(clean_name("Wor\nk\u{0}"), Some("Work".to_owned()));
+    // Cut by characters, never in the middle of one; a cut that ends on a space drops it.
+    let long = "é".repeat(200);
+    assert_eq!(clean_name(&long).map(|n| n.chars().count()), Some(MAX_NAME_CHARS));
+    let spaced = format!("{} tail", "a".repeat(MAX_NAME_CHARS - 1));
+    assert_eq!(clean_name(&spaced), Some("a".repeat(MAX_NAME_CHARS - 1)));
+    Ok(())
+}
+
+#[tokio::test]
 async fn s1_1_add_falls_back_to_host() -> TestResult {
     let db = db()?;
     let fake = Fake::new(vec![modified(basic_feed(None), None)]);
@@ -674,6 +716,7 @@ fn calendar_row(url: &str) -> Calendar {
     Calendar {
         id: "c1".into(),
         name: "Work".into(),
+        custom_name: None,
         kind: "ics".into(),
         enabled: true,
         url: Some(url.into()),

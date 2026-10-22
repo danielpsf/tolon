@@ -9,7 +9,10 @@ use crate::StoreError;
 pub struct Calendar {
     pub id: String,
     pub kind: String,
+    /// The feed's name: X-WR-CALNAME, or the host. Shown unless `custom_name` is set.
     pub name: String,
+    /// A name the person typed, kept on this computer only. `None` shows `name`.
+    pub custom_name: Option<String>,
     pub enabled: bool,
     /// May carry a secret; never log it.
     pub url: Option<String>,
@@ -19,6 +22,13 @@ pub struct Calendar {
     pub last_sync_at: Option<String>,
     pub last_error: Option<String>,
     pub created_at: String,
+}
+
+impl Calendar {
+    /// The name to show everywhere: the custom name, then the feed's name.
+    pub fn display_name(&self) -> &str {
+        self.custom_name.as_deref().unwrap_or(&self.name)
+    }
 }
 
 // Hand-written so a `{:?}` in a log line cannot leak the url.
@@ -34,7 +44,7 @@ impl fmt::Debug for Calendar {
 }
 
 const COLUMNS: &str =
-    "id, kind, name, enabled, url, account, color, etag, last_sync_at, last_error, created_at";
+    "id, kind, name, enabled, url, account, color, etag, last_sync_at, last_error, created_at, custom_name";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Calendar> {
     Ok(Calendar {
@@ -49,6 +59,7 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Calendar> {
         last_sync_at: r.get(8)?,
         last_error: r.get(9)?,
         created_at: r.get(10)?,
+        custom_name: r.get(11)?,
     })
 }
 
@@ -143,6 +154,14 @@ impl<'a> CalendarsRepo<'a> {
         self.touch(
             "update calendars set enabled = ?2 where id = ?1",
             params![id, enabled],
+        )
+    }
+
+    /// Sets the name the person chose; `None` clears it, so the feed's name shows again.
+    pub fn set_custom_name(&self, id: &str, name: Option<&str>) -> Result<(), StoreError> {
+        self.touch(
+            "update calendars set custom_name = ?2 where id = ?1",
+            params![id, name],
         )
     }
 
@@ -334,6 +353,26 @@ mod tests {
         assert_eq!(got.last_sync_at.as_deref(), Some("t3"));
         assert!(matches!(
             c.record_not_modified("nope", "t"),
+            Err(StoreError::NotFound)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn custom_name_wins_until_cleared() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let c = store.calendars();
+        let a = c.insert("ics", "Team fixture", None, true, "t")?;
+        assert_eq!((a.custom_name.as_deref(), a.display_name()), (None, "Team fixture"));
+        c.set_custom_name(&a.id, Some("Standups"))?;
+        let named = c.get(&a.id)?.ok_or("gone")?;
+        assert_eq!(named.display_name(), "Standups");
+        assert_eq!(named.name, "Team fixture");
+        assert_eq!(c.list()?, vec![named]);
+        c.set_custom_name(&a.id, None)?;
+        assert_eq!(c.get(&a.id)?.ok_or("gone")?, a);
+        assert!(matches!(
+            c.set_custom_name("nope", Some("x")),
             Err(StoreError::NotFound)
         ));
         Ok(())

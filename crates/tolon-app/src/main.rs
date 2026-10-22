@@ -153,6 +153,7 @@ fn main() -> anyhow::Result<()> {
             commands::calendars_add_ics,
             commands::calendars_remove,
             commands::calendars_set_enabled,
+            commands::calendars_rename,
             commands::calendars_sync_now,
             commands::calendars_google_available,
             commands::calendars_google_sign_in,

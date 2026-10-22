@@ -22,6 +22,7 @@ export const api = {
   calendarsAddIcs: (url: string) => invoke<CalendarDto>("calendars_add_ics", { url }),
   calendarsRemove: (id: string) => invoke<void>("calendars_remove", { id }),
   calendarsSetEnabled: (id: string, enabled: boolean) => invoke<void>("calendars_set_enabled", { id, enabled }),
+  calendarsRename: (id: string, name: string) => invoke<void>("calendars_rename", { id, name }),
   // Google calendars (F13), settings window only.
   /** True when this build has a Google client ID; "Sign in with Google" shows only then. */
   calendarsGoogleAvailable: () => invoke<boolean>("calendars_google_available"),
