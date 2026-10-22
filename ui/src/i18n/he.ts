@@ -30,7 +30,15 @@ export const he: Messages = {
     appearance: "מראה",
     language: "שפה",
     startup: "הפעלה",
+    help: "עזרה",
     about: "אודות",
+  },
+  help: {
+    subtitle: "העזרה זמינה בינתיים באנגלית בלבד.",
+    sectionsLabel: "פרקי העזרה",
+    install: "התקנה",
+    icalLinks: "קבלת קישור iCal",
+    diagnostics: "אבחון",
   },
   calendars: {
     title: "יומנים",

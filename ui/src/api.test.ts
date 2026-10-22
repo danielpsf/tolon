@@ -43,6 +43,11 @@ describe("settings commands", () => {
     expect(invoke).toHaveBeenCalledWith("sound_preview", { sound: "chime" });
   });
 
+  it("L-071 opens a help link with app_open_url and the address as given", async () => {
+    await api.appOpenUrl("https://example.com/a");
+    expect(invoke).toHaveBeenCalledWith("app_open_url", { url: "https://example.com/a" });
+  });
+
   it("listens to settings:changed", async () => {
     const handler = vi.fn();
     await onSettingsChanged(handler);

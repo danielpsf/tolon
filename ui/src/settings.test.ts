@@ -16,6 +16,7 @@ describe("settings pages", () => {
       "appearance",
       "language",
       "startup",
+      "help",
       "about",
     ]);
   });

@@ -142,6 +142,38 @@
 .tl-inline .sm-switch {
   margin-inline-start: var(--sm-space-2);
 }
+
+/* Help (L-071): the release's docs inside .sm-prose. The article carries lang="en" dir="ltr" whatever the page direction. */
+.tl-help {
+  max-width: 720px;
+}
+.tl-help:focus-visible {
+  outline: none; /* focus lands here by script after a section change; it is not a control */
+}
+.tl-help > :first-child {
+  margin-top: 0;
+}
+.tl-help h4,
+.tl-help h5,
+.tl-help h6 {
+  font-family: var(--sm-font-display);
+  font-size: 16px;
+  margin: var(--sm-space-5) 0 var(--sm-space-2);
+}
+.tl-help li {
+  margin-bottom: var(--sm-space-2);
+}
+.tl-help img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--sm-space-3) 0 var(--sm-space-4);
+  border: 1px solid var(--sm-line);
+  border-radius: var(--sm-radius-m);
+}
+.tl-help .sm-table-wrap {
+  margin: 0 0 var(--sm-space-4);
+}
 .sm-input.tl-num {
   width: 64px;
   text-align: center;

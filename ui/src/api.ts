@@ -57,6 +57,8 @@ export const api = {
   appHidePanel: () => invoke<void>("app_hide_panel"),
   appQuit: () => invoke<void>("app_quit"),
   trayTooltip: (text: string) => invoke<void>("tray_tooltip", { text }),
+  /** A link of Settings, Help in the default browser; Rust accepts web addresses only (settings window only). */
+  appOpenUrl: (url: string) => invoke<void>("app_open_url", { url }),
   // First run (F10), settings window only.
   /** Hides this window once the first calendar is added (AC10.2). */
   appHideSettings: () => invoke<void>("app_hide_settings"),

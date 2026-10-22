@@ -180,6 +180,7 @@ fn main() -> anyhow::Result<()> {
             commands::app_hide_settings,
             commands::app_tray_place,
             commands::tray_tooltip,
+            commands::app_open_url,
             commands::notify_copy_set,
             commands::update_status,
             commands::update_check_now,

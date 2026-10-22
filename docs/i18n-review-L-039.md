@@ -599,3 +599,34 @@ One changed string of L-062: `firstRun.trayBody`, step 3 of first run, in all 12
 Round 1 raised no issue in any locale (four answers left out the empty `issues` list and said `ok`), so no catalogue changed and round 2 was not needed. Native review is still required before release.
 
 Wrapping, measured in headless Chromium at 1040 x 760 (the 554 px step column): the phrase sits on one line in all 12 locales. Step 3's first paragraph takes 2 lines in en-US, en-GB, es, pt-PT, ar, tr, hi, zh-CN and he, and 3 lines in de, pt-BR and ja. Japanese and Chinese have no word spaces, so only the Latin name and the particle or first character are joined; a break inside the katakana word or between two Han characters stays possible.
+
+## L-071
+
+New strings for Settings, Help, in all 12 catalogues: `nav.help`, and `help.subtitle` ("Help is in English for now."), `help.sectionsLabel` ("Help sections"), `help.install` ("Install"), `help.icalLinks` ("Get an iCal link") and `help.diagnostics` ("Diagnostics"). The Help text itself is the English docs; only the page around it is translated. `help.diagnostics` is there before `docs/help/diagnostics.md` (L-072) exists: the tab shows once the file does.
+
+### Method
+
+- Judge: `gemini-3.8-flash` through the maintainer's LiteLLM proxy (`/chat/completions`), temperature 0, `max_tokens` 16000, at most 2 rounds.
+- One locale per call, 12 calls (en-US is judged as English). Each prompt holds the six strings with where they show, the en-US source, the locale's neighbouring strings (`nav.about`, `nav.language`, `nav.label`, `calendars.pasteIcalUrl`, so "link" keeps the locale's word) and the copy rules.
+
+### Calls and tokens
+
+| Locale | Round | Prompt | Completion (reasoning) | Total | Seconds | Issues | Verdict |
+|---|---|---|---|---|---|---|---|
+| en-US | 1 | 369 | 308 (285) | 677 | 3.9 | 0 | ok |
+| en-GB | 1 | 369 | 341 (318) | 710 | 3.3 | 0 | ok |
+| pt-BR | 1 | 381 | 598 (589) | 979 | 5.4 | 0 | ok |
+| pt-PT | 1 | 383 | 498 (489) | 881 | 3.7 | 0 | ok |
+| de | 1 | 375 | 526 (503) | 901 | 5.0 | 0 | ok |
+| es | 1 | 379 | 682 (659) | 1061 | 6.7 | 0 | ok |
+| ar | 1 | 383 | 533 (510) | 916 | 3.7 | 0 | ok |
+| tr | 1 | 378 | 540 (517) | 918 | 4.8 | 0 | ok |
+| hi | 1 | 380 | 812 (803) | 1192 | 18.2 | 0 | ok |
+| zh-CN | 1 | 368 | 457 (448) | 825 | 4.7 | 0 | ok |
+| ja | 1 | 375 | 413 (390) | 788 | 3.4 | 0 | ok |
+| he | 1 | 391 | 654 (631) | 1045 | 5.8 | 0 | ok |
+| All (12 calls) | | 4531 | 6362 | 10893 | | 0 | |
+
+### Issues and decisions
+
+Round 1 raised no issue in any locale, so no catalogue changed and round 2 was not needed. Native review is still required before release. Seen in headless Chromium at 1040 x 760: the three tabs fit on one row in en-US and ar, light and dark (`ar` reads right to left, with the English article left to right inside it).
