@@ -14,7 +14,15 @@ export const tr: Messages = {
     appearance: "Görünüm",
     language: "Dil",
     startup: "Başlangıç",
+    help: "Yardım",
     about: "Hakkında",
+  },
+  help: {
+    subtitle: "Yardım şimdilik yalnızca İngilizce.",
+    sectionsLabel: "Yardım bölümleri",
+    install: "Kurulum",
+    icalLinks: "iCal bağlantısı alma",
+    diagnostics: "Tanılama",
   },
   calendars: {
     title: "Takvimler",

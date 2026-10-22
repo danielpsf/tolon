@@ -14,7 +14,15 @@ export const ja: Messages = {
     appearance: "外観",
     language: "言語",
     startup: "起動",
+    help: "ヘルプ",
     about: "バージョン情報",
+  },
+  help: {
+    subtitle: "ヘルプは今のところ英語のみです。",
+    sectionsLabel: "ヘルプのセクション",
+    install: "インストール",
+    icalLinks: "iCal リンクの取得",
+    diagnostics: "診断",
   },
   calendars: {
     title: "カレンダー",

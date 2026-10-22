@@ -550,7 +550,9 @@ fn l072_no_log_line_names_personal_fields() -> TestResult {
                     );
                 }
                 assert!(
-                    !code.contains("url =") || code.contains("url = %redact_url("),
+                    !code.contains("url =")
+                        || code.contains("url = %redact_url(")
+                        || code.contains("url = %tolon_sync::redact_url("),
                     "{}: tracing call {i} logs a URL without redact_url: {args}",
                     p.display()
                 );

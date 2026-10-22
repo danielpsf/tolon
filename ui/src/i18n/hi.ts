@@ -15,7 +15,15 @@ export const hi: Messages = {
     appearance: "रूप-रंग",
     language: "भाषा",
     startup: "स्टार्टअप",
+    help: "सहायता",
     about: "के बारे में",
+  },
+  help: {
+    subtitle: "सहायता अभी केवल अंग्रेज़ी में है।",
+    sectionsLabel: "सहायता अनुभाग",
+    install: "इंस्टॉल करना",
+    icalLinks: "iCal लिंक पाएं",
+    diagnostics: "डायग्नोस्टिक्स",
   },
   calendars: {
     title: "कैलेंडर",

@@ -51,7 +51,7 @@ tokio = { version = "1", features = ["time", "sync", "macros", "rt", "net"] }
 tauri-plugin-dialog = "2"
 # The F4.5 fallback: a system notification with Join and Snooze actions when the interrupt cannot take over the screen (AC4.5).
 tauri-plugin-notification = "2"
-# Opens the join link in the default browser (AC5.3). Used from Rust only, the plugin is not registered and no capability grants it.
+# Opens the join link in the default browser (AC5.3) and the links of Settings, Help (`app_open_url`, web addresses only). Used from Rust only, the plugin is not registered and no capability grants it.
 tauri-plugin-opener = "2"
 # Compares the offered version with the skipped one (AC11.1); already in the tree through the updater.
 semver = "1"

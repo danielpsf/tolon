@@ -15,7 +15,15 @@ export const de: Messages = {
     appearance: "Darstellung",
     language: "Sprache",
     startup: "Systemstart",
+    help: "Hilfe",
     about: "Info",
+  },
+  help: {
+    subtitle: "Die Hilfe gibt es vorerst nur auf Englisch.",
+    sectionsLabel: "Hilfethemen",
+    install: "Installation",
+    icalLinks: "iCal-Link holen",
+    diagnostics: "Diagnose",
   },
   calendars: {
     title: "Kalender",

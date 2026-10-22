@@ -15,7 +15,15 @@ export const ptBR: Messages = {
     appearance: "Aparência",
     language: "Idioma",
     startup: "Inicialização",
+    help: "Ajuda",
     about: "Sobre",
+  },
+  help: {
+    subtitle: "A ajuda está só em inglês por enquanto.",
+    sectionsLabel: "Seções da ajuda",
+    install: "Instalação",
+    icalLinks: "Obter um link iCal",
+    diagnostics: "Diagnóstico",
   },
   calendars: {
     title: "Calendários",

@@ -142,6 +142,38 @@
 .tl-inline .sm-switch {
   margin-inline-start: var(--sm-space-2);
 }
+
+/* Help (L-071): the release's docs inside .sm-prose. The article carries lang="en" dir="ltr" whatever the page direction. */
+.tl-help {
+  max-width: 720px;
+}
+.tl-help:focus-visible {
+  outline: none; /* focus lands here by script after a section change; it is not a control */
+}
+.tl-help > :first-child {
+  margin-top: 0;
+}
+.tl-help h4,
+.tl-help h5,
+.tl-help h6 {
+  font-family: var(--sm-font-display);
+  font-size: 16px;
+  margin: var(--sm-space-5) 0 var(--sm-space-2);
+}
+.tl-help li {
+  margin-bottom: var(--sm-space-2);
+}
+.tl-help img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--sm-space-3) 0 var(--sm-space-4);
+  border: 1px solid var(--sm-line);
+  border-radius: var(--sm-radius-m);
+}
+.tl-help .sm-table-wrap {
+  margin: 0 0 var(--sm-space-4);
+}
 .sm-input.tl-num {
   width: 64px;
   text-align: center;
@@ -884,18 +916,44 @@
   font-size: calc(13 * var(--tl-c));
   font-weight: 600;
 }
-/* The hill fills the rest of the window, edge to edge; the art scales with the window's width. */
+/*
+ * The hill (L-070): the background of everything below the page's edge, edge to edge. The page's curve is the top of this
+ * box and stretches across the width; the character stands on its bottom edge on every aspect ratio, scales with the
+ * width and is capped at 45% of the window's height (362 of 1280 design pixels tall, so 45vh is 159vh wide), which keeps
+ * it clear of the buttons. When the rows above leave less room than that, the hill crops the character's foot, as before.
+ */
 [data-style="peek"] .tl-peek {
   position: relative;
   grid-row: 4;
   justify-self: stretch;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--tl-bg);
+}
+[data-style="peek"] .tl-peek-curve {
+  display: block;
+  flex: none;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1280 / 78;
+  /* The edge's 2 px stroke and the pointer's tip are drawn on the outline. */
+  overflow: visible;
+}
+[data-style="peek"] .tl-peek-char {
+  position: relative;
+  flex: none;
+  align-self: center;
+  margin-top: auto;
+  width: min(100%, calc(45vh * 1280 / 362));
+  aspect-ratio: 1280 / 362;
 }
 [data-style="peek"] .tl-peek-art {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  /* The mounds and the foot run past the box; the hill crops them at the window's bottom. */
+  overflow: visible;
 }
 /* Mirrored for right to left, with the speech bubble on the other side. */
 :root[dir="rtl"][data-style="peek"] .tl-peek-art {
@@ -972,11 +1030,11 @@
   stop-color: var(--tl-fg);
   stop-opacity: 0;
 }
-/* "It's time." beside Peek (198 and 80 design pixels from the top centre, at 1280 wide). */
+/* "It's time." beside Peek (198 design pixels from the centre and 2 from the top, at 1280 wide), in percent of the character's box. */
 [data-style="peek"] .tl-peek-say {
   position: absolute;
-  top: 6.25vw;
-  inset-inline-start: calc(50% + 15.5vw);
+  top: 0.5%;
+  inset-inline-start: calc(50% + 15.5%);
   margin: 0;
   padding: calc(10 * var(--tl-c)) calc(24 * var(--tl-c));
   border-radius: var(--sm-radius-pill);
@@ -1079,14 +1137,13 @@
   background: var(--tl-bg);
   color: var(--tl-fg);
 }
-/* The hill, cropped to Peek's head: the bulge, the eyes and the cheeks; the bubble is placed in percent of the card. */
+/* The hill, cropped to Peek's head: the bulge, the eyes and the cheeks, as at the reminder's 1280 width. */
 [data-style="peek"] .tl-peek-card {
   --tl-c: 0.6px;
   aspect-ratio: 1280 / 340;
 }
-[data-style="peek"] .tl-peek-card .tl-peek-say {
-  top: 23.5%;
-  inset-inline-start: calc(50% + 15.5%);
+[data-style="peek"] .tl-peek-card .tl-peek-char {
+  width: 100%;
 }
 
 /*

@@ -15,7 +15,15 @@ export const enUS = {
     appearance: "Appearance",
     language: "Language",
     startup: "Startup",
+    help: "Help",
     about: "About",
+  },
+  help: {
+    subtitle: "Help is in English for now.",
+    sectionsLabel: "Help sections",
+    install: "Install",
+    icalLinks: "Get an iCal link",
+    diagnostics: "Diagnostics",
   },
   calendars: {
     title: "Calendars",
