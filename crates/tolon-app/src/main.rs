@@ -114,10 +114,19 @@ fn keeps_running(event: &RunEvent) -> bool {
     matches!(event, RunEvent::ExitRequested { code: None, .. })
 }
 
+/// Info and below, unless `TOLON_LOG=debug` asks for the debug lines (on-screen checks read them,
+/// L-061). Anything else is info.
+fn log_level(asked: Option<&str>) -> tracing::Level {
+    match asked {
+        Some("debug") => tracing::Level::DEBUG,
+        _ => tracing::Level::INFO,
+    }
+}
+
 fn main() -> anyhow::Result<()> {
-    // Info and below, stderr only; fetch failures log a redacted host, never the URL.
+    // Stderr only; fetch failures log a redacted host, never the URL.
     let _ = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(log_level(std::env::var("TOLON_LOG").ok().as_deref()))
         .with_writer(std::io::stderr)
         .try_init();
 
@@ -250,6 +259,13 @@ mod tests {
     use super::*;
 
     type TestResult = anyhow::Result<()>;
+
+    #[test]
+    fn l061_debug_lines_are_opt_in() {
+        assert_eq!(log_level(None), tracing::Level::INFO);
+        assert_eq!(log_level(Some("warn")), tracing::Level::INFO);
+        assert_eq!(log_level(Some("debug")), tracing::Level::DEBUG);
+    }
 
     /// L-042: the activation policy is set before anything opens a window, and the bundle hides
     /// the Dock icon from launch and needs macOS 13 (SMAppService).

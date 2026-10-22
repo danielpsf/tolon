@@ -173,6 +173,10 @@ impl Host for Fake {
         self.log("stop");
     }
 
+    fn remember_join_target(&self, url: &str) {
+        self.log(&format!("target {url}"));
+    }
+
     fn open_url(&self, url: &str) -> anyhow::Result<()> {
         if self.fail_url.load(Ordering::SeqCst) {
             return Err(anyhow!("no browser"));
@@ -762,6 +766,31 @@ async fn l056_a_joined_group_restores_nothing_on_its_later_close() -> TestResult
     assert_eq!(rig.host().count("close"), 1);
     assert_eq!(rig.host().restores(), 0, "the joined call has the focus");
     assert_eq!(rig.host().forgets(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn l061_join_notes_the_target_app_of_the_link_just_before_it_opens() -> TestResult {
+    let rig = Rig::new(&[with_link("call", "140000", MEET_LOCATION)], at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    let calls = rig.host().calls();
+    let noted = calls.iter().position(|c| *c == format!("target {MEET}"));
+    let opened = calls.iter().position(|c| c == "url");
+    assert!(noted.is_some() && noted < opened, "{calls:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn l061_actions_without_a_link_note_no_target() -> TestResult {
+    for act in [Act::Snooze(5), Act::Dismiss, Act::AlreadyThere] {
+        let rig = Rig::new(&[with_link("call", "140000", MEET_LOCATION)], at(13, 50, 0))?;
+        rig.tick_at(at(13, 58, 5)).await;
+        let key = rig.key(0)?;
+        rig.act(at(13, 58, 10), &key, act).await?;
+        assert!(!rig.host().calls().iter().any(|c| c.starts_with("target")));
+    }
     Ok(())
 }
 

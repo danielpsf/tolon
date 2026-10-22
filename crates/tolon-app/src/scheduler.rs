@@ -91,12 +91,16 @@ pub trait Host: Send + Sync {
     /// Ends the interrupt's claim on the front, once it is known that no waiting reminder took the
     /// screen (decision 2026-10-22, "Closing a reminder gives focus back"). `restore`: give the
     /// front back to the app that was in front when the interrupt opened. Otherwise (after a Join,
-    /// where the browser has focus) forget that app and give up Tolon's activation (L-060), unless
-    /// settings or the panel is shown.
+    /// where the browser has focus) forget that app and hand the front to the app that opened the
+    /// link, or give up Tolon's activation without one (L-060, L-061), unless settings or the panel
+    /// is shown.
     fn settle_focus(&self, restore: bool);
     /// One shot of the alarm sound; failures are logged and ignored.
     fn play(&self, sound: Sound);
     fn stop_sound(&self);
+    /// Notes the app that opens `url`, right before a Join opens it, so the front can go to that app
+    /// when the last reminder closes (decision 2026-10-22, L-061). Never fails the Join.
+    fn remember_join_target(&self, url: &str);
     /// Opens an https link in the default browser. The error never carries the URL.
     fn open_url(&self, url: &str) -> anyhow::Result<()>;
     /// The F4.5 fallback: a system notification with Join and Snooze. `id` is the notification's
@@ -1008,6 +1012,7 @@ impl<H: Host> Scheduler<H> {
         let test = open.test;
         let joined = open.joined || act == Act::Join;
         if let Some(url) = &link {
+            self.host.remember_join_target(url);
             self.host.open_url(url).map_err(|_| AppError::INTERNAL)?;
         }
         if !test {

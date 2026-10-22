@@ -187,6 +187,10 @@ impl Host for TauriHost {
         }
     }
 
+    fn remember_join_target(&self, url: &str) {
+        interrupt::remember_join_target(&self.app, url);
+    }
+
     fn open_url(&self, url: &str) -> anyhow::Result<()> {
         // The error text can quote the URL, which can carry a meeting password: log the host only.
         tauri_plugin_opener::open_url(url, None::<&str>).map_err(|_| {
