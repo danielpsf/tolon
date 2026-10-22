@@ -293,6 +293,14 @@ pub trait Platform: Send + Sync {
     /// window forward there.
     fn activate_app(&self) -> Result<(), PlatformError>;
 
+    /// Switch Tolon between showing in Cmd-Tab and the Dock (`true`) and staying out of both
+    /// (`false`), on the main thread (decision 2026-10-22, "Real-world feeds, calendar names and
+    /// Cmd-Tab", L-068). The app runs with `false`, so the interrupt covers a full-screen Space
+    /// (L-042); it passes `true` while the settings window is shown and goes back before any
+    /// reminder opens. macOS: `NSApp.setActivationPolicy(.regular or .accessory)`. Windows and
+    /// Linux list the settings window already: nothing. The stub records each call per thread.
+    fn set_regular(&self, regular: bool) -> Result<(), PlatformError>;
+
     /// Note which app is in front, before an interrupt opens and before [`Platform::activate_app`],
     /// so [`Platform::restore_previous`] can hand the front back (decision 2026-10-22, "Closing a
     /// reminder gives focus back"). An app that is not Tolon replaces what was noted. When Tolon
@@ -434,11 +442,21 @@ static STUB_YIELDS: AtomicUsize = AtomicUsize::new(0);
 static STUB_JOIN_TARGET: Previous<String> = Previous::new();
 static STUB_HANDOVERS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
+thread_local! {
+    /// The `set_regular` arguments of this thread, so parallel tests do not see each other's.
+    static STUB_POLICY: std::cell::RefCell<Vec<bool>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl StubPlatform {
     /// How many times [`Platform::activate_app`] was called in this process, so tests can check
     /// it ran, and in which order against other steps. Shared by the process like the login flag.
     pub fn activations(&self) -> usize {
         STUB_ACTIVATIONS.load(Ordering::SeqCst)
+    }
+
+    /// The arguments of every [`Platform::set_regular`] call made on this thread, oldest first.
+    pub fn policy_calls(&self) -> Vec<bool> {
+        STUB_POLICY.with(|calls| calls.borrow().clone())
     }
 
     /// Puts app `id` in front for the next [`Platform::remember_frontmost`]; 0 is Tolon itself.
@@ -481,6 +499,11 @@ impl Platform for StubPlatform {
 
     fn activate_app(&self) -> Result<(), PlatformError> {
         STUB_ACTIVATIONS.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn set_regular(&self, regular: bool) -> Result<(), PlatformError> {
+        STUB_POLICY.with(|calls| calls.borrow_mut().push(regular));
         Ok(())
     }
 
@@ -872,6 +895,13 @@ mod tests {
         let before = StubPlatform.activations();
         assert_eq!(StubPlatform.activate_app(), Ok(()));
         assert_eq!(StubPlatform.activations(), before + 1);
+    }
+
+    #[test]
+    fn stub_set_regular_records_each_call_in_order() {
+        assert_eq!(StubPlatform.set_regular(true), Ok(()));
+        assert_eq!(StubPlatform.set_regular(false), Ok(()));
+        assert_eq!(StubPlatform.policy_calls(), [true, false]);
     }
 
     #[test]

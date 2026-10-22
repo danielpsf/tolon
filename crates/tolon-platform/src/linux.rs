@@ -62,6 +62,11 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing: the settings window is already listed in the taskbar or task list here.
+    fn set_regular(&self, _regular: bool) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Nothing: the window manager decides what is in front when the interrupt hides.
     fn remember_frontmost(&self) -> Result<(), PlatformError> {
         Ok(())

@@ -227,6 +227,11 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    /// Nothing: the settings window is already listed in the taskbar or task list here.
+    fn set_regular(&self, _regular: bool) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// `GetForegroundWindow` and its process, unless the window is this process's: then what was
     /// noted stays (a reminder that opens right after another).
     fn remember_frontmost(&self) -> Result<(), PlatformError> {
