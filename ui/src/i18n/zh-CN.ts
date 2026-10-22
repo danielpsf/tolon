@@ -257,6 +257,7 @@ export const zhCN: Messages = {
       timeout: "同步失败：日历响应超时。",
       connect: "同步失败：Tolon 无法连接到服务器。",
       not_calendar: "同步失败：该链接不是 iCal 日历。",
+      not_public: "同步失败：此日历未公开。请改用“iCal 格式的私密地址”。",
       too_large: "同步失败：日历过大，无法读取。",
       network: "同步失败：没有网络连接。",
       unsupported_scheme: "同步失败：仅支持 https 和 webcal 链接。",

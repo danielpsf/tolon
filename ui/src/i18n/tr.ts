@@ -257,6 +257,7 @@ export const tr: Messages = {
       timeout: "Eşitleme başarısız: takvim çok geç yanıt verdi.",
       connect: "Eşitleme başarısız: Tolon sunucuya bağlanamadı.",
       not_calendar: "Eşitleme başarısız: bu bağlantı bir iCal takvimi değil.",
+      not_public: "Eşitleme başarısız: bu takvim herkese açık değil. Bunun yerine “iCal biçiminde gizli adres” seçeneğini kullan.",
       too_large: "Eşitleme başarısız: takvim okunamayacak kadar büyük.",
       network: "Eşitleme başarısız: ağ bağlantısı yok.",
       unsupported_scheme: "Eşitleme başarısız: yalnızca https ve webcal bağlantıları çalışır.",

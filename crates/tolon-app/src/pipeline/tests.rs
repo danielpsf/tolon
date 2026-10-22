@@ -9,6 +9,8 @@ use serde_json::json;
 use super::*;
 use crate::errors::{command_error, CommandError};
 
+mod big_feed;
+
 type TestResult = anyhow::Result<()>;
 
 fn http(status: u16) -> SyncErrorDto {
@@ -305,6 +307,7 @@ async fn s1_3_non_http_failures_use_the_error_kind_code() -> TestResult {
         (FetchError::Timeout, "timeout"),
         (FetchError::Connect, "connect"),
         (FetchError::NotCalendar, "not_calendar"),
+        (FetchError::NotPublic, "not_public"),
         (FetchError::TooLarge { limit: 5 }, "too_large"),
         (FetchError::Network, "network"),
     ];

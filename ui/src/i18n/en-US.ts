@@ -264,6 +264,7 @@ export const enUS = {
       timeout: "Sync failed: the calendar took too long to answer.",
       connect: "Sync failed: Tolon could not connect to the server.",
       not_calendar: "Sync failed: that link is not an iCal calendar.",
+      not_public: "Sync failed: this calendar is not public. Use its “Secret address in iCal format” instead.",
       too_large: "Sync failed: the calendar is too large to read.",
       network: "Sync failed: there is no network connection.",
       unsupported_scheme: "Sync failed: only https and webcal links work.",

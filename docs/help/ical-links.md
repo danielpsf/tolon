@@ -38,7 +38,7 @@ The ICS link is private. Anyone who has it can read the calendar. Unpublish stop
 
    ![The Integrate calendar section: Calendar ID, Public URL, Embed code, Public address in iCal format and Secret address in iCal format with its copy icon and Reset button.](images/google-integrate-calendar.png)
 
-Use the secret address, not the public one. The public address only works if the calendar is public. The Reset button under the secret address makes a new one and stops the old one working. Use it if the link ever leaks.
+Use the secret address, not the public one. The public address only works if the calendar is public; if it is not, Tolon says "this calendar is not public". The Reset button under the secret address makes a new one and stops the old one working. Use it if the link ever leaks.
 
 ## Yahoo Calendar
 

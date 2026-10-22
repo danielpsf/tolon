@@ -261,6 +261,7 @@ export const de: Messages = {
       timeout: "Synchronisierung fehlgeschlagen: Der Kalender hat zu lange nicht geantwortet.",
       connect: "Synchronisierung fehlgeschlagen: Tolon konnte keine Verbindung zum Server herstellen.",
       not_calendar: "Synchronisierung fehlgeschlagen: Dieser Link ist kein iCal-Kalender.",
+      not_public: "Synchronisierung fehlgeschlagen: Dieser Kalender ist nicht öffentlich. Nutze stattdessen die „Geheime Adresse im iCal-Format“.",
       too_large: "Synchronisierung fehlgeschlagen: Der Kalender ist zu groß zum Lesen.",
       network: "Synchronisierung fehlgeschlagen: Es besteht keine Netzwerkverbindung.",
       unsupported_scheme: "Synchronisierung fehlgeschlagen: Nur https- und webcal-Links funktionieren.",

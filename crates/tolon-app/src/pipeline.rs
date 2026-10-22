@@ -18,6 +18,7 @@ use tolon_sync::{normalize_url, redact_url, FetchError, FetchOutcome, IcsFetcher
 use crate::errors::{fetch_code, AppError, SyncErrorDto};
 use crate::google;
 use crate::interrupt::JoinDto;
+use crate::scheduler;
 use crate::settings;
 
 /// The store behind a mutex. A guard is never held across an await.
@@ -151,10 +152,14 @@ pub async fn add_ics(
     })?;
     let result = fetcher.fetch(&url, None).await;
     // The repo cannot rename a calendar, and event ids embed the calendar id, so the name is
-    // read from a first parse and the calendar is inserted afterwards; `apply` parses again with the real id.
+    // read from the header (feeds put X-WR-CALNAME before the first VEVENT) and the calendar is
+    // inserted afterwards; `apply` parses the whole feed with the real id.
     let feed_name = match &result {
         Ok(FetchOutcome::Modified { body, .. }) => {
-            parse_ics(body, &CalendarId(String::new()), &ParseOptions::default()).name
+            let header = body
+                .split_once("BEGIN:VEVENT")
+                .map_or(body.as_str(), |(head, _)| head);
+            parse_ics(header, &CalendarId(String::new()), &ParseOptions::default()).name
         }
         _ => None,
     };
@@ -202,6 +207,16 @@ pub async fn sync_all(db: &Db, fetcher: &impl Fetch, now: DateTime<Utc>) -> anyh
     first_err.map_or(Ok(()), Err)
 }
 
+/// What one fetch brings once it is parsed and encoded, so the store lock is held only to write.
+enum Answer {
+    Events {
+        feed: Vec<FeedEvent>,
+        etag: Option<String>,
+        skipped: usize,
+    },
+    NotModified,
+}
+
 /// Writes the outcome of one fetch. The error text and the log row never contain the URL.
 fn apply(
     db: &Db,
@@ -210,21 +225,41 @@ fn apply(
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     let at = now.to_rfc3339();
+    // Parsing a 64 MB feed takes seconds: it happens before the lock, which the scheduler and the
+    // UI wait on. The parse only needs the id; a calendar removed meanwhile is caught below.
+    let answer = match result {
+        Ok(FetchOutcome::Modified { body, etag }) => {
+            let mut parsed = parse_ics(&body, &CalendarId(id.to_owned()), &parse_options(now));
+            drop(body);
+            if parsed.over_event_cap {
+                Err(FetchError::TooLarge { limit: MAX_EVENTS })
+            } else {
+                Ok(Answer::Events {
+                    feed: feed_events(std::mem::take(&mut parsed.events))?,
+                    etag,
+                    skipped: parsed.skipped_components,
+                })
+            }
+        }
+        Ok(FetchOutcome::NotModified) => Ok(Answer::NotModified),
+        Err(e) => Err(e),
+    };
     let store = lock(db);
     // Removed while the fetch was in flight: nothing to write.
     let Some(cal) = store.calendars().get(id)? else {
         return Ok(());
     };
-    match result {
-        Ok(FetchOutcome::Modified { body, etag }) => {
-            let mut parsed =
-                parse_ics(&body, &CalendarId(cal.id.clone()), &ParseOptions::default());
-            let feed = feed_events(std::mem::take(&mut parsed.events))?;
+    match answer {
+        Ok(Answer::Events {
+            feed,
+            etag,
+            skipped,
+        }) => {
             store.events().replace_for_calendar(id, &feed, &at)?;
             store.calendars().record_success(id, etag.as_deref(), &at)?;
             // S2.3: the log records the skipped count as a code ("skipped:1"), not a sentence.
-            if parsed.skipped_components > 0 {
-                let detail = format!("skipped:{}", parsed.skipped_components);
+            if skipped > 0 {
+                let detail = format!("skipped:{skipped}");
                 store
                     .sync_log()
                     .append(Some(id), &at, "ok", Some(&detail))?;
@@ -232,7 +267,7 @@ fn apply(
         }
         // A 304 is a healthy answer, so it clears a stale error (record_success, not
         // record_not_modified); the etag stays and the stored events are untouched (S1.5).
-        Ok(FetchOutcome::NotModified) => {
+        Ok(Answer::NotModified) => {
             store
                 .calendars()
                 .record_success(id, cal.etag.as_deref(), &at)?;
@@ -248,6 +283,34 @@ fn apply(
         }
     }
     Ok(())
+}
+
+/// A calendar keeps at most this many events after the old-event drop; a feed with more is
+/// refused as `too_large` (decision 2026-10-22, L-066 review). The owner's 13.2 MB calendar has 6,359.
+const MAX_EVENTS: usize = 100_000;
+
+/// Single events that ended before the cutoff never reach the store (decision 2026-10-22). A
+/// series (RRULE or RDATE), its overrides and EXDATEs are kept: they still make future occurrences.
+fn parse_options(now: DateTime<Utc>) -> ParseOptions {
+    ParseOptions {
+        keep_from: Some(keep_from(now, local_zone())),
+        max_events: Some(MAX_EVENTS),
+        ..ParseOptions::default()
+    }
+}
+
+/// Local midnight yesterday, or the scheduler's look-back when that reaches further back (a day
+/// that is 25 h long, or just after midnight on a 23 h one). Either way the panel's day and every
+/// alarm the scheduler can still plan are covered.
+pub(crate) fn keep_from(now: DateTime<Utc>, zone: Tz) -> DateTime<Utc> {
+    let lookback = now
+        .checked_sub_signed(scheduler::LOOKBACK)
+        .unwrap_or(DateTime::<Utc>::MIN_UTC);
+    now.with_timezone(&zone)
+        .date_naive()
+        .checked_sub_signed(Duration::days(1))
+        .and_then(|day| midnight(day, zone).ok())
+        .map_or(lookback, |yesterday| yesterday.min(lookback))
 }
 
 /// Duplicate UIDs keep the last event, then each event becomes its stored JSON payload.

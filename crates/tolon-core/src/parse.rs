@@ -16,6 +16,14 @@ pub struct ParseOptions {
     /// Addresses that are the calendar owner, for the declined rule. When empty and the calendar
     /// name is an address (Google names the primary calendar that way), the name is used.
     pub owner_emails: Vec<String>,
+    /// Drops single events that end before this instant, as the VEVENT is read, so a feed with
+    /// years of history never reaches the store. A series (RRULE or RDATE; an old one still makes
+    /// future occurrences), RECURRENCE-ID overrides and EXDATEs are always kept: an override
+    /// without its master would lose its title and its key. `None` keeps all.
+    pub keep_from: Option<DateTime<Utc>>,
+    /// Reading stops when more than this many VEVENTs are kept (after the drop above), so a hostile
+    /// feed of tiny events cannot grow memory or the work done on every tick. `None` has no limit.
+    pub max_events: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +31,9 @@ pub struct ParsedCalendar {
     /// `X-WR-CALNAME`; the caller falls back to the host (S1.1).
     pub name: Option<String>,
     pub events: Vec<Event>,
+    /// The feed kept more than `ParseOptions::max_events` VEVENTs; `events` is empty and the
+    /// caller refuses the feed.
+    pub over_event_cap: bool,
     /// VEVENTs dropped for a missing or invalid DTSTART or RRULE, or for being cut off (S2.3).
     pub skipped_components: usize,
 }
@@ -65,8 +76,17 @@ pub fn parse_ics(input: &str, calendar: &CalendarId, opts: &ParseOptions) -> Par
             "END" if value.eq_ignore_ascii_case("VEVENT") => {
                 if let Some(props) = current.take() {
                     match build(&props, calendar) {
+                        Some(r) if ended_before(&r, opts.keep_from) => {}
                         Some(r) => raw.push(r),
                         None => skipped += 1,
+                    }
+                    if opts.max_events.is_some_and(|max| raw.len() > max) {
+                        return ParsedCalendar {
+                            name,
+                            events: Vec::new(),
+                            over_event_cap: true,
+                            skipped_components: skipped,
+                        };
                     }
                 }
                 nested = 0;
@@ -107,12 +127,45 @@ pub fn parse_ics(input: &str, calendar: &CalendarId, opts: &ParseOptions) -> Par
     ParsedCalendar {
         name,
         events,
+        over_event_cap: false,
         skipped_components: skipped,
+    }
+}
+
+/// A single event, not a series and not an override, that is certainly over before `keep_from`.
+/// The later of DTSTART and DTEND counts, so a malformed DTEND before DTSTART cannot drop a
+/// future event. A floating or all-day time has no zone yet (it is read in the machine's zone
+/// later); no zone is more than 12 h behind UTC, so the wall time plus 12 h is its latest
+/// possible instant. The event goes only when it is over in every zone.
+fn ended_before(r: &Raw, keep_from: Option<DateTime<Utc>>) -> bool {
+    let Some(cut) = keep_from else { return false };
+    if r.recurring || r.recurrence_id.is_some() {
+        return false;
+    }
+    match (latest_instant(&r.event.start), latest_instant(&r.event.end)) {
+        (Some(start), Some(end)) => start.max(end) < cut,
+        _ => false,
+    }
+}
+
+fn latest_instant(t: &EventTime) -> Option<DateTime<Utc>> {
+    match t {
+        EventTime::Utc { at } => Some(*at),
+        EventTime::Zoned { .. } => t.resolve(Tz::UTC).map(|t| t.with_timezone(&Utc)),
+        EventTime::Floating { local } => local
+            .checked_add_signed(Duration::hours(12))
+            .map(|t| t.and_utc()),
+        EventTime::Date { date } => date
+            .and_hms_opt(0, 0, 0)
+            .and_then(|t| t.checked_add_signed(Duration::hours(12)))
+            .map(|t| t.and_utc()),
     }
 }
 
 struct Raw {
     event: Event,
+    /// RRULE or RDATE: a series, even though only RRULE is expanded (RDATE is not read).
+    recurring: bool,
     recurrence_id: Option<EventTime>,
     /// Lower-cased addresses with their answers; matched against the owner once the name is known.
     attendees: Vec<(String, Option<Response>)>,
@@ -311,7 +364,9 @@ fn build(props: &[Property], calendar: &CalendarId) -> Option<Raw> {
         })
         .unwrap_or(DateTime::<Utc>::UNIX_EPOCH);
 
+    let recurring = rrule.is_some() || get("RDATE").is_some();
     Some(Raw {
+        recurring,
         event: Event {
             id: EventId(format!("{}:{uid}", calendar.0)),
             calendar: calendar.clone(),
