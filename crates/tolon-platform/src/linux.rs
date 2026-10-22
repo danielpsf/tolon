@@ -77,6 +77,11 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing: the window manager gives the front to the window that is on top.
+    fn remember_join_target(&self, _url: &str) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Nothing: no app-level activation without a window.
     fn yield_focus(&self) -> Result<(), PlatformError> {
         Ok(())
@@ -151,6 +156,10 @@ mod tests {
     fn l056_focus_calls_do_nothing() {
         assert_eq!(LinuxPlatform.remember_frontmost(), Ok(()));
         assert_eq!(LinuxPlatform.restore_previous(), Ok(()));
+        assert_eq!(
+            LinuxPlatform.remember_join_target("https://x.example/j"),
+            Ok(())
+        );
         assert_eq!(LinuxPlatform.yield_focus(), Ok(()));
         assert_eq!(LinuxPlatform.forget_frontmost(), Ok(()));
     }

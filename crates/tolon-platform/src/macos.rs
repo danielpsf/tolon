@@ -4,8 +4,8 @@ use crate::login::{from_sm_app_service_status, sm_call_for, sm_error_means_done,
 use crate::macos_level::{top_left_y, INTERRUPT_COLLECTION_BEHAVIOR, INTERRUPT_WINDOW_LEVEL};
 use crate::monitors::{to_physical_i32, to_physical_u32};
 use crate::{
-    ns_view_of, Focus, Platform, PlatformError, Previous, Raised, Screen, StartAtLogin, Takeover,
-    TrayStyle,
+    has_url_scheme, ns_view_of, Focus, Platform, PlatformError, Previous, Raised, Screen,
+    StartAtLogin, Takeover, TrayStyle,
 };
 use objc2::rc::Retained;
 use objc2::runtime::NSObjectProtocol;
@@ -14,7 +14,7 @@ use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSEvent,
     NSRunningApplication, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
 };
-use objc2_foundation::{ns_string, NSError, NSNumber};
+use objc2_foundation::{ns_string, NSBundle, NSError, NSNumber, NSString, NSURL};
 use objc2_service_management::SMAppService;
 use raw_window_handle::HasWindowHandle;
 
@@ -22,6 +22,23 @@ pub struct MacPlatform;
 
 /// The pid of the app that was in front when the interrupt opened.
 static PREVIOUS: Previous<i32> = Previous::new();
+
+/// The bundle id of the app that opens the last join link, until a hand-over uses it (L-061).
+static JOIN_TARGET: Previous<String> = Previous::new();
+
+/// The app LaunchServices picks for `url`: its bundle id, via `NSWorkspace` and `NSBundle`.
+fn bundle_id_for_url(url: &str) -> Option<String> {
+    if !has_url_scheme(url) {
+        return None;
+    }
+    let url = NSURL::URLWithString(&NSString::from_str(url))?;
+    let app = NSWorkspace::sharedWorkspace().URLForApplicationToOpenURL(&url)?;
+    Some(
+        NSBundle::bundleWithURL(&app)?
+            .bundleIdentifier()?
+            .to_string(),
+    )
+}
 
 fn main_thread() -> Result<MainThreadMarker, PlatformError> {
     MainThreadMarker::new().ok_or(PlatformError::NotMainThread)
@@ -111,12 +128,51 @@ impl Platform for MacPlatform {
         Ok(())
     }
 
-    /// `NSApp.deactivate()`: Tolon stops being the active app, so the window server activates the
-    /// app that owns the topmost window (the browser a Join opened). It exists from macOS 14 and
-    /// Tolon supports 13, so the selector is checked first; on 13 nothing happens.
+    /// `NSWorkspace.URLForApplicationToOpenURL` before the link opens, kept as a bundle id.
+    fn remember_join_target(&self, url: &str) -> Result<(), PlatformError> {
+        main_thread()?;
+        match bundle_id_for_url(url) {
+            Some(id) => {
+                tracing::debug!(bundle = %id, "noted the app that opens the join link");
+                JOIN_TARGET.remember(id);
+            }
+            None => {
+                tracing::debug!("no app found for the join link; a hand-over will deactivate");
+                JOIN_TARGET.forget();
+            }
+        }
+        Ok(())
+    }
+
+    /// Activates the running app noted by `remember_join_target` (`NSRunningApplication.
+    /// activateWithOptions`, as `restore_previous`: Tolon is the active app here, so the plain
+    /// request is honoured). `NSApp.deactivate()` did not hand the front to the browser on macOS
+    /// 27 (L-060), so it is only the fallback, when no app was noted, none is running, or the
+    /// request is refused. `deactivate` exists from macOS 14 and Tolon supports 13, so the
+    /// selector is checked first; on 13 nothing happens.
     fn yield_focus(&self) -> Result<(), PlatformError> {
         let app = NSApplication::sharedApplication(main_thread()?);
+        match JOIN_TARGET.take() {
+            Some(id) => {
+                let running = NSRunningApplication::runningApplicationsWithBundleIdentifier(
+                    &NSString::from_str(&id),
+                );
+                match running.firstObject() {
+                    Some(target) => {
+                        let accepted =
+                            target.activateWithOptions(NSApplicationActivationOptions::empty());
+                        tracing::debug!(bundle = %id, accepted, "handed the front to the join app");
+                        if accepted {
+                            return Ok(());
+                        }
+                    }
+                    None => tracing::debug!(bundle = %id, "the join app is not running"),
+                }
+            }
+            None => tracing::debug!("no join app noted"),
+        }
         if app.respondsToSelector(sel!(deactivate)) {
+            tracing::debug!("deactivating Tolon");
             app.deactivate();
         } else {
             tracing::debug!("NSApplication.deactivate needs macOS 14");
@@ -333,6 +389,10 @@ mod tests {
             Err(PlatformError::NotMainThread)
         );
         assert_eq!(MacPlatform.yield_focus(), Err(PlatformError::NotMainThread));
+        assert_eq!(
+            MacPlatform.remember_join_target("https://meet.example.com/x"),
+            Err(PlatformError::NotMainThread)
+        );
         // Dropping the noted pid touches no AppKit object, so it works anywhere.
         assert_eq!(MacPlatform.forget_frontmost(), Ok(()));
     }

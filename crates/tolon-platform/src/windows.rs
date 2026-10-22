@@ -271,6 +271,11 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    /// Nothing: Windows gives the foreground to the window that is on top.
+    fn remember_join_target(&self, _url: &str) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Nothing: Windows has no app-level activation without a window; the foreground window is
     /// whatever the system put there when the interrupt hid.
     fn yield_focus(&self) -> Result<(), PlatformError> {
@@ -427,6 +432,10 @@ mod tests {
     #[test]
     fn l056_restoring_with_nothing_remembered_is_a_no_op() {
         assert_eq!(WindowsPlatform.restore_previous(), Ok(()));
+        assert_eq!(
+            WindowsPlatform.remember_join_target("https://x.example/j"),
+            Ok(())
+        );
         assert_eq!(WindowsPlatform.yield_focus(), Ok(()));
         assert_eq!(WindowsPlatform.forget_frontmost(), Ok(()));
     }

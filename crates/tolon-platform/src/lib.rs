@@ -312,11 +312,19 @@ pub trait Platform: Send + Sync {
     /// Join (the browser has focus), or when the interrupt could not open.
     fn forget_frontmost(&self) -> Result<(), PlatformError>;
 
-    /// Give up Tolon's activation without naming another app, once no interrupt window is left
-    /// after a Join (decision 2026-10-22, L-060): the browser window is on top, so the OS hands the
-    /// keys to the app that owns it. The caller skips it while the settings window or the panel is
-    /// shown. macOS: `NSApp.deactivate()`. Windows, Linux and the stub: nothing to give up, there
-    /// is no app-level activation without a window; the stub counts the calls.
+    /// Note which app opens `url`, before the join link opens (decision 2026-10-22, L-061), so
+    /// [`Platform::yield_focus`] can hand the front to it. Replaces what was noted for an earlier
+    /// join. Not an error when no app is found: the hand-over then falls back to giving up
+    /// activation. macOS: `NSWorkspace.URLForApplicationToOpenURL`, kept as a bundle id (never
+    /// logged above debug, and never the URL). Windows, Linux: nothing. The stub keeps the URL.
+    fn remember_join_target(&self, url: &str) -> Result<(), PlatformError>;
+
+    /// Hand the front on once no interrupt window is left after a Join (decision 2026-10-22,
+    /// L-060, L-061); the caller skips it while the settings window or the panel is shown. macOS:
+    /// activate the running app noted by [`Platform::remember_join_target`] and forget it; with
+    /// none noted, not running, or refusing, `NSApp.deactivate()` (macOS 14 and later) as before.
+    /// Windows, Linux: nothing to hand over, there is no app-level activation without a window.
+    /// The stub counts the calls and keeps the targets handed to.
     fn yield_focus(&self) -> Result<(), PlatformError>;
 
     /// How much of the inner size Tauri reports for `window` the title bar covers, in logical
@@ -391,6 +399,19 @@ impl<T> Previous<T> {
     }
 }
 
+/// True when `url` starts with an RFC 3986 scheme (`https:`, `zoommtg:`) and has something after
+/// it. macOS asks LaunchServices for the app that opens a join link only then: a string without a
+/// scheme is read as a file path, and its answer is the app for that path, not for a link.
+pub fn has_url_scheme(url: &str) -> bool {
+    let Some((scheme, rest)) = url.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        && !rest.is_empty()
+}
+
 /// Implementation for CI and tests: one fixed 1440x900 primary screen at 2x; raising does
 /// nothing and reports no focus; the login item is one flag in memory, shared by the process
 /// like the one login item of a real machine, so tests that set it must not run in parallel. It
@@ -405,6 +426,8 @@ static STUB_FRONT: AtomicU32 = AtomicU32::new(0);
 static STUB_PREVIOUS: Previous<u32> = Previous::new();
 static STUB_RESTORES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static STUB_YIELDS: AtomicUsize = AtomicUsize::new(0);
+static STUB_JOIN_TARGET: Previous<String> = Previous::new();
+static STUB_HANDOVERS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 impl StubPlatform {
     /// How many times [`Platform::activate_app`] was called in this process, so tests can check
@@ -421,6 +444,16 @@ impl StubPlatform {
     /// How many times [`Platform::yield_focus`] was called in this process.
     pub fn yields(&self) -> usize {
         STUB_YIELDS.load(Ordering::SeqCst)
+    }
+
+    /// The join links [`Platform::yield_focus`] handed the front to, oldest first. The stub cannot
+    /// resolve an app, so the noted link stands in for it. A call with no link noted is a
+    /// deactivation: it counts in [`StubPlatform::yields`] only.
+    pub fn handed_over(&self) -> Vec<String> {
+        STUB_HANDOVERS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// The apps [`Platform::restore_previous`] brought back, oldest first.
@@ -469,8 +502,19 @@ impl Platform for StubPlatform {
         Ok(())
     }
 
+    fn remember_join_target(&self, url: &str) -> Result<(), PlatformError> {
+        STUB_JOIN_TARGET.remember(url.to_owned());
+        Ok(())
+    }
+
     fn yield_focus(&self) -> Result<(), PlatformError> {
         STUB_YIELDS.fetch_add(1, Ordering::SeqCst);
+        if let Some(target) = STUB_JOIN_TARGET.take() {
+            STUB_HANDOVERS
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(target);
+        }
         Ok(())
     }
 
@@ -875,6 +919,60 @@ mod tests {
         assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
         assert_eq!(StubPlatform.restore_previous(), Ok(()));
         assert_eq!(StubPlatform.restored()[before..], [42]);
+    }
+
+    #[test]
+    fn l061_has_url_scheme_accepts_links_and_rejects_paths() {
+        for ok in [
+            "https://meet.example.com/abc",
+            "zoommtg://zoom.us/join?confno=1",
+            "msteams:/l/meetup-join/x",
+            "web+app://x",
+        ] {
+            assert!(has_url_scheme(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "meet.example.com/abc",
+            "/Users/someone/call.html",
+            "://x",
+            "1http://x",
+            "ht tp://x",
+            "https:",
+        ] {
+            assert!(!has_url_scheme(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn l061_stub_hands_the_front_to_the_noted_join_target_once() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = StubPlatform.handed_over().len();
+        assert_eq!(
+            StubPlatform.remember_join_target("https://a.example/x"),
+            Ok(())
+        );
+        assert_eq!(
+            StubPlatform.remember_join_target("https://b.example/y"),
+            Ok(())
+        );
+        assert_eq!(StubPlatform.yield_focus(), Ok(()));
+        assert_eq!(
+            StubPlatform.handed_over()[before..],
+            ["https://b.example/y"]
+        );
+        // The target was used up: the next yield is a plain deactivation.
+        assert_eq!(StubPlatform.yield_focus(), Ok(()));
+        assert_eq!(StubPlatform.handed_over().len(), before + 1);
+    }
+
+    #[test]
+    fn l061_stub_without_a_join_target_only_counts_the_yield() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let (yields, handed) = (StubPlatform.yields(), StubPlatform.handed_over().len());
+        assert_eq!(StubPlatform.yield_focus(), Ok(()));
+        assert_eq!(StubPlatform.yields(), yields + 1);
+        assert_eq!(StubPlatform.handed_over().len(), handed);
     }
 
     #[test]
