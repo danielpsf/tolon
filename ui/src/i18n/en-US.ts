@@ -146,15 +146,15 @@ export const enUS = {
         heading: "Help us fix a problem",
         intro: "Save a file with Tolon's logs and settings, and send it to us. Tolon sends nothing itself.",
         save: "Save diagnostics",
-        fileType: "Zip file",
         savedTo: (path: string) => `Saved to ${path}`,
         reveal: {
           finder: "Show in Finder",
           explorer: "Show in Explorer",
           files: "Show in Files",
         },
-        // {support} is where to send the file, shown as a link.
-        sendTo: "Send the file to {support} with a note on what happened.",
+        // {support} is the support address, a mailto link.
+        sendTo: "Send it to {support} with the file attached and a note on what happened.",
+        issues: "Or open a public issue on GitHub",
         whatsInside: "What the file holds, and what it never holds",
       },
     },

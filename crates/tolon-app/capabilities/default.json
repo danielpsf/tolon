@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window may listen to events from the core (calendars:changed, occurrences:changed) and open the system save dialog for Save diagnostics (L-072); the dialog only returns the chosen path and Tolon writes the file itself. Nothing else: no open dialog, fs or shell permissions.",
+  "description": "The main window may listen to events from the core (calendars:changed, occurrences:changed). Nothing else: no dialog, fs or shell permissions.",
   "windows": ["main"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "dialog:allow-save"]
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
 }

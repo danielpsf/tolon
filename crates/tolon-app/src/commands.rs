@@ -795,15 +795,18 @@ pub struct DiagnosticsState {
     last: std::sync::Mutex<Option<std::path::PathBuf>>,
 }
 
-/// What the About page needs before the save dialog: the suggested path, and which file manager
-/// "Show in ..." names (`finder`, `explorer`, `files`).
+/// What the About page needs: which file manager "Show in ..." names (`finder`, `explorer`,
+/// `files`), and where to send the file.
 #[derive(Serialize)]
 pub struct DiagnosticsPlanDto {
-    pub default_path: String,
     pub file_manager: &'static str,
-    /// Where to send the file (GitHub issues until there is a support address).
-    pub support_url: &'static str,
-    /// What the file holds: `docs/help/diagnostics.md` at this version.
+    /// The support address, the text of the mailto link.
+    pub support_email: &'static str,
+    /// `mailto:` the address with a subject and a short template (`diagnostics_open("support")`).
+    pub support_url: String,
+    /// GitHub issues, for a public report (`diagnostics_open("issues")`).
+    pub issues_url: &'static str,
+    /// What the file holds: `docs/help/diagnostics.md` at this version (`diagnostics_open("doc")`).
     pub doc_url: String,
 }
 
@@ -812,44 +815,91 @@ fn local_now() -> DateTime<chrono::FixedOffset> {
     Utc::now().with_timezone(&zone).fixed_offset()
 }
 
-/// The default name in the Downloads folder (the home folder when there is none).
 #[tauri::command]
 pub async fn diagnostics_plan(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<DiagnosticsPlanDto, CommandError> {
     main_only(window.label())?;
-    let folder = app
-        .path()
-        .download_dir()
-        .or_else(|_| app.path().home_dir())
-        .map_err(|_| command_error(&AppError::DIAGNOSTICS_SAVE.into()))?;
     let version = app.package_info().version.to_string();
-    let name = crate::diagnostics::file_name(&version, local_now());
     let file_manager = match crate::interrupt::native().name() {
         "macos" => "finder",
         "windows" => "explorer",
         _ => "files",
     };
     Ok(DiagnosticsPlanDto {
-        default_path: folder.join(name).to_string_lossy().into_owned(),
         file_manager,
-        support_url: crate::diagnostics::SUPPORT_URL,
+        support_email: crate::diagnostics::SUPPORT_EMAIL,
+        support_url: crate::diagnostics::support_mailto(&version),
+        issues_url: crate::diagnostics::ISSUES_URL,
         doc_url: crate::diagnostics::doc_url(&version),
     })
 }
 
-/// "Save diagnostics": writes the zip to `path`, the answer of the system save dialog, and returns
-/// where it went (`.zip` is added when the dialog left it off). Nothing is sent anywhere.
+/// "Save diagnostics": the system save dialog opens from Rust, so the page never names a path. It
+/// suggests `Tolon-diagnostics-<version>-<YYYYMMDD-HHMM>.zip` in Downloads. Answers where the zip
+/// went, or `null` when the person cancelled. Nothing is sent anywhere.
 #[tauri::command]
 pub async fn diagnostics_save(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    client: crate::diagnostics::Client,
+) -> Result<Option<String>, CommandError> {
+    main_only(window.label())?;
+    use tauri_plugin_dialog::DialogExt;
+    let failed = || command_error(&AppError::DIAGNOSTICS_SAVE.into());
+    let folder = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|_| failed())?;
+    let version = app.package_info().version.to_string();
+    let dialog = app
+        .dialog()
+        .file()
+        .set_parent(&window)
+        .set_directory(folder)
+        .set_file_name(crate::diagnostics::file_name(&version, local_now()))
+        .add_filter("Zip", &["zip"]);
+    let chosen = tauri::async_runtime::spawn_blocking(move || dialog.blocking_save_file())
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "the save dialog failed");
+            failed()
+        })?;
+    let Some(chosen) = chosen else {
+        return Ok(None);
+    };
+    let path = chosen.into_path().map_err(|_| failed())?;
+    let target = crate::diagnostics::target(&path).map_err(|e| command_error(&e.into()))?;
+    write_diagnostics(&app, &window, target, client)
+        .await
+        .map(Some)
+}
+
+/// The save without the dialog, for the WebDriver suite, which cannot drive a system dialog. Only
+/// in the end-to-end build, whose feature no release can have.
+#[cfg(feature = "e2e-loopback")]
+#[tauri::command]
+pub async fn diagnostics_e2e_save(
     app: AppHandle,
     window: tauri::WebviewWindow,
     path: String,
     client: crate::diagnostics::Client,
 ) -> Result<String, CommandError> {
     main_only(window.label())?;
-    let target = crate::diagnostics::target(&path).map_err(|e| command_error(&e.into()))?;
+    let target = crate::diagnostics::target(std::path::Path::new(&path))
+        .map_err(|e| command_error(&e.into()))?;
+    write_diagnostics(&app, &window, target, client).await
+}
+
+/// Collects, zips and writes to `target`, then remembers it for "Show in ...".
+async fn write_diagnostics(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    target: std::path::PathBuf,
+    client: crate::diagnostics::Client,
+) -> Result<String, CommandError> {
     let local = local_now();
     let screens = window
         .available_monitors()
@@ -871,17 +921,23 @@ pub async fn diagnostics_save(
         time_zone: pipeline::local_zone().name().to_owned(),
         client,
     };
-    let collected = state(&app).and_then(|s| {
+    let collected = state(app).and_then(|s| {
         let store = pipeline::lock(&s.db);
         let env = crate::diagnostics::environment(facts, &store, local);
         Ok((env, crate::diagnostics::store_entries(&store, Utc::now())?))
     });
     let (env, files) = collected.map_err(|e| command_error(&e))?;
+    let home = app.path().home_dir().ok();
     let written = tauri::async_runtime::spawn_blocking({
         let target = target.clone();
         move || -> anyhow::Result<()> {
-            let bytes =
-                crate::diagnostics::archive(&env, files, crate::logs::folder().as_deref(), local)?;
+            let bytes = crate::diagnostics::archive(
+                &env,
+                files,
+                crate::logs::folder().as_deref(),
+                home.as_deref(),
+                local,
+            )?;
             crate::diagnostics::save(&target, &bytes)?;
             Ok(())
         }
@@ -907,8 +963,9 @@ pub async fn diagnostics_save(
     Ok(target.to_string_lossy().into_owned())
 }
 
-/// Opens one of the two fixed GitHub pages of "Help us fix a problem" in the browser: `support`
-/// (where to send the file) or `doc` (what it holds). The page names a link, never a URL.
+/// Opens one of the fixed links of "Help us fix a problem": `support` (the mailto with its
+/// template, the only mailto Tolon opens), `issues` (GitHub issues) or `doc` (what the file
+/// holds). The page names a link, never a URL.
 #[tauri::command]
 pub async fn diagnostics_open(
     app: AppHandle,
@@ -916,13 +973,15 @@ pub async fn diagnostics_open(
     link: String,
 ) -> Result<(), CommandError> {
     main_only(window.label())?;
+    let version = app.package_info().version.to_string();
     let url = match link.as_str() {
-        "support" => crate::diagnostics::SUPPORT_URL.to_owned(),
-        "doc" => crate::diagnostics::doc_url(&app.package_info().version.to_string()),
+        "support" => crate::diagnostics::support_mailto(&version),
+        "issues" => crate::diagnostics::ISSUES_URL.to_owned(),
+        "doc" => crate::diagnostics::doc_url(&version),
         _ => return Err(command_error(&AppError::NOT_FOUND.into())),
     };
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| {
-        tracing::warn!(error = %e, "could not open the help link in the browser");
+        tracing::warn!(error = %e, "could not open the help link");
         command_error(&AppError::DIAGNOSTICS_REVEAL.into())
     })
 }
@@ -1130,6 +1189,7 @@ mod tests {
         ("diagnostics_save", "main_only"),
         ("diagnostics_open", "main_only"),
         ("diagnostics_reveal", "main_only"),
+        ("diagnostics_e2e_save", "main_only"),
         ("update_e2e_endpoint", "main_only"),
         ("app_e2e_settings_visible", "main_only"),
         ("app_e2e_interrupt_windows", "main_only"),

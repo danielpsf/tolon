@@ -641,6 +641,19 @@ impl Platform for StubPlatform {
     }
 }
 
+/// Makes `dir` readable by the person's own account only (0700) on macOS and Linux, for the log
+/// folder (L-072 review). Windows keeps the profile folder's own ACL, which is already per user.
+pub fn private_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let _ = dir;
+    Ok(())
+}
+
 /// Runs a file manager launcher and waits for it to exit (L-072). `check_status: false` for
 /// Explorer, which exits with 1 even when it showed the file.
 #[cfg_attr(

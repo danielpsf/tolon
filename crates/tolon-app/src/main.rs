@@ -38,14 +38,15 @@ fn open_store(app: &tauri::AppHandle) -> anyhow::Result<Store> {
 }
 
 /// Creates `dir` (and parents) first: SQLite does not make folders. The dialog text stays a short
-/// sentence; the log line carries the path and the full cause chain for diagnosis.
+/// sentence; the log line names the file and carries the full cause chain for diagnosis.
 fn open_store_in(dir: &Path) -> anyhow::Result<Store> {
     let db = dir.join("tolon.db");
     let opened = std::fs::create_dir_all(dir)
         .context("Tolon could not create its data folder.")
         .and_then(|()| Ok(Store::open(&db)?));
     opened.inspect_err(
-        |e| tracing::error!(path = %db.display(), error = %format!("{e:#}"), "could not open the database"),
+        // Not the full path: it names the home folder, and the log files go into the diagnostics zip.
+        |e| tracing::error!(path = "<data dir>/tolon.db", error = %format!("{e:#}"), "could not open the database"),
     )
 }
 
@@ -191,6 +192,8 @@ fn main() -> anyhow::Result<()> {
             commands::app_e2e_settings_visible,
             #[cfg(feature = "e2e-loopback")]
             commands::app_e2e_interrupt_windows,
+            #[cfg(feature = "e2e-loopback")]
+            commands::diagnostics_e2e_save,
         ])
         .setup(|app| {
             // The log files for "Save diagnostics" (L-072); without a data folder, stderr only.

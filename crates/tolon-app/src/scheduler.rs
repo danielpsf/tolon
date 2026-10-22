@@ -273,14 +273,22 @@ pub fn plan_and_tick(
     let store = pipeline::lock(db);
     let stored = stored_alarms(&store)?;
     let mut alarms = plan(occurrences, settings, &stored, now);
-    log_plan(&stored, &alarms, occurrences.len());
+    // The alarm codes of the debug lines (L-072); without the secret the lines say "unknown".
+    let refs = crate::diagnostics::AlarmRefs::load(&store)
+        .inspect_err(|e| tracing::warn!(error = %e, "no alarm code secret"))
+        .ok();
+    let code = |a: &tolon_core::OccurrenceKey| {
+        refs.as_ref()
+            .map_or_else(|| "unknown".to_owned(), |r| r.of(&a.to_string()))
+    };
+    log_plan(&stored, &alarms, occurrences.len(), &code);
     let planned: Vec<AlarmRow> = alarms.iter().map(|a| to_row(a, now)).collect();
     store.alarms().upsert_all(&planned)?;
     store.alarms().prune_before(&ts(now))?;
     let transitions = tick(&alarms, now, pause, quiet);
     for t in &transitions {
         tracing::debug!(
-            alarm = %crate::diagnostics::key_ref(&t.occurrence.to_string()),
+            alarm = %code(&t.occurrence),
             kind = t.kind.as_str(),
             to = t.to.name(),
             paused = pause.is_some(),
@@ -316,9 +324,14 @@ pub fn plan_and_tick(
 }
 
 /// Debug lines for the plan's decisions (L-072): each alarm that is new or moved, and each one
-/// the plan dropped, named by `key_ref` (the key holds the event's UID), never by title. Nothing
+/// the plan dropped, named by their `AlarmRefs` code (the key holds the event's UID), never by title. Nothing
 /// when the plan did not change, so a quiet day writes few lines.
-fn log_plan(stored: &[Alarm], planned: &[Alarm], occurrences: usize) {
+fn log_plan(
+    stored: &[Alarm],
+    planned: &[Alarm],
+    occurrences: usize,
+    code: &dyn Fn(&tolon_core::OccurrenceKey) -> String,
+) {
     let same = |a: &Alarm, b: &Alarm| a.occurrence == b.occurrence && a.kind == b.kind;
     let mut changed = false;
     for a in planned {
@@ -328,7 +341,7 @@ fn log_plan(stored: &[Alarm], planned: &[Alarm], occurrences: usize) {
         }
         changed = true;
         tracing::debug!(
-            alarm = %crate::diagnostics::key_ref(&a.occurrence.to_string()),
+            alarm = %code(&a.occurrence),
             kind = a.kind.as_str(),
             at = %ts(a.at),
             meeting_start = %ts(a.start),
@@ -343,7 +356,7 @@ fn log_plan(stored: &[Alarm], planned: &[Alarm], occurrences: usize) {
     {
         changed = true;
         tracing::debug!(
-            alarm = %crate::diagnostics::key_ref(&s.occurrence.to_string()),
+            alarm = %code(&s.occurrence),
             kind = s.kind.as_str(),
             state = s.state.name(),
             "alarm dropped: its meeting is gone, ignored or over"

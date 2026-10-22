@@ -21,8 +21,10 @@ type TestResult = anyhow::Result<()>;
 
 /// Every string that must never reach the zip: the address and its token, the feed's calendar
 /// name, the event's title, description, location, attendee, UID and join link, the Google
-/// account and calendar ids, the sync token, an OAuth access token, and an ignore word.
-const SECRETS: [&str; 12] = [
+/// account and calendar ids, the sync token, an OAuth access token, an ignore word, and the
+/// person's name in the home folder's path.
+const SECRETS: [&str; 13] = [
+    "SECRETUSER",
     "private-SECRET",
     "SECRETTITLE",
     "SECRETDESCRIPTION",
@@ -75,7 +77,7 @@ fn contains(haystack: &[u8], needle: &str) -> bool {
 
 /// A store with an iCal calendar that synced, one that failed, and a Google calendar; the
 /// scheduler has planned and fired the meeting; every step logged to the files in `logs`.
-async fn seeded(logs: &Path) -> anyhow::Result<Db> {
+async fn seeded(logs: &Path, home: &Path) -> anyhow::Result<Db> {
     let files = Arc::new(LogFiles::open(logs)?);
     let subscriber = tracing_subscriber::registry().with(file_layer(files));
     let _guard = tracing::subscriber::set_default(subscriber);
@@ -132,6 +134,8 @@ async fn seeded(logs: &Path) -> anyhow::Result<Db> {
     assert_eq!(occs.len(), 1, "the seeded meeting is planned");
     scheduler::plan_and_tick(&db, &occs, &AlarmSettings::default(), (None, None), now())?;
     tracing::info!(host = %redact_url(SECRET_URL), "a line with a redacted host");
+    // A path under the home folder, as an OS error can quote one.
+    tracing::warn!(path = %home.join("Library").join("x.db").display(), "a line with a path");
     Ok(db)
 }
 
@@ -162,10 +166,11 @@ fn local() -> DateTime<FixedOffset> {
         .fixed_offset()
 }
 
-async fn zip_of_seeded_store() -> anyhow::Result<(tempfile::TempDir, Vec<u8>)> {
+async fn zip_of_seeded_store() -> anyhow::Result<(tempfile::TempDir, Vec<u8>, String)> {
     let dir = tempfile::tempdir()?;
     let logs = dir.path().join("logs");
-    let db = seeded(&logs).await?;
+    let home = dir.path().join("Users").join("SECRETUSER");
+    let db = seeded(&logs, &home).await?;
     let store = pipeline::lock(&db);
     // The secrets are really in the store, so their absence from the zip means something.
     let cals = store.calendars().list()?;
@@ -193,15 +198,27 @@ async fn zip_of_seeded_store() -> anyhow::Result<(tempfile::TempDir, Vec<u8>)> {
     }
     let env = environment(facts(), &store, local());
     let files = store_entries(&store, now())?;
-    let bytes = archive(&env, files, Some(&logs), local())?;
-    Ok((dir, bytes))
+    let bytes = archive(&env, files, Some(&logs), Some(&home), local())?;
+    let logged = logs::list(&logs)?
+        .iter()
+        .map(|f| std::fs::read_to_string(&f.0))
+        .collect::<Result<String, _>>()?;
+    assert!(logged.contains("SECRETUSER"), "the home path was logged");
+    // The per-install secret of the alarm codes, made by the scheduler's first plan.
+    let secret = store
+        .settings()
+        .get("diagnostics_secret")?
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .ok_or_else(|| anyhow!("no alarm code secret"))?;
+    Ok((dir, bytes, secret))
 }
 
 #[tokio::test]
 async fn l072_no_secret_title_or_address_reaches_the_zip() -> TestResult {
-    let (dir, bytes) = zip_of_seeded_store().await?;
+    let (dir, bytes, alarm_secret) = zip_of_seeded_store().await?;
     let entries = zip_writer::read(&bytes)?;
-    for secret in SECRETS {
+    assert_eq!(alarm_secret.len(), 32);
+    for secret in SECRETS.iter().copied().chain([alarm_secret.as_str()]) {
         assert!(!contains(&bytes, secret), "{secret} in the zip bytes");
         for e in &entries {
             assert!(!contains(&e.data, secret), "{secret} in {}", e.name);
@@ -209,7 +226,7 @@ async fn l072_no_secret_title_or_address_reaches_the_zip() -> TestResult {
         }
     }
     // The same through the system tools, on the file as it is saved.
-    let path = target(&dir.path().join("Tolon-diagnostics").to_string_lossy())?;
+    let path = target(&dir.path().join("Tolon-diagnostics"))?;
     save(&path, &bytes)?;
     assert!(path.extension().is_some_and(|e| e == "zip"));
     if let Ok(out) = std::process::Command::new("unzip")
@@ -242,7 +259,7 @@ async fn l072_no_secret_title_or_address_reaches_the_zip() -> TestResult {
                     continue;
                 }
                 let data = std::fs::read(&p)?;
-                for secret in SECRETS {
+                for secret in SECRETS.iter().copied().chain([alarm_secret.as_str()]) {
                     assert!(!contains(&data, secret), "{secret} in {}", p.display());
                 }
                 seen += 1;
@@ -255,7 +272,7 @@ async fn l072_no_secret_title_or_address_reaches_the_zip() -> TestResult {
 
 #[tokio::test]
 async fn l072_the_zip_holds_the_listed_files_with_what_an_agent_needs() -> TestResult {
-    let (_dir, bytes) = zip_of_seeded_store().await?;
+    let (_dir, bytes, _) = zip_of_seeded_store().await?;
     let entries = zip_writer::read(&bytes)?;
     let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
     assert_eq!(
@@ -284,6 +301,18 @@ async fn l072_the_zip_holds_the_listed_files_with_what_an_agent_needs() -> TestR
     );
 
     let env = json("environment.json")?;
+    // The doc names every field of environment.json, and settings.json's pause.
+    let keys = env.as_object().ok_or_else(|| anyhow!("not an object"))?;
+    for key in keys
+        .keys()
+        .chain([&"paused_until".to_owned(), &"added_at".to_owned()])
+    {
+        assert!(
+            README.contains(&format!("`{key}`")),
+            "the doc lists `{key}`"
+        );
+    }
+    assert!(json("settings.json")?.get("paused_until").is_some());
     assert_eq!(env["tolon_version"], "0.1.0-beta.1");
     assert_eq!(env["screen_count"], 1);
     assert_eq!(env["utc_offset"], "+02:00");
@@ -372,13 +401,13 @@ fn l072_the_default_name_and_the_target_path() -> TestResult {
     );
     let base = std::env::temp_dir();
     let named = base.join("x.ZIP");
-    assert_eq!(target(&named.to_string_lossy())?, named);
+    assert_eq!(target(&named)?, named);
+    assert_eq!(target(&base.join("x"))?, base.join("x.zip"));
     assert_eq!(
-        target(&base.join("x").to_string_lossy())?,
-        base.join("x.zip")
+        target(Path::new("relative.zip")),
+        Err(AppError::DIAGNOSTICS_SAVE)
     );
-    assert_eq!(target("relative.zip"), Err(AppError::DIAGNOSTICS_SAVE));
-    assert_eq!(target(""), Err(AppError::DIAGNOSTICS_SAVE));
+    assert_eq!(target(Path::new("")), Err(AppError::DIAGNOSTICS_SAVE));
     Ok(())
 }
 
@@ -392,19 +421,74 @@ fn l072_a_failed_save_leaves_no_file() {
     assert!(!path.exists());
 }
 
-/// The doc (and so README.txt) names the same place to send the file as the About page.
+/// L-072 review: the zip is never written through a symlink, neither at the chosen name nor at
+/// its temporary `.part` (created with `create_new`), and an existing regular file is replaced.
+#[cfg(unix)]
 #[test]
-fn l072_the_doc_points_where_the_about_page_does() {
-    assert!(README.contains(SUPPORT_URL));
+fn l072_save_refuses_a_symlink_and_replaces_a_plain_file() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let victim = dir.path().join("victim.txt");
+    std::fs::write(&victim, "keep")?;
+    let link = dir.path().join("d.zip");
+    std::os::unix::fs::symlink(&victim, &link)?;
+    assert_eq!(target(&link), Err(AppError::DIAGNOSTICS_SAVE));
+    assert!(save(&link, b"zip").is_err());
+    assert_eq!(std::fs::read_to_string(&victim)?, "keep");
+    let plain = dir.path().join("e.zip");
+    std::fs::write(&plain, "old")?;
+    save(&plain, b"new")?;
+    assert_eq!(std::fs::read(&plain)?, b"new");
+    let left: Vec<_> = std::fs::read_dir(dir.path())?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".part"))
+        .collect();
+    assert!(left.is_empty(), "no .part file stays behind");
+    Ok(())
+}
+
+/// The doc (and so README.txt) names where to send the file, as the About page does; the mailto
+/// carries the subject with the version and the template.
+#[test]
+fn l072_the_doc_and_the_mailto_point_to_the_support_address() {
+    assert!(README.contains(SUPPORT_EMAIL));
+    assert!(README.contains(ISSUES_URL));
+    let mail = support_mailto("0.1.0-beta.1");
+    assert!(mail.starts_with(
+        "mailto:tolon@danielpsf.net?subject=Tolon%20diagnostics%200.1.0-beta.1&body="
+    ));
+    assert!(mail.contains("What%20happened%3A"));
+    assert!(mail.contains("attach%20the%20diagnostics%20zip"));
+    assert!(!mail[7..].contains(' ') && !mail.contains('\n'));
     assert!(doc_url("0.1.0-beta.1").ends_with("/blob/v0.1.0-beta.1/docs/help/diagnostics.md"));
 }
 
+/// L-072 review: alarm codes are keyed by a per-install secret, stable within an install and
+/// different between installs, so a guessable UID cannot be matched to its code.
 #[test]
-fn l072_key_ref_is_stable_and_hides_the_key() {
+fn l072_alarm_codes_are_keyed_per_install() -> TestResult {
     let key = "cal:uid-a@b.example@2026-10-20T08:01:00Z";
-    assert_eq!(key_ref(key), key_ref(key));
-    assert_ne!(key_ref(key), key_ref("cal:other@2026-10-20T08:01:00Z"));
-    assert!(!key_ref(key).contains('@'));
+    let (one, two) = (Store::open_in_memory()?, Store::open_in_memory()?);
+    let a = AlarmRefs::load(&one)?.of(key);
+    assert_eq!(
+        a,
+        AlarmRefs::load(&one)?.of(key),
+        "stable: the secret is stored"
+    );
+    assert_eq!(a.len(), 16);
+    assert!(!a.contains('@'));
+    assert_ne!(
+        a,
+        AlarmRefs::load(&one)?.of("cal:other@2026-10-20T08:01:00Z")
+    );
+    assert_ne!(
+        a,
+        AlarmRefs::load(&two)?.of(key),
+        "another install, another code"
+    );
+    // The secret is outside the settings contract, so settings.json never has it.
+    let settings = String::from_utf8(store_entries(&one, now())?[0].data.clone())?;
+    assert!(!settings.contains("diagnostics_secret"));
+    Ok(())
 }
 
 /// A tracing call up to the `)` that closes it right after its message string.

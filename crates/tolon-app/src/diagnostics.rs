@@ -3,14 +3,18 @@
 //! is sent anywhere (rule 8); the person sends the file.
 //!
 //! Never in the zip: calendar addresses (only the host of an iCal link), tokens, the Google
-//! account address, event titles, descriptions, attendees, the ignore keywords' text. Alarms are
-//! named by [`key_ref`], a hash, because their key holds the event's UID.
+//! account address, event titles, descriptions, attendees, the ignore keywords' text, the home
+//! folder's path. Alarms are named by [`AlarmRefs`], a keyed hash, because their key holds the
+//! event's UID.
 
+use std::hash::Hasher;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use siphasher::sip::SipHasher24;
 use tolon_store::{Calendar, Store};
 use tolon_sync::redact_url;
 
@@ -20,13 +24,41 @@ use crate::{google, logs, settings};
 
 /// `docs/help/diagnostics.md` is the zip's `README.txt`, so the two always say the same thing.
 pub const README: &str = include_str!("../../../docs/help/diagnostics.md");
-/// Where people send the file, until Daniel names a support address (decision 2026-10-22). The
-/// one place it is written; the About page shows what `diagnostics_plan` answers.
-pub const SUPPORT_URL: &str = "https://github.com/danielpsf/tolon/issues";
+/// Where people send the file (decision 2026-10-22, Daniel). The one place it is written; the
+/// About page shows what `diagnostics_plan` answers.
+pub const SUPPORT_EMAIL: &str = "tolon@danielpsf.net";
+/// The public alternative.
+pub const ISSUES_URL: &str = "https://github.com/danielpsf/tolon/issues";
+/// The email's body: what to write, and the reminder to attach the file. English, like the docs.
+const MAIL_BODY: &str = "What happened:\n\n\nWhen did it happen (date, time and time zone):\n\n\nWhat did you expect, and what happened instead:\n\n\nPlease attach the diagnostics zip file that Tolon saved.\n";
+/// The settings key of the per-install secret behind [`AlarmRefs`]. Outside the settings
+/// contract, so `settings.json` never carries it.
+const ALARM_SECRET: &str = "diagnostics_secret";
 
 /// `docs/help/diagnostics.md` on GitHub, at this version's tag.
 pub fn doc_url(version: &str) -> String {
     format!("https://github.com/danielpsf/tolon/blob/v{version}/docs/help/diagnostics.md")
+}
+
+/// RFC 3986 percent-encoding of everything but the unreserved characters.
+fn percent(text: &str) -> String {
+    text.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                char::from(b).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+/// `mailto:` the support address, with the subject and the short template filled in.
+pub fn support_mailto(version: &str) -> String {
+    format!(
+        "mailto:{SUPPORT_EMAIL}?subject={}&body={}",
+        percent(&format!("Tolon diagnostics {version}")),
+        percent(MAIL_BODY)
+    )
 }
 
 /// How many sync log rows go in, newest first.
@@ -80,14 +112,47 @@ pub struct Facts {
     pub client: Client,
 }
 
-/// A short, stable stand-in for an alarm's occurrence key (FNV-1a, 64 bits): the key holds the
-/// event's UID, which can look like an email address. The scheduler's debug lines use the same
-/// value, so `alarms.json` and the log files can be matched.
-pub fn key_ref(key: &str) -> String {
-    let hash = key.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
-    format!("{hash:016x}")
+/// Short, stable stand-ins for alarm keys: SipHash-2-4 under a 128-bit secret made once per
+/// install and kept in the settings table, never exported. The key holds the event's UID, which
+/// can look like an email address, and an unkeyed hash of a guessable UID could be reversed.
+/// The scheduler's debug lines use the same codes, so `alarms.json` and the logs match.
+pub struct AlarmRefs {
+    k0: u64,
+    k1: u64,
+}
+
+impl AlarmRefs {
+    /// The install's secret, made on first use.
+    pub fn load(store: &Store) -> anyhow::Result<AlarmRefs> {
+        let stored = store
+            .settings()
+            .get(ALARM_SECRET)?
+            .and_then(|v| v.as_str().and_then(|s| u128::from_str_radix(s, 16).ok()));
+        let secret = match stored {
+            Some(s) => s,
+            None => {
+                let mut bytes = [0u8; 16];
+                getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("no randomness: {e}"))?;
+                let s = u128::from_le_bytes(bytes);
+                store
+                    .settings()
+                    .set(ALARM_SECRET, &json!(format!("{s:032x}")))?;
+                s
+            }
+        };
+        // The two halves of the 128-bit secret.
+        Ok(AlarmRefs {
+            k0: (secret >> 64) as u64,
+            k1: secret as u64,
+        })
+    }
+
+    /// 16 hex digits for `key`.
+    pub fn of(&self, key: &str) -> String {
+        let mut h = SipHasher24::new_with_keys(self.k0, self.k1);
+        h.write(key.as_bytes());
+        format!("{:016x}", h.finish())
+    }
 }
 
 /// `Tolon-diagnostics-<version>-<YYYYMMDD-HHMM>.zip`, in the person's local time.
@@ -98,21 +163,29 @@ pub fn file_name(version: &str, local: DateTime<FixedOffset>) -> String {
     )
 }
 
-/// Where to write: an absolute path from the save dialog, ending in `.zip` (added when the
-/// dialog left it off, as some Linux dialogs do).
-pub fn target(path: &str) -> Result<PathBuf, AppError> {
-    let p = PathBuf::from(path.trim());
+/// Where to write: the save dialog's absolute path, ending in `.zip` (added when the dialog left
+/// it off, as some Linux dialogs do). A symlink is refused: the file is written where it is shown.
+pub fn target(path: &Path) -> Result<PathBuf, AppError> {
+    let p = path.to_owned();
     if !p.is_absolute() || p.file_name().is_none() {
         return Err(AppError::DIAGNOSTICS_SAVE);
     }
     let zip = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-    Ok(if zip {
+    let p = if zip {
         p
     } else {
         let mut name = p.into_os_string();
         name.push(".zip");
         PathBuf::from(name)
-    })
+    };
+    if is_symlink(&p) {
+        return Err(AppError::DIAGNOSTICS_SAVE);
+    }
+    Ok(p)
+}
+
+fn is_symlink(p: &Path) -> bool {
+    std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink())
 }
 
 fn pretty(value: &Value) -> anyhow::Result<Vec<u8>> {
@@ -140,7 +213,6 @@ pub fn environment(facts: Facts, store: &Store, local: DateTime<FixedOffset>) ->
         "screen_count": facts.screens.len(),
         "screens": facts.screens,
         "database_schema": store.schema_version().ok(),
-        "log_files": "debug level for Tolon's own code, info for its libraries; times in UTC",
     })
 }
 
@@ -184,7 +256,7 @@ fn calendar_json(c: &Calendar) -> Value {
         "host": host,
         "enabled": c.enabled,
         "sync_status": status,
-        "last_error": c.last_error.as_deref().map(SyncErrorDto::from_code),
+        "last_error": c.last_error.as_deref().map(|e| SyncErrorDto::from_code(&detail_code(e))),
         "last_sync_at": c.last_sync_at,
         "added_at": c.created_at,
     })
@@ -226,6 +298,7 @@ pub fn store_entries(store: &Store, now: DateTime<Utc>) -> anyhow::Result<Vec<En
         })
         .collect();
     let since = now - Duration::days(ALARM_DAYS);
+    let refs = AlarmRefs::load(store)?;
     let alarms: Vec<Value> = store
         .alarms()
         .list()?
@@ -235,7 +308,7 @@ pub fn store_entries(store: &Store, now: DateTime<Utc>) -> anyhow::Result<Vec<En
         })
         .map(|a| {
             json!({
-                "alarm": key_ref(&a.occurrence_key),
+                "alarm": refs.of(&a.occurrence_key),
                 "kind": a.kind,
                 "at": a.at,
                 "meeting_start": a.start,
@@ -265,12 +338,30 @@ pub fn store_entries(store: &Store, now: DateTime<Utc>) -> anyhow::Result<Vec<En
     ])
 }
 
+/// A log file as text with the home folder's path written as `~` (it can name the person).
+fn log_text(path: &Path, home: Option<&Path>) -> Vec<u8> {
+    match std::fs::read(path) {
+        Ok(bytes) => {
+            let text = String::from_utf8_lossy(&bytes);
+            match home
+                .map(|h| h.display().to_string())
+                .filter(|h| h.len() > 1)
+            {
+                Some(h) => text.replace(&h, "~").into_bytes(),
+                None => text.into_owned().into_bytes(),
+            }
+        }
+        Err(e) => format!("Tolon could not read this log file: {}\n", e.kind()).into_bytes(),
+    }
+}
+
 /// The whole zip: `README.txt` and `environment.json` first, then the store's files and the log
-/// files under `logs/`. A log file that cannot be read is skipped with a note in its place.
+/// files under `logs/`, with `home` replaced by `~`. A log file that cannot be read gets a note.
 pub fn archive(
     environment: &Value,
     store_files: Vec<Entry>,
     log_dir: Option<&Path>,
+    home: Option<&Path>,
     local: DateTime<FixedOffset>,
 ) -> anyhow::Result<Vec<u8>> {
     let readme = format!(
@@ -293,25 +384,36 @@ pub fn archive(
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        let data = std::fs::read(&path).unwrap_or_else(|e| {
-            format!("Tolon could not read this log file: {}\n", e.kind()).into_bytes()
-        });
         entries.push(Entry {
             name: format!("logs/{name}"),
-            data,
+            data: log_text(&path, home),
         });
     }
     Ok(zip_writer::write(&entries, local.naive_local())?)
 }
 
-/// Writes `bytes` next to `path` first and then moves it in place, so a failed write never
-/// leaves half a zip under the chosen name.
+/// Writes `bytes` to a new `<path>.<random>.part` first (`create_new`: never through an existing
+/// file or symlink) and then moves it in place, so a failed write never leaves half a zip under
+/// the chosen name. A `path` that is a symlink is refused.
 pub fn save(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if is_symlink(path) {
+        return Err(std::io::Error::other("the chosen file is a symbolic link"));
+    }
+    let mut tag = [0u8; 4];
+    getrandom::fill(&mut tag).map_err(|e| std::io::Error::other(e.to_string()))?;
     let mut part = path.as_os_str().to_owned();
-    part.push(".part");
+    part.push(format!(".{:08x}.part", u32::from_le_bytes(tag)));
     let part = PathBuf::from(part);
-    std::fs::write(&part, bytes)
-        .and_then(|()| std::fs::rename(&part, path))
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&part)?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .and_then(|()| {
+            drop(file);
+            std::fs::rename(&part, path)
+        })
         .inspect_err(|_| {
             let _ = std::fs::remove_file(&part);
         })

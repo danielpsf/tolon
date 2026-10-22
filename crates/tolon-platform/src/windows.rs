@@ -397,11 +397,14 @@ impl Platform for WindowsPlatform {
         }
     }
 
-    /// `explorer /select,"<path>"`, passed raw: Explorer parses its own command line and does not
-    /// follow the quoting `Command::arg` writes.
+    /// `%SystemRoot%\explorer.exe /select,"<path>"`: the full path, so no `explorer.exe` earlier
+    /// on the search path runs instead. The argument is passed raw: Explorer parses its own
+    /// command line and does not follow the quoting `Command::arg` writes.
     fn reveal_file(&self, path: &std::path::Path) -> Result<(), PlatformError> {
         use std::os::windows::process::CommandExt;
-        let mut explorer = std::process::Command::new("explorer");
+        let root = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
+        let mut explorer =
+            std::process::Command::new(std::path::Path::new(&root).join("explorer.exe"));
         explorer.raw_arg(format!("/select,\"{}\"", path.display()));
         crate::run_launcher("explorer /select", &mut explorer, false)
     }

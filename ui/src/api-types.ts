@@ -40,15 +40,21 @@ export const COMMAND_ERROR_CODES = [
   "diagnostics_reveal",
 ] as const;
 
-/** `diagnostics_plan` (L-072): the save dialog's suggested path, and what "Show in ..." names. */
+/** `diagnostics_plan` (L-072): what "Show in ..." names, and where to send the file. */
 export interface DiagnosticsPlanDto {
-  default_path: string;
   file_manager: "finder" | "explorer" | "files";
-  /** Where to send the file: GitHub issues until there is a support address. */
+  /** The support address, the text of the mailto link. */
+  support_email: string;
+  /** `mailto:` the address with a subject and a short template. */
   support_url: string;
+  /** GitHub issues, for a public report. */
+  issues_url: string;
   /** `docs/help/diagnostics.md` at this version. */
   doc_url: string;
 }
+
+/** The fixed links `diagnostics_open` opens; the page never sends a URL. */
+export type DiagnosticsLink = "support" | "issues" | "doc";
 
 /** What the settings window adds to `environment.json`: its language and the webview's user agent. */
 export interface DiagnosticsClient {

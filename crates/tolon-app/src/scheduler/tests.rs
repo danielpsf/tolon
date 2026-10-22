@@ -1553,8 +1553,8 @@ fn lead_time_limits_are_the_cores() {
 
 // ---- Capabilities ------------------------------------------------------------------------------
 
-/// L-072: the main window also gets the save dialog (Save diagnostics), and nothing else of the
-/// dialog plugin: the dialog answers a path, Tolon writes the file.
+/// No window may open a dialog, an opener or a notification itself. L-072 review: the save dialog
+/// of Save diagnostics opens from Rust, so the page never chooses where a file is written.
 #[test]
 fn no_webview_capability_grants_opener_or_notification_commands() -> TestResult {
     const LISTEN: [&str; 2] = ["core:event:allow-listen", "core:event:allow-unlisten"];
@@ -1562,7 +1562,7 @@ fn no_webview_capability_grants_opener_or_notification_commands() -> TestResult 
         (
             "default",
             include_str!("../../capabilities/default.json"),
-            [&LISTEN[..], &["dialog:allow-save"]].concat(),
+            LISTEN.to_vec(),
         ),
         (
             "interrupt",

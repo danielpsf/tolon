@@ -729,8 +729,8 @@ test("window rights: the settings window reads the pause and the current alarm, 
 });
 
 // ---- Save diagnostics (L-072) ---------------------------------------------------------------------
-// The system save dialog cannot be driven here; it only answers a path, so the suite hands
-// `diagnostics_save` a temp path itself, as the dialog would.
+// The system save dialog opens from Rust and cannot be driven here, so the suite saves through
+// `diagnostics_e2e_save` (end-to-end build only), which skips the dialog and writes to a temp path.
 
 /** The names in a zip's central directory (no zip64, as Tolon writes it). */
 function zipNames(bytes) {
@@ -750,12 +750,14 @@ function zipNames(bytes) {
 
 test("l072 Save diagnostics writes a zip with the listed files to the chosen path", async () => {
   const plan = await invoke("diagnostics_plan");
-  assert.match(plan.answer?.default_path ?? "", /Tolon-diagnostics-.+-\d{8}-\d{4}\.zip$/, JSON.stringify(plan));
-  assert.equal(plan.answer.support_url, "https://github.com/danielpsf/tolon/issues");
+  assert.equal(plan.answer?.support_email, "tolon@danielpsf.net", JSON.stringify(plan));
+  assert.match(plan.answer.support_url, /^mailto:tolon@danielpsf\.net\?subject=Tolon%20diagnostics%20/);
+  assert.equal(plan.answer.issues_url, "https://github.com/danielpsf/tolon/issues");
+  // The page cannot choose a path: the command that opens the dialog takes none.
   const dir = mkdtempSync(join(tmpdir(), "tolon-diagnostics-"));
   try {
     // No `.zip`: Tolon adds it, as for a dialog that leaves the extension off.
-    const saved = await invoke("diagnostics_save", {
+    const saved = await invoke("diagnostics_e2e_save", {
       path: join(dir, "diagnostics"),
       client: { locale: "en-US", languages: ["en-US"], user_agent: "e2e" },
     });
@@ -766,7 +768,7 @@ test("l072 Save diagnostics writes a zip with the listed files to the chosen pat
     }
     assert.ok(names.some((n) => /^logs\/tolon\.\d{4}-\d{2}-\d{2}\.log$/.test(n)), `a log file in ${names}`);
     // A relative path is refused; nothing is written.
-    assert.deepEqual(await invoke("diagnostics_save", { path: "relative.zip", client: { locale: "", languages: [], user_agent: "" } }), {
+    assert.deepEqual(await invoke("diagnostics_e2e_save", { path: "relative.zip", client: { locale: "", languages: [], user_agent: "" } }), {
       code: "diagnostics_save",
     });
   } finally {

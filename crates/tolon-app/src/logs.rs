@@ -125,12 +125,16 @@ struct Inner {
     appender: RollingFileAppender,
     /// Bytes in the folder's log files, as far as Tolon knows.
     used: u64,
+    /// The UTC day a "budget reached" note was written, so it is written once a day.
+    noted: Option<NaiveDate>,
 }
 
 impl LogFiles {
     /// Creates the folder, drops files older than 7 days and over the budget, and opens today's.
     pub fn open(dir: &Path) -> io::Result<LogFiles> {
         fs::create_dir_all(dir)?;
+        // Only the person's own account may read the logs (unix; nothing elsewhere).
+        tolon_platform::private_dir(dir)?;
         let used = prune(dir, Utc::now(), 0)?;
         let appender = RollingFileAppender::builder()
             .rotation(Rotation::DAILY)
@@ -141,7 +145,11 @@ impl LogFiles {
             .map_err(io::Error::other)?;
         Ok(LogFiles {
             dir: dir.to_owned(),
-            inner: Mutex::new(Inner { appender, used }),
+            inner: Mutex::new(Inner {
+                appender,
+                used,
+                noted: None,
+            }),
         })
     }
 }
@@ -154,6 +162,14 @@ impl Write for &LogFiles {
             // Rare: old files go first; today's file alone over the budget drops the line.
             inner.used = prune(&self.dir, Utc::now(), len).unwrap_or(inner.used);
             if inner.used + len > MAX_BYTES {
+                // One note a day says lines are missing; it may pass the budget by its own size.
+                let today = Utc::now().date_naive();
+                if inner.noted != Some(today) {
+                    inner.noted = Some(today);
+                    let note = budget_note(Utc::now());
+                    inner.appender.write_all(note.as_bytes())?;
+                    inner.used += note.len() as u64;
+                }
                 return Ok(buf.len());
             }
         }
@@ -171,6 +187,14 @@ impl Write for &LogFiles {
     }
 }
 
+/// The line written once a day when the 10 MB budget drops lines, in the fmt layer's shape.
+fn budget_note(now: DateTime<Utc>) -> String {
+    format!(
+        "{}  WARN tolon_app::logs: log budget reached, lines dropped\n",
+        now.to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+    )
+}
+
 /// The day of a `tolon.YYYY-MM-DD.log` name; `None` for any other file.
 fn day_of(name: &str) -> Option<NaiveDate> {
     let day = name.strip_prefix("tolon.")?.strip_suffix(".log")?;
@@ -182,6 +206,10 @@ pub fn list(dir: &Path) -> io::Result<Vec<(PathBuf, NaiveDate, u64)>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
+        // Regular files only: a symlink planted in the folder is neither read nor deleted.
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
         let name = entry.file_name();
         let Some(day) = name.to_str().and_then(day_of) else {
             continue;
@@ -283,9 +311,41 @@ mod tests {
         w.write_all(b"first line\n")?;
         let big = vec![b'y'; usize::try_from(MAX_BYTES)?];
         w.write_all(&big)?;
+        w.write_all(&big)?;
         w.flush()?;
-        let total: u64 = list(dir.path())?.iter().map(|f| f.2).sum();
-        assert_eq!(total, 11, "the oversized line was dropped");
+        let files = list(dir.path())?;
+        let text = std::fs::read_to_string(&files[0].0)?;
+        assert!(text.starts_with("first line\n"), "{text}");
+        assert_eq!(
+            text.matches("log budget reached, lines dropped").count(),
+            1,
+            "one note a day; the oversized lines are dropped"
+        );
+        assert!(!text.contains('y'));
+        Ok(())
+    }
+
+    /// L-072 review: a symlink in the folder is neither listed (so never zipped) nor deleted, and
+    /// the folder is private (0700).
+    #[cfg(unix)]
+    #[test]
+    fn l072_symlinks_in_the_log_folder_are_skipped_and_the_folder_is_private() -> TestResult {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir()?;
+        let logs = dir.path().join("logs");
+        let outside = dir.path().join("secret.txt");
+        std::fs::write(&outside, "not a log")?;
+        let files = LogFiles::open(&logs)?;
+        (&files).write_all(b"a line\n")?;
+        let link = logs.join("tolon.2020-01-01.log");
+        std::os::unix::fs::symlink(&outside, &link)?;
+        let names: Vec<PathBuf> = list(&logs)?.into_iter().map(|f| f.0).collect();
+        assert!(!names.contains(&link), "{names:?}");
+        assert_eq!(names.len(), 1);
+        prune(&logs, Utc::now(), 0)?;
+        assert!(outside.is_file(), "the link's target is untouched");
+        let mode = std::fs::metadata(&logs)?.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
         Ok(())
     }
 }

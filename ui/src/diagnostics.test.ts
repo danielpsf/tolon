@@ -12,10 +12,13 @@ vi.mock("./api", () => ({
   asCommandError: () => ({ code: "internal" }),
 }));
 
+const MAILTO = "mailto:tolon@danielpsf.net?subject=Tolon%20diagnostics%200.1.0-beta.1&body=What%20happened%3A";
+
 const plan = (file_manager: DiagnosticsPlanDto["file_manager"]): DiagnosticsPlanDto => ({
-  default_path: "/Users/x/Downloads/Tolon-diagnostics-0.1.0-beta.1-20261022-1405.zip",
   file_manager,
-  support_url: "https://github.com/danielpsf/tolon/issues",
+  support_email: "tolon@danielpsf.net",
+  support_url: MAILTO,
+  issues_url: "https://github.com/danielpsf/tolon/issues",
   doc_url: "https://github.com/danielpsf/tolon/blob/v0.1.0-beta.1/docs/help/diagnostics.md",
 });
 
@@ -32,7 +35,7 @@ describe("l072 help section", () => {
       const h = createCopy(locale).t.settings.about.help;
       expect(h.sendTo.split("{support}").length, locale).toBe(2);
       expect(h.savedTo("/tmp/a.zip"), locale).toContain("/tmp/a.zip");
-      for (const name of [h.heading, h.intro, h.save, h.reveal.finder, h.reveal.explorer, h.reveal.files]) {
+      for (const name of [h.heading, h.intro, h.save, h.issues, h.reveal.finder, h.reveal.explorer, h.reveal.files]) {
         expect(name, locale).not.toMatch(/!/);
       }
     }
@@ -48,7 +51,10 @@ describe("l072 help section", () => {
     const html = render(plan("finder"), null);
     expect(html).toContain("Help us fix a problem");
     expect(html).toContain(">Save diagnostics</button>");
-    expect(html).toContain('Send the file to <a href="https://github.com/danielpsf/tolon/issues">github.com/danielpsf/tolon/issues</a> with a note on what happened.');
+    expect(html).toContain(
+      `Send it to <a href="${MAILTO.replace("&", "&amp;")}">tolon@danielpsf.net</a> with the file attached and a note on what happened.`,
+    );
+    expect(html).toContain('<a href="https://github.com/danielpsf/tolon/issues">Or open a public issue on GitHub</a>');
     expect(html).toContain("What the file holds, and what it never holds");
     expect(html).not.toContain("Saved to");
     expect(html).not.toContain("Show in");

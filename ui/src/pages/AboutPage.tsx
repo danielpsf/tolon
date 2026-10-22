@@ -3,7 +3,7 @@
 // Under Updates, "Help us fix a problem" saves the diagnostics zip (L-072).
 import { useEffect, useRef, useState, type Ref } from "react";
 import { api } from "../api";
-import type { DiagnosticsPlanDto, UpdateDto } from "../api-types";
+import type { DiagnosticsLink, DiagnosticsPlanDto, UpdateDto } from "../api-types";
 import { copy } from "../copy";
 import { updateView, useUpdate } from "../update";
 import { errorText } from "../view";
@@ -99,9 +99,6 @@ export function supportParts(template: string): [string, string] {
   return at < 0 ? [template, ""] : [template.slice(0, at), template.slice(at + "{support}".length)];
 }
 
-/** The support address as people read it: no scheme. */
-const shortUrl = (url: string) => url.replace(/^https:\/\//, "");
-
 /** "Help us fix a problem" (L-072): save the diagnostics zip, show where it went, say where to send it. */
 export function HelpSection({
   plan,
@@ -118,12 +115,12 @@ export function HelpSection({
   error: string | null;
   onSave: () => void;
   onReveal: () => void;
-  onOpen: (link: "support" | "doc") => void;
+  onOpen: (link: DiagnosticsLink) => void;
 }) {
   const h = copy().t.settings.about.help;
   const [before, after] = supportParts(h.sendTo);
-  /** A real link for reading and copying; a click opens it in the browser, not in this window. */
-  const link = (href: string, which: "support" | "doc", text: string) => (
+  /** A real link for reading and copying; a click asks Rust to open it, never this window. */
+  const link = (href: string, which: DiagnosticsLink, text: string) => (
     <a
       href={href}
       onClick={(e) => {
@@ -166,9 +163,10 @@ export function HelpSection({
         <>
           <p className="sm-caption">
             {before}
-            {link(plan.support_url, "support", shortUrl(plan.support_url))}
+            {link(plan.support_url, "support", plan.support_email)}
             {after}
           </p>
+          <p className="sm-caption">{link(plan.issues_url, "issues", h.issues)}</p>
           <p className="sm-caption">{link(plan.doc_url, "doc", h.whatsInside)}</p>
         </>
       )}
@@ -176,7 +174,7 @@ export function HelpSection({
   );
 }
 
-/** The Help section's state: the plan from Rust, the dialog, the save and the reveal. */
+/** The Help section's state: the plan from Rust, the save (its dialog opens in Rust) and the reveal. */
 function useDiagnostics() {
   const c = copy();
   const [plan, setPlan] = useState<DiagnosticsPlanDto | null>(null);
@@ -204,19 +202,16 @@ function useDiagnostics() {
     error,
     onSave: () =>
       void run(async () => {
-        if (!plan) return;
-        const path = await api.diagnosticsChoosePath(plan.default_path, c.t.settings.about.help.fileType);
-        if (!path) return;
-        setSaved(
-          await api.diagnosticsSave(path, {
-            locale: c.locale,
-            languages: [...navigator.languages],
-            user_agent: navigator.userAgent,
-          }),
-        );
+        const path = await api.diagnosticsSave({
+          locale: c.locale,
+          languages: [...navigator.languages],
+          user_agent: navigator.userAgent,
+        });
+        // null: the person cancelled the save dialog.
+        if (path) setSaved(path);
       }),
     onReveal: () => void run(() => api.diagnosticsReveal()),
-    onOpen: (link: "support" | "doc") => void run(() => api.diagnosticsOpen(link)),
+    onOpen: (link: DiagnosticsLink) => void run(() => api.diagnosticsOpen(link)),
   };
 }
 
