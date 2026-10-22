@@ -35,6 +35,7 @@ export const ptBR: Messages = {
     toggleLabel: (name) => `Ativar o calendário ${name}`,
     addCalendar: "Adicionar calendário",
     pasteIcalUrl: "Colar um link iCal",
+    secretAddressHelp: "Como encontrar seu endereço secreto.",
     ignoreHeading: "Ignorar",
     ignoreAllDay: "Eventos de dia inteiro",
     ignoreDeclined: "Eventos que recusei",

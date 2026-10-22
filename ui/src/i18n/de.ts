@@ -35,6 +35,7 @@ export const de: Messages = {
     toggleLabel: (name) => `Kalender ${name} aktivieren`,
     addCalendar: "Kalender hinzufügen",
     pasteIcalUrl: "iCal-Link einfügen",
+    secretAddressHelp: "So findest du deine geheime Adresse.",
     ignoreHeading: "Ignorieren",
     ignoreAllDay: "Ganztägige Termine",
     ignoreDeclined: "Termine, die ich abgelehnt habe",

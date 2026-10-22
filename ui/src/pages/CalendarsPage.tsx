@@ -3,7 +3,7 @@ import { api, asCommandError } from "../api";
 import type { CalendarDto, GoogleAccountDto } from "../api-types";
 import { copy } from "../copy";
 import { useCalendars } from "../store";
-import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusOf, titleParts } from "../view";
+import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusHelp, statusOf, titleParts } from "../view";
 
 const TICK_MS = 30_000;
 
@@ -31,6 +31,7 @@ function Row({
   const c = copy();
   const { calendars: t } = c.t;
   const status = statusOf(calendar, c, now);
+  const help = statusHelp(calendar, c);
   const dot = status.failed ? "signal" : calendar.enabled ? "" : "muted";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -132,7 +133,17 @@ function Row({
           )}
         </span>
       )}
-      {!editing && <span className={`tl-status${status.failed ? " failed" : ""}`}>{status.text}</span>}
+      {!editing && (
+        <span className={`tl-status${status.failed ? " failed" : ""}`}>
+          {status.text}
+          {help && (
+            <>
+              {" "}
+              <a href={help.href}>{help.text}</a>
+            </>
+          )}
+        </span>
+      )}
       <span className="tl-remove">
         <button
           ref={renameButton}

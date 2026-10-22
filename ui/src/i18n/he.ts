@@ -50,6 +50,7 @@ export const he: Messages = {
     toggleLabel: (name) => `הפעלת היומן ${iso(name)}`,
     addCalendar: "הוספת יומן",
     pasteIcalUrl: "הדבקת קישור iCal",
+    secretAddressHelp: "איך למצוא את הכתובת הסודית שלך.",
     ignoreHeading: "התעלמות",
     ignoreAllDay: "אירועים של יום שלם",
     ignoreDeclined: "אירועים שדחיתי",

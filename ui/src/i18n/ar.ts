@@ -46,6 +46,7 @@ export const ar: Messages = {
     toggleLabel: (name) => `تفعيل التقويم ${iso(name)}`,
     addCalendar: "إضافة تقويم",
     pasteIcalUrl: "لصق رابط iCal",
+    secretAddressHelp: "كيفية العثور على عنوانك السري.",
     ignoreHeading: "تجاهل",
     ignoreAllDay: "الأحداث التي تستغرق اليوم كله",
     ignoreDeclined: "الأحداث التي رفضتها",

@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { asCommandError } from "./api";
 import type { CalendarDto } from "./api-types";
 import { createCopy } from "./copy";
-import { cancelsRename, errorText, titleParts, MAX_NAME_LENGTH, renameValue, statusOf, titleOf } from "./view";
+import {
+  cancelsRename,
+  errorText,
+  titleParts,
+  MAX_NAME_LENGTH,
+  renameValue,
+  statusHelp,
+  statusOf,
+  titleOf,
+} from "./view";
 
 const en = createCopy("en-US");
 const now = Date.parse("2026-10-20T10:00:00Z");
@@ -17,6 +26,23 @@ const calendar = (over: Partial<CalendarDto> = {}): CalendarDto => ({
   last_error: null,
   account: null,
   ...over,
+});
+
+describe("statusHelp", () => {
+  it("links a not-public calendar to the Google steps of the iCal guide, inside Tolon", () => {
+    const failed = calendar({ last_error: { kind: "not_public" } });
+    expect(statusHelp(failed, en)).toEqual({
+      href: "#/help/ical-links/google-calendar",
+      text: "How to find your secret address.",
+    });
+    expect(statusHelp(failed, createCopy("de"))?.text).toBe("So findest du deine geheime Adresse.");
+  });
+
+  it("offers no link for any other status", () => {
+    expect(statusHelp(calendar(), en)).toBeNull();
+    expect(statusHelp(calendar({ last_error: { kind: "http", status: 404 } }), en)).toBeNull();
+    expect(statusHelp(calendar({ last_error: { kind: "too_large" } }), en)).toBeNull();
+  });
 });
 
 describe("statusOf", () => {

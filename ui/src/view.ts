@@ -16,6 +16,15 @@ export function statusOf(calendar: CalendarDto, c: Copy, now: number = Date.now(
   return { text: Number.isNaN(at) ? c.t.relative.neverSynced : c.syncedAgo(at, now), failed: false };
 }
 
+/**
+ * The help page that fixes a failure, for the status line to link: a calendar that is not public
+ * points at the Google steps of the iCal link guide, inside Tolon (no browser opens). Null for any other status.
+ */
+export function statusHelp(calendar: CalendarDto, c: Copy): { href: string; text: string } | null {
+  if (calendar.last_error?.kind !== "not_public") return null;
+  return { href: "#/help/ical-links/google-calendar", text: c.t.calendars.secretAddressHelp };
+}
+
 /** "Work, iCal subscription" for a feed, "Team, Google Calendar, signed in" for Google, the bare name for anything else. */
 export function titleOf(calendar: CalendarDto, c: Copy): string {
   const { calendars } = c.t;

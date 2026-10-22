@@ -34,6 +34,7 @@ export const zhCN: Messages = {
     toggleLabel: (name) => `启用日历 ${name}`,
     addCalendar: "添加日历",
     pasteIcalUrl: "粘贴 iCal 链接",
+    secretAddressHelp: "如何找到你的私密地址。",
     ignoreHeading: "忽略",
     ignoreAllDay: "全天活动",
     ignoreDeclined: "我已拒绝的活动",
