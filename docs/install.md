@@ -16,8 +16,17 @@ Tolon is signed by its author, not by Apple, because the project has no paid App
 
 1. Open the `.dmg` and drag Tolon into Applications.
 2. Open Tolon from Applications. macOS shows a warning that it could not verify Tolon. Click Done. Do not click Move to Trash.
+
+   ![The macOS warning that opens first: "Tolon" Not Opened. Apple could not verify "Tolon" is free of malware that may harm your Mac or compromise your privacy. Two buttons, Done and Move to Trash.](images/install-macos-first-open.png)
+
 3. Open System Settings, click Privacy & Security, and scroll down to Security. Click Open Anyway next to Tolon. The button shows for about an hour after step 2. If it is gone, repeat step 2.
-4. Type your Mac password and click OK. On a Mac with Touch ID, Touch ID may ask for your finger instead of the password. Tolon opens its first-run window. From now on Tolon opens like any other app.
+
+   ![System Settings, Privacy & Security, the Security section: "Tolon" was blocked to protect your Mac, with the Open Anyway button beside it.](images/install-macos-open-anyway.png)
+
+4. Type your Mac password and click OK. Your user name is usually already filled in. On a Mac with Touch ID, Touch ID may ask for your finger instead of the password. Tolon opens its first-run window. From now on Tolon opens like any other app.
+
+   ![The macOS password prompt: You are attempting to open an app that may cause harm to your Mac or compromise your privacy. Enter an administrator's name and password to continue with Privacy & Security. A name field with the user name arya, a hidden password field, and the OK and Cancel buttons.](images/install-macos-admin-password.png)
+
 
 If you prefer the Terminal, check the download against `SHA256SUMS` first (see "Check your download" below). Then run this line, which removes the quarantine mark that causes the warning:
 
