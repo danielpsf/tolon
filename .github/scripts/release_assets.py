@@ -125,15 +125,20 @@ def latest_json(dist, tag, repo, now=None):
 
 
 def absolute_links(text, repo, tag):
-    """Rewrite `](path)` links, relative to docs/ (where install.md lives), to blob/TAG URLs."""
+    """Rewrite `](path)` targets, relative to docs/ (where install.md lives), to absolute URLs for TAG.
+
+    Links go to blob/ and images to raw/ (blob/ pages do not render as an image in release notes)."""
     def fix(m):
-        target = m.group(1)
+        bang, label, target = m.groups()
         if re.match(r"([a-z][a-z0-9+.-]*:|#|/)", target, re.I):
             return m.group(0)
         path = posixpath.normpath(posixpath.join("docs", target))
-        return f"](https://github.com/{repo}/blob/{tag}/{path})"
+        if path.startswith(".."):  # escapes the repo root: leave it
+            return m.group(0)
+        kind = "raw" if bang else "blob"
+        return f"{bang}[{label}](https://github.com/{repo}/{kind}/{tag}/{path})"
     # shortcut: no support for links with a title or parentheses in the path; upgrade if install.md grows one.
-    return re.sub(r"\]\(([^)\s]*)\)", fix, text)
+    return re.sub(r"(!?)\[([^\]]*)\]\(([^)\s]*)\)", fix, text)
 
 
 def notes(tag, install_md, out, repo):

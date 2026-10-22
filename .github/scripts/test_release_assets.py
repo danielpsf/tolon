@@ -2,6 +2,7 @@ import base64
 import json
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -114,6 +115,16 @@ class Notes(unittest.TestCase):
     def test_parent_link_leaves_docs(self):
         self.assertEqual(self.fix("[a](../README.md)"), f"[a]({self.B}README.md)")
 
+    def test_images_use_raw(self):
+        self.assertEqual(
+            self.fix("![a](images/x.png) [b](images/x.png)"),
+            "![a](https://github.com/o/r/raw/v1.0.0/docs/images/x.png) "
+            f"[b]({self.B}docs/images/x.png)",
+        )
+
+    def test_path_escaping_the_repo_is_left_alone(self):
+        self.assertEqual(self.fix("[a](../../etc/x.md)"), "[a](../../etc/x.md)")
+
     def test_absolute_and_anchor_links_stay(self):
         for link in ("https://x.io/a", "http://x.io", "mailto:a@b.c", "#know", "/abs/path"):
             self.assertEqual(self.fix(f"[a]({link})"), f"[a]({link})")
@@ -126,12 +137,11 @@ class Notes(unittest.TestCase):
         install = Path(tempfile.mkdtemp()) / "install.md"
         install.write_text("# Install\n[h](help/x.md)\n")
         out = install.parent / "notes.md"
-        head = ra.ROOT / "docs/releases/v1.0.0-test.md"
-        head.write_text("# Head\n")
-        try:
+        root = install.parent / "repo"
+        (root / "docs/releases").mkdir(parents=True)
+        (root / "docs/releases/v1.0.0-test.md").write_text("# Head\n")
+        with mock.patch.object(ra, "ROOT", root):
             self.assertEqual(ra.notes("v1.0.0-test", install, out, "o/r"), [])
-        finally:
-            head.unlink()
         self.assertEqual(
             out.read_text(),
             "# Head\n\n---\n\n# Install\n[h](https://github.com/o/r/blob/v1.0.0-test/docs/help/x.md)\n",
