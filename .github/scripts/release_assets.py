@@ -2,6 +2,7 @@
 """Release helpers for .github/workflows/release.yml (stdlib only; Python 3.10 on ubuntu-22.04).
 
   release_assets.py check-tag TAG             tag, versions and updater config agree
+  release_assets.py prerelease TAG            print true when TAG is a pre-release (has a `-`), else false
   release_assets.py check-key SIG             a probe signature was made by the key in tauri.conf.json
   release_assets.py latest-json DIR TAG REPO  write DIR/latest.json for the Tauri updater
 
@@ -25,7 +26,8 @@ TAURI_CONF = ROOT / "crates/tolon-app/tauri.conf.json"
 # (decision "Updater (L-019)"), so it cannot read the older `.nsis.zip`, `.msi.zip` or `.AppImage.tar.gz`
 # archives. The updater plugin looks up `{os}-{arch}-{installer}` (windows-x86_64-nsis, linux-x86_64-deb, ...)
 # before the plain `{os}-{arch}`, so a copy installed from an MSI or a deb gets its own file type back. The
-# plain Windows and Linux keys point at NSIS and the AppImage.
+# plain Windows and Linux keys point at NSIS and the AppImage. A pre-release has no MSI (WiX refuses its
+# version, decision "Windows betas ship the NSIS installer only"), so its manifest leaves out the MSI key.
 NSIS = ["*-setup.exe"]
 MSI = ["*.msi"]
 APPIMAGE = ["*.AppImage"]
@@ -40,6 +42,11 @@ KEYS = {
     "linux-x86_64-appimage": APPIMAGE,
     "linux-x86_64-deb": ["*.deb"],
 }
+NO_MSI_IN_PRERELEASE = {"windows-x86_64-msi"}
+
+
+def is_prerelease(tag):
+    return "-" in tag
 
 
 def read_versions():
@@ -93,6 +100,8 @@ def latest_json(dist, tag, repo, now=None):
             (n for pat in patterns for n in names if fnmatch.fnmatch(n, pat) and f"{n}.sig" in names),
             None,
         )
+        if found is None and key in NO_MSI_IN_PRERELEASE and is_prerelease(tag):
+            continue
         if found is None:
             raise SystemExit(f"no signed updater artifact for {key} in {dist} (looked for {patterns} with a .sig)")
         platforms[key] = {
@@ -115,6 +124,9 @@ def main(argv):
         cmd, args = argv[1], argv[2:]
         if cmd == "check-tag" and len(args) == 1:
             errors = check_tag(args[0])
+        elif cmd == "prerelease" and len(args) == 1:
+            print("true" if is_prerelease(args[0]) else "false")
+            errors = []
         elif cmd == "check-key" and len(args) == 1:
             errors = check_key(args[0])
         elif cmd == "latest-json" and len(args) == 3:
