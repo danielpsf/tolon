@@ -341,6 +341,10 @@ pub trait Windows {
     fn restore_previous(&self);
     /// Drops the app noted by `remember_frontmost` without bringing it forward.
     fn forget_frontmost(&self);
+    /// Gives up Tolon's activation once no window is left after a Join (L-060).
+    fn yield_focus(&self);
+    /// True while the settings window or the panel is on screen: Tolon keeps the front then.
+    fn own_window_shown(&self) -> bool;
 }
 
 struct TauriWindows<'a> {
@@ -466,6 +470,17 @@ impl Windows for TauriWindows<'_> {
 
     fn forget_frontmost(&self) {
         self.on_main_thread("forget the frontmost app", |p| p.forget_frontmost());
+    }
+
+    fn yield_focus(&self) {
+        self.on_main_thread("give up the active app", |p| p.yield_focus());
+    }
+
+    fn own_window_shown(&self) -> bool {
+        [crate::tray::MAIN, crate::tray::PANEL]
+            .into_iter()
+            .filter_map(|label| self.app.get_webview_window(label))
+            .any(|w| w.is_visible().unwrap_or(false))
     }
 }
 
@@ -619,17 +634,28 @@ pub fn close_all(app: &AppHandle) {
 }
 
 /// Ends a reminder's claim on the front (decision 2026-10-22, "Closing a reminder gives focus
-/// back"). `restore`: give the front back to the app that was in front when it opened. Otherwise
-/// (Join: the browser has focus) drop the note. Hiding alone leaves Tolon the active app.
+/// back" and L-060). `restore`: give the front back to the app that was in front when it opened.
+/// Otherwise (Join: the browser has focus) drop the note and give up Tolon's activation, so the
+/// keys reach the browser window that is already on top; not while settings or the panel is shown.
+/// Hiding alone leaves Tolon the active app. Every call is queued after the hides.
 pub fn settle_focus(app: &AppHandle, restore: bool) {
-    let windows = TauriWindows {
-        app,
-        platform: native(),
-    };
+    settle(
+        &TauriWindows {
+            app,
+            platform: native(),
+        },
+        restore,
+    );
+}
+
+fn settle(windows: &dyn Windows, restore: bool) {
     if restore {
         windows.restore_previous();
-    } else {
-        windows.forget_frontmost();
+        return;
+    }
+    windows.forget_frontmost();
+    if !windows.own_window_shown() {
+        windows.yield_focus();
     }
 }
 
@@ -827,6 +853,8 @@ mod tests {
         /// How many times each label was built, as opposed to reused.
         built: RefCell<Vec<String>>,
         fail_open_of: Option<String>,
+        /// Settings or the panel is on screen.
+        own_window: std::cell::Cell<bool>,
     }
 
     impl FakeWindows {
@@ -924,6 +952,42 @@ mod tests {
         fn forget_frontmost(&self) {
             self.calls.borrow_mut().push("forget".to_owned());
         }
+        fn yield_focus(&self) {
+            self.calls.borrow_mut().push("yield".to_owned());
+        }
+        fn own_window_shown(&self) -> bool {
+            self.own_window.get()
+        }
+    }
+
+    #[test]
+    fn l060_a_joined_close_forgets_then_yields_once() {
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        settle(&windows, false);
+        assert_eq!(windows.calls(), ["forget", "yield"]);
+    }
+
+    #[test]
+    fn l060_a_close_without_a_join_restores_and_does_not_yield() {
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        settle(&windows, true);
+        assert_eq!(windows.calls(), ["restore"]);
+    }
+
+    #[test]
+    fn l060_settings_or_the_panel_on_screen_keeps_the_front_after_a_join() {
+        let windows = FakeWindows::default();
+        windows.own_window.set(true);
+        settle(&windows, false);
+        assert_eq!(windows.calls(), ["forget"], "no yield, no restore");
+    }
+
+    /// A source check: the yield is queued through the main-thread queue, like the restore.
+    #[test]
+    fn l060_the_yield_goes_through_the_main_thread_queue() {
+        let source = include_str!("interrupt.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        assert!(shipped.contains("self.on_main_thread(\"give up the active app\""));
     }
 
     #[test]

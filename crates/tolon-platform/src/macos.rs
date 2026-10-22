@@ -8,7 +8,8 @@ use crate::{
     TrayStyle,
 };
 use objc2::rc::Retained;
-use objc2::MainThreadMarker;
+use objc2::runtime::NSObjectProtocol;
+use objc2::{sel, MainThreadMarker};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSEvent,
     NSRunningApplication, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
@@ -106,6 +107,19 @@ impl Platform for MacPlatform {
             if !app.activateWithOptions(NSApplicationActivationOptions::empty()) {
                 tracing::debug!("the previous app did not accept the activation request");
             }
+        }
+        Ok(())
+    }
+
+    /// `NSApp.deactivate()`: Tolon stops being the active app, so the window server activates the
+    /// app that owns the topmost window (the browser a Join opened). It exists from macOS 14 and
+    /// Tolon supports 13, so the selector is checked first; on 13 nothing happens.
+    fn yield_focus(&self) -> Result<(), PlatformError> {
+        let app = NSApplication::sharedApplication(main_thread()?);
+        if app.respondsToSelector(sel!(deactivate)) {
+            app.deactivate();
+        } else {
+            tracing::debug!("NSApplication.deactivate needs macOS 14");
         }
         Ok(())
     }
@@ -318,6 +332,7 @@ mod tests {
             MacPlatform.restore_previous(),
             Err(PlatformError::NotMainThread)
         );
+        assert_eq!(MacPlatform.yield_focus(), Err(PlatformError::NotMainThread));
         // Dropping the noted pid touches no AppKit object, so it works anywhere.
         assert_eq!(MacPlatform.forget_frontmost(), Ok(()));
     }

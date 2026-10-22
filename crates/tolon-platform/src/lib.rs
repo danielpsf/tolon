@@ -312,6 +312,13 @@ pub trait Platform: Send + Sync {
     /// Join (the browser has focus), or when the interrupt could not open.
     fn forget_frontmost(&self) -> Result<(), PlatformError>;
 
+    /// Give up Tolon's activation without naming another app, once no interrupt window is left
+    /// after a Join (decision 2026-10-22, L-060): the browser window is on top, so the OS hands the
+    /// keys to the app that owns it. The caller skips it while the settings window or the panel is
+    /// shown. macOS: `NSApp.deactivate()`. Windows, Linux and the stub: nothing to give up, there
+    /// is no app-level activation without a window; the stub counts the calls.
+    fn yield_focus(&self) -> Result<(), PlatformError>;
+
     /// How much of the inner size Tauri reports for `window` the title bar covers, in logical
     /// points. macOS lays the content view under the title bar, so Tauri's inner size there is
     /// the whole frame: a 760-point inner size shows 728 points of page below a 32-point title
@@ -397,6 +404,7 @@ static STUB_ACTIVATIONS: AtomicUsize = AtomicUsize::new(0);
 static STUB_FRONT: AtomicU32 = AtomicU32::new(0);
 static STUB_PREVIOUS: Previous<u32> = Previous::new();
 static STUB_RESTORES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+static STUB_YIELDS: AtomicUsize = AtomicUsize::new(0);
 
 impl StubPlatform {
     /// How many times [`Platform::activate_app`] was called in this process, so tests can check
@@ -408,6 +416,11 @@ impl StubPlatform {
     /// Puts app `id` in front for the next [`Platform::remember_frontmost`]; 0 is Tolon itself.
     pub fn set_frontmost(&self, id: u32) {
         STUB_FRONT.store(id, Ordering::SeqCst);
+    }
+
+    /// How many times [`Platform::yield_focus`] was called in this process.
+    pub fn yields(&self) -> usize {
+        STUB_YIELDS.load(Ordering::SeqCst)
     }
 
     /// The apps [`Platform::restore_previous`] brought back, oldest first.
@@ -453,6 +466,11 @@ impl Platform for StubPlatform {
                 .unwrap_or_else(PoisonError::into_inner)
                 .push(id);
         }
+        Ok(())
+    }
+
+    fn yield_focus(&self) -> Result<(), PlatformError> {
+        STUB_YIELDS.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
@@ -857,6 +875,15 @@ mod tests {
         assert_eq!(StubPlatform.remember_frontmost(), Ok(()));
         assert_eq!(StubPlatform.restore_previous(), Ok(()));
         assert_eq!(StubPlatform.restored()[before..], [42]);
+    }
+
+    #[test]
+    fn stub_records_each_yield() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = StubPlatform.yields();
+        assert_eq!(StubPlatform.yield_focus(), Ok(()));
+        assert_eq!(StubPlatform.yield_focus(), Ok(()));
+        assert_eq!(StubPlatform.yields(), before + 2);
     }
 
     #[test]

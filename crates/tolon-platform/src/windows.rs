@@ -271,6 +271,12 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    /// Nothing: Windows has no app-level activation without a window; the foreground window is
+    /// whatever the system put there when the interrupt hid.
+    fn yield_focus(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Tauri's inner size is already below the title bar here.
     fn title_bar_overlap(&self, _window: &dyn HasWindowHandle) -> Result<f64, PlatformError> {
         Ok(0.0)
@@ -421,6 +427,7 @@ mod tests {
     #[test]
     fn l056_restoring_with_nothing_remembered_is_a_no_op() {
         assert_eq!(WindowsPlatform.restore_previous(), Ok(()));
+        assert_eq!(WindowsPlatform.yield_focus(), Ok(()));
         assert_eq!(WindowsPlatform.forget_frontmost(), Ok(()));
     }
 
