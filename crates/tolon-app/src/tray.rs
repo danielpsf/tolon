@@ -362,11 +362,15 @@ pub fn show_settings(app: &AppHandle) {
     let Some(window) = app.get_webview_window(MAIN) else {
         return;
     };
+    let handle = app.clone();
     let shown = app.run_on_main_thread(move || {
+        // Read here, on the main thread: a reminder that is up keeps the Accessory policy (L-068).
+        let reminder_up = crate::interrupt::reminder_shown(&handle);
         bring_forward(
             || window.unminimize(),
             || window.show(),
             &NATIVE,
+            reminder_up,
             || window.set_focus(),
         );
     });
@@ -375,13 +379,16 @@ pub fn show_settings(app: &AppHandle) {
     }
 }
 
-/// Unminimize, show, then activate Tolon, then focus: an Accessory app's window does not come
-/// forward on `show()` alone (macOS), and focus goes to a window that is already shown. Each step
-/// runs on its own: a failure is logged and the next step still runs.
-fn bring_forward(
+/// Unminimize, show, switch to the Regular activation policy (Cmd-Tab and the Dock, L-068), then
+/// activate Tolon, then focus: an Accessory app's window does not come forward on `show()` alone
+/// (macOS), and focus goes to a window that is already shown. `reminder_up`: a reminder is on
+/// screen, so the policy stays Accessory (L-042) and `resume_regular` switches it when the
+/// reminder closes. Each step runs on its own: a failure is logged and the next step still runs.
+pub(crate) fn bring_forward(
     unminimize: impl FnOnce() -> tauri::Result<()>,
     show: impl FnOnce() -> tauri::Result<()>,
     platform: &dyn Platform,
+    reminder_up: bool,
     focus: impl FnOnce() -> tauri::Result<()>,
 ) {
     if let Err(e) = unminimize() {
@@ -389,6 +396,11 @@ fn bring_forward(
     }
     if let Err(e) = show() {
         tracing::warn!(error = %e, "could not show the settings window");
+    }
+    if !reminder_up {
+        if let Err(e) = platform.set_regular(true) {
+            tracing::warn!(error = %e, "could not list Tolon in Cmd-Tab and the Dock");
+        }
     }
     if let Err(e) = platform.activate_app() {
         tracing::warn!(error = %e, "could not bring Tolon to the front");
@@ -473,15 +485,26 @@ pub fn hides_on_close(label: &str) -> bool {
 
 /// Hides the settings window and tells its page, which ends first run for the rest of the
 /// session (F10): a close before any calendar is the skip, and after the first calendar the
-/// window goes away (AC10.2). Either way the tray stays the way back.
+/// window goes away (AC10.2). Either way the tray stays the way back. Tolon leaves Cmd-Tab and
+/// the Dock with it (the Accessory policy, L-068), queued on the main thread after the hide.
 pub fn hide_settings(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN) {
         if let Err(e) = window.hide() {
             tracing::warn!(error = %e, "could not hide the settings window");
         }
     }
+    if let Err(e) = app.run_on_main_thread(|| after_settings_hidden(&NATIVE)) {
+        tracing::warn!(error = %e, "could not reach the main thread to leave the Dock");
+    }
     if let Err(e) = app.emit_to(MAIN, "settings:hidden", ()) {
         tracing::debug!(error = %e, "could not tell the settings window it hid");
+    }
+}
+
+/// Once the settings window is hidden Tolon is an Accessory app again (L-068).
+fn after_settings_hidden(platform: &dyn Platform) {
+    if let Err(e) = platform.set_regular(false) {
+        tracing::warn!(error = %e, "could not leave Cmd-Tab and the Dock");
     }
 }
 
@@ -771,6 +794,7 @@ mod tests {
             || step("unminimize"),
             || step("show"),
             &StubPlatform,
+            false,
             || step("focus"),
         );
         assert_eq!(steps.take(), [("unminimize", 0), ("show", 0), ("focus", 1)]);
@@ -780,15 +804,65 @@ mod tests {
             || Err(tauri::Error::WindowNotFound),
             || step("show"),
             &StubPlatform,
+            false,
             || step("focus"),
         );
         bring_forward(
             || Err(tauri::Error::WindowNotFound),
             || Err(tauri::Error::WindowNotFound),
             &StubPlatform,
+            false,
             || step("focus"),
         );
         assert_eq!(steps.take(), [("show", 1), ("focus", 2), ("focus", 3)]);
+    }
+
+    /// L-068: showing the settings window switches to Regular after the show and before the
+    /// activation; hiding it switches back; a reminder that is up keeps the Accessory policy.
+    #[test]
+    fn l068_settings_shown_is_regular_hidden_is_accessory() {
+        use std::cell::RefCell;
+        use tolon_platform::StubPlatform;
+        let steps = RefCell::new(Vec::new());
+        let step = |name: &'static str| {
+            steps
+                .borrow_mut()
+                .push((name, StubPlatform.policy_calls().len()));
+            Ok(())
+        };
+        bring_forward(
+            || step("unminimize"),
+            || step("show"),
+            &StubPlatform,
+            false,
+            || step("focus"),
+        );
+        assert_eq!(StubPlatform.policy_calls(), [true]);
+        assert_eq!(steps.take(), [("unminimize", 0), ("show", 0), ("focus", 1)]);
+        after_settings_hidden(&StubPlatform);
+        assert_eq!(StubPlatform.policy_calls(), [true, false]);
+        bring_forward(|| Ok(()), || Ok(()), &StubPlatform, true, || Ok(()));
+        assert_eq!(
+            StubPlatform.policy_calls(),
+            [true, false],
+            "a reminder is up: still Accessory"
+        );
+    }
+
+    /// L-068, a source check: `hide_settings` queues the switch back to Accessory. The behaviour
+    /// of that switch is `l068_settings_shown_is_regular_hidden_is_accessory`.
+    #[test]
+    fn l068_hide_settings_queues_after_settings_hidden() {
+        let shipped = include_str!("tray.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default();
+        let hide = shipped
+            .split("pub fn hide_settings(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_default();
+        assert!(hide.contains("after_settings_hidden(&NATIVE)"), "{hide}");
     }
 
     /// AC10.2: only `bring_forward` activates, and only `show_settings` calls it, so a start with

@@ -69,12 +69,21 @@ impl Platform for MacPlatform {
     }
 
     fn prepare_app(&self) -> Result<(), PlatformError> {
-        let mtm = main_thread()?;
         // macOS layers only an Accessory (or LSUIElement) app's windows into another app's
         // full-screen Space; a Regular app's stay off screen there at any level (L-042).
-        if NSApplication::sharedApplication(mtm)
-            .setActivationPolicy(NSApplicationActivationPolicy::Accessory)
-        {
+        self.set_regular(false)
+    }
+
+    /// `NSApp.setActivationPolicy`: Regular for Cmd-Tab and the Dock while settings shows,
+    /// Accessory otherwise (L-068). A false answer from AppKit is an error.
+    fn set_regular(&self, regular: bool) -> Result<(), PlatformError> {
+        let mtm = main_thread()?;
+        let policy = if regular {
+            NSApplicationActivationPolicy::Regular
+        } else {
+            NSApplicationActivationPolicy::Accessory
+        };
+        if NSApplication::sharedApplication(mtm).setActivationPolicy(policy) {
             Ok(())
         } else {
             Err(PlatformError::Os {
@@ -382,6 +391,10 @@ mod tests {
         // libtest runs this on a worker thread, so the activation policy is never changed here.
         assert_eq!(MacPlatform.screens(), Err(PlatformError::NotMainThread));
         assert_eq!(MacPlatform.prepare_app(), Err(PlatformError::NotMainThread));
+        assert_eq!(
+            MacPlatform.set_regular(true),
+            Err(PlatformError::NotMainThread)
+        );
         assert_eq!(
             MacPlatform.activate_app(),
             Err(PlatformError::NotMainThread)

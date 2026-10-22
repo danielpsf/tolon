@@ -346,6 +346,13 @@ pub trait Windows {
     /// screen: Tolon keeps the front then and drops the app noted for the link (L-063). That is
     /// read when the call runs, on the main thread, so a window opened since it was queued counts.
     fn yield_unless_own_window_shown(&self);
+    /// Takes Tolon out of Cmd-Tab and the Dock (the Accessory policy) before a reminder is raised,
+    /// so it covers another app's full-screen Space (L-042, L-068). Queued ahead of the raise.
+    fn leave_regular(&self);
+    /// Puts Tolon back in Cmd-Tab and the Dock once the reminder is gone and the settings window is
+    /// still shown (L-068). Whether it is, and whether a reminder window is up again, is read when
+    /// the call runs, on the main thread. Queued after the focus hand-over.
+    fn resume_regular(&self);
 }
 
 struct TauriWindows<'a> {
@@ -484,6 +491,28 @@ impl Windows for TauriWindows<'_> {
             tracing::warn!(error = %e, "could not reach the main thread to give up the active app");
         }
     }
+
+    fn leave_regular(&self) {
+        self.on_main_thread("leave the Regular activation policy", |p| {
+            p.set_regular(false)
+        });
+    }
+
+    fn resume_regular(&self) {
+        let (app, platform) = (self.app.clone(), self.platform);
+        let sent = self.app.run_on_main_thread(move || {
+            let settings = app
+                .get_webview_window(crate::tray::MAIN)
+                .is_some_and(|w| w.is_visible().unwrap_or(false));
+            let reminder = reminder_shown(&app);
+            if let Err(e) = regular_or_keep(settings, reminder, platform) {
+                tracing::warn!(error = %e, "could not return to the Regular activation policy");
+            }
+        });
+        if let Err(e) = sent {
+            tracing::warn!(error = %e, "could not reach the main thread to return to Regular");
+        }
+    }
 }
 
 /// True while the settings window or the panel is on screen: Tolon keeps the front then.
@@ -504,6 +533,22 @@ fn yield_or_keep(shown: bool, platform: &dyn Platform) -> Result<(), PlatformErr
     } else {
         tracing::debug!("settle: yield the front after a join");
         platform.yield_focus()
+    }
+}
+
+/// The main-thread end of a reminder's close (L-068): Tolon is a Regular app again only while the
+/// settings window is shown and no reminder window is, because a Regular app's reminder stays off
+/// another app's full-screen Space (L-042).
+fn regular_or_keep(
+    settings_shown: bool,
+    reminder_shown: bool,
+    platform: &dyn Platform,
+) -> Result<(), PlatformError> {
+    if settings_shown && !reminder_shown {
+        tracing::debug!("settle: the settings window is shown, Regular again");
+        platform.set_regular(true)
+    } else {
+        Ok(())
     }
 }
 
@@ -543,6 +588,7 @@ pub fn open_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result
     let opened = show_windows(windows, screens);
     if opened.is_err() && !windows.states().iter().any(|s| s.visible) {
         windows.forget_frontmost();
+        windows.resume_regular();
     }
     opened
 }
@@ -556,6 +602,9 @@ fn show_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result<()>
     if !before.iter().any(|s| s.visible) {
         windows.remember_frontmost();
     }
+    // Before any open or raise: with the settings window shown Tolon is a Regular app, and a
+    // Regular app's reminder stays off a full-screen Space (L-042, L-068).
+    windows.leave_regular();
     for gone in before
         .iter()
         .filter(|s| !specs.iter().any(|spec| spec.label == s.label))
@@ -602,6 +651,14 @@ pub fn window_states(app: &AppHandle) -> Vec<WindowState> {
         platform: native(),
     }
     .states()
+}
+
+/// True from the moment a reminder's payload is set until it closes: a reminder is up (L-068).
+/// Window visibility would be too late: the payload is set before the windows are queued to show,
+/// and a settings show that lands in between must keep the Accessory policy (L-042).
+pub fn reminder_shown(app: &AppHandle) -> bool {
+    app.try_state::<InterruptState>()
+        .is_some_and(|state| state.get().is_some())
 }
 
 /// True while a shown interrupt window has keyboard focus.
@@ -677,10 +734,11 @@ fn settle(windows: &dyn Windows, restore: bool) {
     if restore {
         tracing::debug!("settle: restore the app that was in front");
         windows.restore_previous();
-        return;
+    } else {
+        windows.forget_frontmost();
+        windows.yield_unless_own_window_shown();
     }
-    windows.forget_frontmost();
-    windows.yield_unless_own_window_shown();
+    windows.resume_regular();
 }
 
 /// Notes the app that opens `url` (decision 2026-10-22, L-061), on the main thread and in order
@@ -928,7 +986,14 @@ mod tests {
                 ..Self::default()
             }
         }
+        /// What was asked, without the activation policy switches (L-068), which have tests of
+        /// their own through `all_calls`.
         fn calls(&self) -> Vec<String> {
+            let mut calls = self.all_calls();
+            calls.retain(|c| c != "accessory" && c != "regular");
+            calls
+        }
+        fn all_calls(&self) -> Vec<String> {
             self.calls.borrow().clone()
         }
         /// The main thread gets to the queued hand-overs, and reads the windows as they are now.
@@ -987,6 +1052,8 @@ mod tests {
         fn yield_unless_own_window_shown(&self) {
             let _ = yield_or_keep(self.0, &StubPlatform);
         }
+        fn leave_regular(&self) {}
+        fn resume_regular(&self) {}
     }
 
     impl Windows for FakeWindows {
@@ -1044,6 +1111,12 @@ mod tests {
         fn yield_unless_own_window_shown(&self) {
             self.calls.borrow_mut().push("queue yield".to_owned());
             self.queued.set(self.queued.get() + 1);
+        }
+        fn leave_regular(&self) {
+            self.calls.borrow_mut().push("accessory".to_owned());
+        }
+        fn resume_regular(&self) {
+            self.calls.borrow_mut().push("regular".to_owned());
         }
     }
 
@@ -1123,6 +1196,145 @@ mod tests {
         windows.own_window.set(true);
         windows.run_queued();
         assert_eq!(windows.calls(), ["forget", "queue yield", "keep"]);
+    }
+
+    /// L-068: the reminder's payload is set while its windows are still hidden (queued, not shown
+    /// yet). A settings show in that gap sees the reminder through the payload, not the windows,
+    /// and does not switch to Regular.
+    #[test]
+    fn l068_settings_shown_while_a_reminder_is_queued_stays_accessory() -> TestResult {
+        let state = InterruptState::default();
+        assert!(state.get().is_none());
+        state.set(Some(AlarmShow::sample(at(13, 58)?)));
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        assert!(windows.states().iter().all(|s| !s.visible));
+        crate::tray::bring_forward(
+            || Ok(()),
+            || Ok(()),
+            &StubPlatform,
+            state.get().is_some(),
+            || Ok(()),
+        );
+        assert_eq!(StubPlatform.policy_calls(), Vec::<bool>::new());
+        state.set(None);
+        crate::tray::bring_forward(
+            || Ok(()),
+            || Ok(()),
+            &StubPlatform,
+            state.get().is_some(),
+            || Ok(()),
+        );
+        assert_eq!(StubPlatform.policy_calls(), [true]);
+        Ok(())
+    }
+
+    /// A source check: both reads of "a reminder is up" use the payload flag.
+    #[test]
+    fn l068_a_reminder_is_up_from_the_payload_not_from_window_visibility() {
+        let shipped = include_str!("interrupt.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default();
+        let read = shipped
+            .split("pub fn reminder_shown(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_default();
+        assert!(read.contains("state.get().is_some()"), "{read}");
+        assert!(shipped.contains("let reminder = reminder_shown(&app);"));
+    }
+
+    /// L-068: a reminder opens with settings shown. The Accessory switch is queued after the app is
+    /// noted and before anything is opened or raised, so L-042 holds.
+    #[test]
+    fn l068_a_reminder_switches_to_accessory_before_the_first_open_and_raise() -> TestResult {
+        let windows = FakeWindows::default();
+        open_windows(&windows, &[screen(1, 0.0, 2.0), screen(2, 1920.0, 1.0)])?;
+        assert_eq!(
+            windows.all_calls(),
+            [
+                "remember",
+                "accessory",
+                "open interrupt-1",
+                "raise interrupt-1",
+                "open interrupt-2",
+                "raise interrupt-2"
+            ]
+        );
+        Ok(())
+    }
+
+    /// A second meeting joins a reminder that is up: the switch repeats ahead of the raise, harmless.
+    #[test]
+    fn l068_a_reminder_that_is_up_is_raised_after_the_switch() -> TestResult {
+        let windows = FakeWindows::with(&["interrupt-1"], &[]);
+        open_windows(&windows, &[screen(1, 0.0, 2.0)])?;
+        assert_eq!(windows.all_calls(), ["accessory", "raise interrupt-1"]);
+        Ok(())
+    }
+
+    /// L-068: the close asks for Regular after the focus hand-over, on both paths.
+    #[test]
+    fn l068_a_close_goes_back_to_regular_after_the_hand_over() {
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        settle(&windows, true);
+        assert_eq!(windows.all_calls(), ["restore", "regular"]);
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        settle(&windows, false);
+        windows.run_queued();
+        assert_eq!(
+            windows.all_calls(),
+            ["forget", "queue yield", "regular", "yield"],
+            "the Regular request is queued after the yield request"
+        );
+    }
+
+    /// L-068: a reminder that fails to open with none on screen still hands Regular back.
+    #[test]
+    fn l068_a_failed_open_with_nothing_on_screen_goes_back_to_regular() {
+        let windows = FakeWindows {
+            fail_open_of: Some("interrupt-1".to_owned()),
+            ..FakeWindows::default()
+        };
+        assert!(open_windows(&windows, &[screen(1, 0.0, 2.0)]).is_err());
+        assert_eq!(
+            windows.all_calls().last().map(String::as_str),
+            Some("regular")
+        );
+    }
+
+    /// L-068: Regular only with the settings window shown and no reminder window shown.
+    #[test]
+    fn l068_regular_only_while_settings_is_shown_and_no_reminder_is() {
+        assert_eq!(regular_or_keep(true, false, &StubPlatform), Ok(()));
+        assert_eq!(StubPlatform.policy_calls(), [true]);
+        assert_eq!(regular_or_keep(true, true, &StubPlatform), Ok(()));
+        assert_eq!(regular_or_keep(false, false, &StubPlatform), Ok(()));
+        assert_eq!(StubPlatform.policy_calls(), [true], "no other call");
+    }
+
+    /// A source check: the Regular request reads both windows inside the main-thread closure, when
+    /// it runs, and the Accessory request goes through the same queue as the raise.
+    #[test]
+    fn l068_the_switches_go_through_the_main_thread_queue() {
+        let shipped = include_str!("interrupt.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default();
+        let resume = shipped
+            .split("fn resume_regular(&self) {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n    }\n").next())
+            .unwrap_or_default();
+        assert!(resume.contains("run_on_main_thread(move ||"), "{resume}");
+        assert!(resume.contains("regular_or_keep(settings, reminder, platform)"));
+        let leave = shipped
+            .split("fn leave_regular(&self) {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n    }\n").next())
+            .unwrap_or_default();
+        assert!(leave.contains("on_main_thread("), "{leave}");
+        assert!(leave.contains("set_regular(false)"));
     }
 
     /// The stub platform keeps one join target for the whole process.
