@@ -164,21 +164,26 @@ export function perform(action: Action, key: string): Promise<void> {
 }
 
 /**
- * One action per alarm on screen. A second press on the same alarm while the first is in flight, or after
- * it went through, is ignored: the window closes on success, so it must not send a second command. An
- * update of the alarm (`alarm:show` while it is up, as after a partial join) is a new object, so the
- * meetings that remain can be acted on at once. A failed action opens its alarm again.
+ * One press per meeting. A second press on a meeting that was acted on, while the first is in flight or
+ * after it went through, is ignored: the window closes on success, so it must not send a second command,
+ * and an `alarm:show` update between the two presses (a partial join) must not let it through either,
+ * since the backend would answer not found. Snooze and dismiss cover the whole group, so they hold every
+ * meeting of it. The meetings that remain after a partial join have other keys and can be acted on at
+ * once. A failed action is released and can be pressed again.
  */
 export function createActionGate() {
-  let held: AlarmShowDto | null = null;
+  const held = new Set<string>();
+  const keysOf = (alarm: AlarmShowDto, action: Action, key: string) =>
+    action === "snooze" || action === "dismiss" ? alarm.meetings.map((m) => m.key) : [key];
   return {
-    take(alarm: AlarmShowDto): boolean {
-      if (held === alarm) return false;
-      held = alarm;
+    take(alarm: AlarmShowDto, action: Action, key: string): boolean {
+      const keys = keysOf(alarm, action, key);
+      if (keys.some((k) => held.has(k))) return false;
+      keys.forEach((k) => held.add(k));
       return true;
     },
-    release(alarm: AlarmShowDto): void {
-      if (held === alarm) held = null;
+    release(alarm: AlarmShowDto, action: Action, key: string): void {
+      keysOf(alarm, action, key).forEach((k) => held.delete(k));
     },
   };
 }

@@ -177,6 +177,10 @@ impl Host for Fake {
         self.log(&format!("target {url}"));
     }
 
+    fn forget_join_target(&self) {
+        self.log("untarget");
+    }
+
     fn open_url(&self, url: &str) -> anyhow::Result<()> {
         if self.fail_url.load(Ordering::SeqCst) {
             return Err(anyhow!("no browser"));
@@ -925,6 +929,32 @@ async fn a_link_that_cannot_open_leaves_the_interrupt_and_the_alarm_alone() -> T
     assert_eq!(e.downcast_ref::<AppError>(), Some(&AppError::INTERNAL));
     assert_eq!(rig.host().count("close"), 0);
     assert_eq!(rig.state_of("call", "lead")?.as_deref(), Some("firing"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn l063_a_link_that_cannot_open_drops_the_noted_target() -> TestResult {
+    let events = [with_link("call", "140000", MEET_LOCATION)];
+    let rig = Rig::new(&events, at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.host().fail_url.store(true, Ordering::SeqCst);
+    assert!(rig.act(at(13, 58, 10), &key, Act::Join).await.is_err());
+    let calls = rig.host().calls();
+    let noted = calls.iter().position(|c| *c == format!("target {MEET}"));
+    let dropped = calls.iter().position(|c| c == "untarget");
+    assert!(noted.is_some() && noted < dropped, "{calls:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn l063_a_link_that_opens_keeps_the_noted_target() -> TestResult {
+    let events = [with_link("call", "140000", MEET_LOCATION)];
+    let rig = Rig::new(&events, at(13, 50, 0))?;
+    rig.tick_at(at(13, 58, 5)).await;
+    let key = rig.key(0)?;
+    rig.act(at(13, 58, 10), &key, Act::Join).await?;
+    assert!(!rig.host().calls().iter().any(|c| c == "untarget"));
     Ok(())
 }
 

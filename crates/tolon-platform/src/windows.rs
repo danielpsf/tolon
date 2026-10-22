@@ -276,6 +276,11 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    /// Nothing, as for `remember_join_target`.
+    fn forget_join_target(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Nothing: Windows has no app-level activation without a window; the foreground window is
     /// whatever the system put there when the interrupt hid.
     fn yield_focus(&self) -> Result<(), PlatformError> {
@@ -436,6 +441,7 @@ mod tests {
             WindowsPlatform.remember_join_target("https://x.example/j"),
             Ok(())
         );
+        assert_eq!(WindowsPlatform.forget_join_target(), Ok(()));
         assert_eq!(WindowsPlatform.yield_focus(), Ok(()));
         assert_eq!(WindowsPlatform.forget_frontmost(), Ok(()));
     }

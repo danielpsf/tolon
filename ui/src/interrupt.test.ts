@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./api";
-import type { JoinDto, MeetingDto } from "./api-types";
+import type { AlarmShowDto, JoinDto, MeetingDto } from "./api-types";
 import { createCopy, LOCALES } from "./copy";
 import {
   countdownText,
@@ -350,52 +350,74 @@ describe("a reused window (L-048)", () => {
         meeting(link("meet.google.com", true), { title: "Second", key: "cal:b@2026-10-20T14:00:00Z" }),
       ],
     });
-    const [, second] = pair().meetings;
+    const [first, second] = pair().meetings;
+    const update = (): AlarmShowDto => ({ test: false, meetings: second ? [second] : [] });
 
     /** The page's sequence: join the first meeting, then the backend sends the group without it. */
     const afterPartialJoin = () => {
       const gate = createActionGate();
       let view = nextAlarmView(NO_ALARM, { type: "show", alarm: pair() });
       const group = view.alarm;
-      expect(group && gate.take(group)).toBe(true);
-      view = nextAlarmView(view, { type: "show", alarm: { test: false, meetings: second ? [second] : [] } });
+      expect(group && first && gate.take(group, "join", first.key)).toBe(true);
+      view = nextAlarmView(view, { type: "show", alarm: update() });
       expect(view.shown).toBe(1);
       return { gate, rest: view.alarm, group };
     };
 
     it("D works on the meeting that is left", () => {
       const { gate, rest } = afterPartialJoin();
-      expect(rest && gate.take(rest)).toBe(true);
+      expect(rest && second && gate.take(rest, "dismiss", second.key)).toBe(true);
     });
 
     it("Esc works on the meeting that is left, once", () => {
       const { gate, rest } = afterPartialJoin();
-      expect(rest && gate.take(rest)).toBe(true);
-      expect(rest && gate.take(rest)).toBe(false);
+      expect(rest && second && gate.take(rest, "snooze", second.key)).toBe(true);
+      expect(rest && second && gate.take(rest, "snooze", second.key)).toBe(false);
     });
 
     it("a press while an action is in flight, or after it went through, is ignored", () => {
       const { gate, group } = afterPartialJoin();
-      expect(group && gate.take(group)).toBe(false);
+      expect(group && first && gate.take(group, "join", first.key)).toBe(false);
     });
 
-    it("a failed action opens its alarm again", () => {
+    // L-063: the alarm:show update arrives between the presses, so the alarm object is not the same one.
+    it("a second Join on the same meeting after an alarm update is ignored", () => {
+      const { gate, rest } = afterPartialJoin();
+      expect(rest && first && gate.take(rest, "join", first.key)).toBe(false);
+    });
+
+    it("another action on a meeting that was acted on is ignored too", () => {
+      const { gate, group } = afterPartialJoin();
+      expect(group && first && gate.take(group, "already_there", first.key)).toBe(false);
+      expect(group && first && gate.take(group, "dismiss", first.key)).toBe(false);
+    });
+
+    it("snooze or dismiss holds the whole group", () => {
+      const gate = createActionGate();
+      const group = pair();
+      const [a, b] = group.meetings;
+      expect(a && gate.take(group, "snooze", a.key)).toBe(true);
+      expect(b && gate.take(group, "dismiss", b.key)).toBe(false);
+    });
+
+    it("a failed action opens its meetings again", () => {
       const gate = createActionGate();
       const alarm = pair();
-      expect(gate.take(alarm)).toBe(true);
-      gate.release(alarm);
-      expect(gate.take(alarm)).toBe(true);
+      const [a] = alarm.meetings;
+      expect(a && gate.take(alarm, "dismiss", a.key)).toBe(true);
+      if (a) gate.release(alarm, "dismiss", a.key);
+      expect(a && gate.take(alarm, "dismiss", a.key)).toBe(true);
     });
 
-    it("a late failure of the first press does not unlock an alarm that was acted on since", () => {
+    it("a late failure of the first press does not unlock a meeting that was acted on since", () => {
       const { gate, rest, group } = afterPartialJoin();
-      expect(rest && gate.take(rest)).toBe(true);
-      if (group) gate.release(group);
-      expect(rest && gate.take(rest)).toBe(false);
+      expect(rest && second && gate.take(rest, "dismiss", second.key)).toBe(true);
+      if (group && first) gate.release(group, "join", first.key);
+      expect(rest && second && gate.take(rest, "dismiss", second.key)).toBe(false);
     });
 
     it("the page asks the gate with the alarm it shows", () => {
-      expect(page).toContain("gate.take(alarm)");
+      expect(page).toContain("gate.take(alarm, action, meeting.key)");
       expect(page).not.toContain("busy.current");
     });
   });
