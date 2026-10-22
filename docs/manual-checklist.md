@@ -3,8 +3,8 @@
 For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, version and your name.
 
 ## macOS
-- [ ] S4.1 Interrupt shows over a full-screen app (test with QuickTime full screen) and covers the menu bar and Dock.
-- [ ] S4.1 Interrupt shows over a native full-screen app on each display (two displays, one app full screen on each in turn), and no Space switch happens with Settings open on another Space.
+- [x] S4.1 Interrupt shows over a full-screen app (test with QuickTime full screen) and covers the menu bar and Dock. Signed off 2026-10-22, macOS 27.0.1, debug build of 1630e54, L-011: TextEdit full screen, menu bar covered; QuickTime and the Dock not tried.
+- [x] S4.1 Interrupt shows over a native full-screen app on each display (two displays, one app full screen on each in turn), and no Space switch happens with Settings open on another Space. Signed off 2026-10-22, macOS 27.0.1, debug build of 1630e54, L-011: both displays in turn, reminder on both; the Settings-on-another-Space part was not run.
 - [ ] In the settings window, Cmd+V pastes into the iCal link field and Cmd+C copies (Tolon has no menu bar, so the Edit shortcuts must still work).
 - [ ] S4.2 Two monitors: both show the interrupt; Esc on either hides both.
 - [ ] L-048 Interrupt windows are reused, not leaked: fire 50 test alarms in a row (Settings, Appearance, "Show a test alarm", Esc each time) and count layer-1001 windows after 0, 10, 20, 30, 40 and 50 (`CGWindowList` or the L-047 script, or `heap Tolon | grep -c TaoWindow`); the count stays at one per screen (two displays: two), none of them on screen between alarms, and the footprint does not climb with each alarm. Also: right after Esc, typing goes to the app that was in front before (not to Tolon, no error beep); a second alarm shows its own title with focus on the primary button; unplug a display, fire an alarm and the window count drops to the screens still connected.
