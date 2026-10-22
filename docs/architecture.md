@@ -134,7 +134,7 @@ calendars.list | calendars.add_ics(url) | calendars.add_google() | calendars.rem
 occurrences.today | occurrences.next
 alarms.snooze(key, minutes) | alarms.dismiss(key) | alarms.join(key) | alarms.already_there(key) | alarms.test
 settings.get | settings.set(key, value)
-diagnostics.save(path) | diagnostics.reveal() | diagnostics.open(support|doc)
+diagnostics.save() (Rust opens the save dialog; returns the path or null) | diagnostics.reveal() | diagnostics.open(support|issues|doc)
 app.pause(minutes) | app.resume | app.quit | app.version | app.check_updates
 ```
 
