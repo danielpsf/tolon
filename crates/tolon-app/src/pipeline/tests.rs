@@ -167,12 +167,21 @@ async fn l067_rename_shows_everywhere_and_clearing_restores_the_feed_name() -> T
     let dto = add_ics(&db, &fake, SECRET_URL, now()).await?;
 
     rename(&db, &dto.id, "  Standups  ")?;
-    assert_eq!(list(&db)?.first().map(|c| c.name.as_str()), Some("Standups"));
+    assert_eq!(
+        list(&db)?.first().map(|c| c.name.as_str()),
+        Some("Standups")
+    );
     // A sync keeps the custom name; the feed's name stays underneath it.
     let again = Fake::new(vec![modified(basic_feed(Some("Renamed upstream")), None)]);
     sync_one(&db, &again, &dto.id, now()).await?;
-    assert_eq!(list(&db)?.first().map(|c| c.name.as_str()), Some("Standups"));
-    assert_eq!(calendars(&db)?.first().map(|c| c.name.as_str()), Some("Team calendar"));
+    assert_eq!(
+        list(&db)?.first().map(|c| c.name.as_str()),
+        Some("Standups")
+    );
+    assert_eq!(
+        calendars(&db)?.first().map(|c| c.name.as_str()),
+        Some("Team calendar")
+    );
 
     rename(&db, &dto.id, "   ")?;
     assert_eq!(
@@ -196,7 +205,10 @@ fn l067_rename_validates_the_id_and_the_name() -> TestResult {
     assert_eq!(clean_name("Wor\nk\u{0}"), Some("Work".to_owned()));
     // Cut by characters, never in the middle of one; a cut that ends on a space drops it.
     let long = "é".repeat(200);
-    assert_eq!(clean_name(&long).map(|n| n.chars().count()), Some(MAX_NAME_CHARS));
+    assert_eq!(
+        clean_name(&long).map(|n| n.chars().count()),
+        Some(MAX_NAME_CHARS)
+    );
     let spaced = format!("{} tail", "a".repeat(MAX_NAME_CHARS - 1));
     assert_eq!(clean_name(&spaced), Some("a".repeat(MAX_NAME_CHARS - 1)));
     Ok(())

@@ -363,7 +363,10 @@ mod tests {
         let store = Store::open_in_memory()?;
         let c = store.calendars();
         let a = c.insert("ics", "Team fixture", None, true, "t")?;
-        assert_eq!((a.custom_name.as_deref(), a.display_name()), (None, "Team fixture"));
+        assert_eq!(
+            (a.custom_name.as_deref(), a.display_name()),
+            (None, "Team fixture")
+        );
         c.set_custom_name(&a.id, Some("Standups"))?;
         let named = c.get(&a.id)?.ok_or("gone")?;
         assert_eq!(named.display_name(), "Standups");
