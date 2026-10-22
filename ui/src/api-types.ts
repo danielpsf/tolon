@@ -36,7 +36,26 @@ export const COMMAND_ERROR_CODES = [
   "google_cancelled",
   "google_sign_in",
   "keychain",
+  "diagnostics_save",
+  "diagnostics_reveal",
 ] as const;
+
+/** `diagnostics_plan` (L-072): the save dialog's suggested path, and what "Show in ..." names. */
+export interface DiagnosticsPlanDto {
+  default_path: string;
+  file_manager: "finder" | "explorer" | "files";
+  /** Where to send the file: GitHub issues until there is a support address. */
+  support_url: string;
+  /** `docs/help/diagnostics.md` at this version. */
+  doc_url: string;
+}
+
+/** What the settings window adds to `environment.json`: its language and the webview's user agent. */
+export interface DiagnosticsClient {
+  locale: string;
+  languages: string[];
+  user_agent: string;
+}
 
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
 

@@ -140,6 +140,20 @@ export const tr: Messages = {
       check: "Güncellemeleri denetle",
       upToDate: "Yüklenecek yeni bir sürüm yok.",
       autoCheck: "Tolon günde bir kez GitHub'da yeni bir sürüm olup olmadığına bakar. Sana sormadan hiçbir şey yüklemez.",
+      help: {
+        heading: "Bir sorunu çözmemize yardım et",
+        intro: "Tolon'un günlüklerini ve ayarlarını içeren bir dosya kaydet ve bize gönder. Tolon kendiliğinden hiçbir şey göndermez.",
+        save: "Tanılama dosyasını kaydet",
+        fileType: "Zip dosyası",
+        savedTo: (path: string) => `Kaydedildiği yer: ${path}`,
+        reveal: {
+          finder: "Finder'da göster",
+          explorer: "Gezgin'de göster",
+          files: "Dosyalar'da göster",
+        },
+        sendTo: "Dosyayı, ne olduğunu anlatan kısa bir notla birlikte {support} adresine gönder.",
+        whatsInside: "Dosyada neler var, neler asla yok",
+      },
     },
   },
   interrupt: {
@@ -267,6 +281,8 @@ export const tr: Messages = {
       google_cancelled: "Google ile oturum açma iptal edildi.",
       google_sign_in: "Tolon, Google ile oturum açmayı tamamlayamadı. Yeniden dene.",
       keychain: "Tolon, oturumu sistem anahtar zincirine kaydedemedi.",
+      diagnostics_save: "Tolon dosyayı oraya kaydedemedi. Başka bir klasör seç.",
+      diagnostics_reveal: "Tolon klasörü açamadı. Dosya, belirtilen yerde kayıtlı.",
     },
   },
 };

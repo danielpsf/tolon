@@ -29,8 +29,8 @@ use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
 };
 use windows::Win32::System::Registry::{
-    RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, REG_ROUTINE_FLAGS,
-    REG_SZ, RRF_RT_REG_BINARY, RRF_RT_REG_SZ,
+    RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE,
+    REG_ROUTINE_FLAGS, REG_SZ, RRF_RT_REG_BINARY, RRF_RT_REG_SZ,
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
@@ -160,19 +160,19 @@ const APPROVED_KEY: PCWSTR =
 /// the value is not there or holds another type (`ERROR_UNSUPPORTED_TYPE`): both mean nothing
 /// usable is set.
 fn read_value(key: PCWSTR, flags: REG_ROUTINE_FLAGS) -> Result<Option<Vec<u8>>, PlatformError> {
+    read_raw(HKEY_CURRENT_USER, key, RUN_VALUE, flags)
+}
+
+/// The raw data of `value` under `root\key`, read with the type filter `flags`; `None` as above.
+fn read_raw(
+    root: HKEY,
+    key: PCWSTR,
+    value: PCWSTR,
+    flags: REG_ROUTINE_FLAGS,
+) -> Result<Option<Vec<u8>>, PlatformError> {
     let mut bytes = 0u32;
     // SAFETY: with no data buffer the call only reports the size in `bytes`, a live u32.
-    let size = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            key,
-            RUN_VALUE,
-            flags,
-            None,
-            None,
-            Some(&mut bytes),
-        )
-    };
+    let size = unsafe { RegGetValueW(root, key, value, flags, None, None, Some(&mut bytes)) };
     if size == ERROR_FILE_NOT_FOUND || size == ERROR_UNSUPPORTED_TYPE {
         return Ok(None);
     }
@@ -181,9 +181,9 @@ fn read_value(key: PCWSTR, flags: REG_ROUTINE_FLAGS) -> Result<Option<Vec<u8>>, 
     // SAFETY: `buf` holds `bytes` bytes and stays alive for the call.
     let read = unsafe {
         RegGetValueW(
-            HKEY_CURRENT_USER,
+            root,
             key,
-            RUN_VALUE,
+            value,
             flags,
             None,
             Some(buf.as_mut_ptr().cast()),
@@ -200,17 +200,32 @@ fn read_value(key: PCWSTR, flags: REG_ROUTINE_FLAGS) -> Result<Option<Vec<u8>>, 
 
 /// The `Tolon` value of the `Run` key as text, or `None`.
 fn read_run_value() -> Result<Option<String>, PlatformError> {
-    Ok(read_value(RUN_KEY, RRF_RT_REG_SZ)?.map(|raw| {
-        let units: Vec<u16> = raw
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|c| u16::from_le_bytes(*c))
-            .collect();
-        String::from_utf16_lossy(&units)
-            .trim_end_matches('\0')
-            .to_owned()
-    }))
+    Ok(read_value(RUN_KEY, RRF_RT_REG_SZ)?.map(|raw| utf16_text(&raw)))
+}
+
+/// A `REG_SZ` value as text, without its trailing NUL.
+fn utf16_text(raw: &[u8]) -> String {
+    let units: Vec<u16> = raw
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .collect();
+    String::from_utf16_lossy(&units)
+        .trim_end_matches('\0')
+        .to_owned()
+}
+
+/// Where Windows keeps its product name, feature update and build number.
+const VERSION_KEY: PCWSTR = w!(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+
+/// One text value of [`VERSION_KEY`], or `None`.
+fn version_value(value: PCWSTR) -> Option<String> {
+    read_raw(HKEY_LOCAL_MACHINE, VERSION_KEY, value, RRF_RT_REG_SZ)
+        .ok()
+        .flatten()
+        .map(|raw| utf16_text(&raw))
+        .filter(|t| !t.is_empty())
 }
 
 impl Platform for WindowsPlatform {
@@ -367,6 +382,28 @@ impl Platform for WindowsPlatform {
             code: u32::from_ne_bytes(e.code().0.to_ne_bytes()),
         })?;
         Ok((f64::from(p.x), f64::from(p.y)))
+    }
+
+    /// "Windows 10 Pro 23H2, build 22631": the product name says 10 on Windows 11 too, so the
+    /// build number (22000 and up is 11) is what tells them apart.
+    fn os_version(&self) -> String {
+        let name = version_value(w!("ProductName")).unwrap_or_else(|| "Windows".to_owned());
+        let feature = version_value(w!("DisplayVersion"))
+            .map(|v| format!(" {v}"))
+            .unwrap_or_default();
+        match version_value(w!("CurrentBuildNumber")) {
+            Some(build) => format!("{name}{feature}, build {build}"),
+            None => format!("{name}{feature}"),
+        }
+    }
+
+    /// `explorer /select,"<path>"`, passed raw: Explorer parses its own command line and does not
+    /// follow the quoting `Command::arg` writes.
+    fn reveal_file(&self, path: &std::path::Path) -> Result<(), PlatformError> {
+        use std::os::windows::process::CommandExt;
+        let mut explorer = std::process::Command::new("explorer");
+        explorer.raw_arg(format!("/select,\"{}\"", path.display()));
+        crate::run_launcher("explorer /select", &mut explorer, false)
     }
 
     /// Enabled only when the value starts this exe (an entry left by a moved install is off) and

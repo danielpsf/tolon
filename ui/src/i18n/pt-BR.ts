@@ -141,6 +141,20 @@ export const ptBR: Messages = {
       check: "Procurar atualizações",
       upToDate: "Não há nenhuma versão nova para instalar.",
       autoCheck: "Uma vez por dia, o Tolon consulta o GitHub em busca de uma versão nova. Ele nunca instala nada sem perguntar a você.",
+      help: {
+        heading: "Ajude a gente a resolver um problema",
+        intro: "Salve um arquivo com os registros e as configurações do Tolon e envie para nós. O Tolon não envia nada sozinho.",
+        save: "Salvar diagnóstico",
+        fileType: "Arquivo zip",
+        savedTo: (path: string) => `Salvo em ${path}`,
+        reveal: {
+          finder: "Mostrar no Finder",
+          explorer: "Mostrar no Explorador de Arquivos",
+          files: "Mostrar em Arquivos",
+        },
+        sendTo: "Envie o arquivo para {support} com uma nota sobre o que aconteceu.",
+        whatsInside: "O que o arquivo contém e o que ele nunca contém",
+      },
     },
   },
   interrupt: {
@@ -271,6 +285,8 @@ export const ptBR: Messages = {
       google_cancelled: "A entrada com o Google foi cancelada.",
       google_sign_in: "O Tolon não conseguiu concluir a entrada com o Google. Tente de novo.",
       keychain: "O Tolon não conseguiu salvar o acesso nas chaves do sistema.",
+      diagnostics_save: "O Tolon não conseguiu salvar o arquivo aí. Escolha outra pasta.",
+      diagnostics_reveal: "O Tolon não conseguiu abrir a pasta. O arquivo está salvo no local indicado.",
     },
   },
 };

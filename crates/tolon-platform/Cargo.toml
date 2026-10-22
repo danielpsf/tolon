@@ -27,7 +27,8 @@ objc2 = "0.6"
 # methods of NSRunningApplication (`processIdentifier`, `runningApplicationWithProcessIdentifier`); libc is already in the lockfile.
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSColor", "NSEvent", "NSRunningApplication", "NSWorkspace", "libc", "NSGraphics", "NSResponder", "NSScreen", "NSText", "NSTextField", "NSControl", "NSView", "NSWindow"] }
 # NSURL and NSBundle: a join link as an NSURL, and the bundle id of the app that opens it (L-061).
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSDictionary", "NSEnumerator", "NSGeometry", "NSString", "NSURL", "NSValue"] }
+# NSProcessInfo: the macOS version for the diagnostics zip (L-072).
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSDictionary", "NSEnumerator", "NSGeometry", "NSProcessInfo", "NSString", "NSURL", "NSValue"] }
 # Only SMAppService and its error codes (start at login); default features would also pull objc2-security and block2.
 objc2-service-management = { version = "0.3", default-features = false, features = ["std", "objc2", "objc2-foundation", "SMAppService", "SMErrors"] }
 

@@ -2,9 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod diagnostics;
 mod errors;
 mod google;
 mod interrupt;
+mod logs;
 mod notify_copy;
 mod pipeline;
 mod refresh;
@@ -12,6 +14,7 @@ mod scheduler;
 mod settings;
 mod tray;
 mod updater;
+mod zip_writer;
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -114,21 +117,10 @@ fn keeps_running(event: &RunEvent) -> bool {
     matches!(event, RunEvent::ExitRequested { code: None, .. })
 }
 
-/// Info and below, unless `TOLON_LOG=debug` asks for the debug lines (on-screen checks read them,
-/// L-061). Anything else is info.
-fn log_level(asked: Option<&str>) -> tracing::Level {
-    match asked {
-        Some("debug") => tracing::Level::DEBUG,
-        _ => tracing::Level::INFO,
-    }
-}
-
 fn main() -> anyhow::Result<()> {
-    // Stderr only; fetch failures log a redacted host, never the URL.
-    let _ = tracing_subscriber::fmt()
-        .with_max_level(log_level(std::env::var("TOLON_LOG").ok().as_deref()))
-        .with_writer(std::io::stderr)
-        .try_init();
+    // Stderr, and the log files once `setup` knows the data folder (L-072). Fetch failures log a
+    // redacted host, never the URL.
+    logs::init(std::env::var("TOLON_LOG").ok().as_deref());
 
     // Tauri's default menu stays (no menu of our own, `enable_macos_default_menu` left on): an
     // Accessory app shows no menu bar, but the menu still carries the Edit key equivalents
@@ -136,6 +128,7 @@ fn main() -> anyhow::Result<()> {
     tauri::Builder::default()
         .manage(interrupt::InterruptState::default())
         .manage(updater::UpdaterState::default())
+        .manage(commands::DiagnosticsState::default())
         // First of the plugins, so a second launch hands over before any other setup runs. That
         // launch exits, and the running Tolon shows its settings window: the way back when the
         // tray icon is hidden (decision 2026-10-22). Windows and Linux; on macOS it also covers a
@@ -186,6 +179,10 @@ fn main() -> anyhow::Result<()> {
             commands::update_install,
             commands::update_skip,
             commands::update_later,
+            commands::diagnostics_plan,
+            commands::diagnostics_save,
+            commands::diagnostics_open,
+            commands::diagnostics_reveal,
             #[cfg(feature = "e2e-loopback")]
             commands::alarms_e2e_state,
             #[cfg(feature = "e2e-loopback")]
@@ -196,6 +193,18 @@ fn main() -> anyhow::Result<()> {
             commands::app_e2e_interrupt_windows,
         ])
         .setup(|app| {
+            // The log files for "Save diagnostics" (L-072); without a data folder, stderr only.
+            match app.path().app_data_dir() {
+                Ok(dir) => logs::start_files(&dir),
+                Err(e) => tracing::warn!(error = %e, "no data folder for the log files"),
+            }
+            tracing::info!(
+                version = %app.package_info().version,
+                os = tolon_platform::NATIVE.name(),
+                os_version = %tolon_platform::NATIVE.os_version(),
+                arch = std::env::consts::ARCH,
+                "Tolon started"
+            );
             // Before any window opens: on macOS the Accessory activation policy lets the interrupt
             // show over another app's full-screen Space (L-042). Nothing elsewhere. A failure costs
             // only that, so Tolon starts anyway.
@@ -259,13 +268,6 @@ mod tests {
     use super::*;
 
     type TestResult = anyhow::Result<()>;
-
-    #[test]
-    fn l061_debug_lines_are_opt_in() {
-        assert_eq!(log_level(None), tracing::Level::INFO);
-        assert_eq!(log_level(Some("warn")), tracing::Level::INFO);
-        assert_eq!(log_level(Some("debug")), tracing::Level::DEBUG);
-    }
 
     /// L-042: the activation policy is set before anything opens a window, and the bundle hides
     /// the Dock icon from launch and needs macOS 13 (SMAppService).

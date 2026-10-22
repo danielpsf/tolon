@@ -1,10 +1,13 @@
 // The only file that talks to Tauri: commands in, events out (docs/architecture.md, "Tauri commands").
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type {
   AlarmShowDto,
   CalendarDto,
   CommandError,
+  DiagnosticsClient,
+  DiagnosticsPlanDto,
   GoogleAccountDto,
   ListedDto,
   NotifyCopyDto,
@@ -70,6 +73,18 @@ export const api = {
   updateInstall: () => invoke<void>("update_install"),
   updateSkip: () => invoke<UpdateDto>("update_skip"),
   updateLater: () => invoke<UpdateDto>("update_later"),
+  // Save diagnostics (L-072), settings window only. Nothing is sent anywhere.
+  diagnosticsPlan: () => invoke<DiagnosticsPlanDto>("diagnostics_plan"),
+  /** The system save dialog; null when the person cancels. It only answers a path. */
+  diagnosticsChoosePath: (defaultPath: string, filterName: string) =>
+    saveDialog({ defaultPath, filters: [{ name: filterName, extensions: ["zip"] }] }),
+  /** Writes the zip and answers where it went. */
+  diagnosticsSave: (path: string, client: DiagnosticsClient) =>
+    invoke<string>("diagnostics_save", { path, client }),
+  /** Shows the zip saved last in Finder, Explorer or the file manager. */
+  diagnosticsReveal: () => invoke<void>("diagnostics_reveal"),
+  /** Opens the support page or the diagnostics doc in the browser. */
+  diagnosticsOpen: (link: "support" | "doc") => invoke<void>("diagnostics_open", { link }),
 };
 
 export const onSettingsChanged = (handler: () => void): Promise<UnlistenFn> => listen("settings:changed", handler);

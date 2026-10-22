@@ -156,6 +156,20 @@ export const he: Messages = {
       check: "בדיקת עדכונים",
       upToDate: "אין גרסה חדשה להתקנה.",
       autoCheck: "פעם ביום Tolon בודק ב-GitHub אם יש גרסה חדשה. הוא אף פעם לא מתקין בלי לשאול אותך.",
+      help: {
+        heading: "עזרו לנו לתקן בעיה",
+        intro: "אפשר לשמור קובץ עם היומנים וההגדרות של Tolon ולשלוח אותו אלינו. Tolon לא שולח שום דבר בעצמו.",
+        save: "שמירת קובץ אבחון",
+        fileType: "קובץ zip",
+        savedTo: (path: string) => `נשמר ב-${path}`,
+        reveal: {
+          finder: "הצגה ב-Finder",
+          explorer: "הצגה בסייר הקבצים",
+          files: "הצגה בקבצים",
+        },
+        sendTo: "אפשר לשלוח את הקובץ אל {support} עם הערה על מה שקרה.",
+        whatsInside: "מה יש בקובץ, ומה אף פעם לא נמצא בו",
+      },
     },
   },
   interrupt: {
@@ -309,6 +323,8 @@ export const he: Messages = {
       google_cancelled: "הכניסה עם Google בוטלה.",
       google_sign_in: "Tolon לא הצליח להשלים את הכניסה עם Google. אפשר לנסות שוב.",
       keychain: "Tolon לא הצליח לשמור את הכניסה במחזיק המפתחות של המערכת.",
+      diagnostics_save: "Tolon לא הצליח לשמור את הקובץ שם. אפשר לבחור תיקייה אחרת.",
+      diagnostics_reveal: "Tolon לא הצליח לפתוח את התיקייה. הקובץ נשמר במקום שמוצג.",
     },
   },
 };

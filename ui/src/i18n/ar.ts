@@ -160,6 +160,20 @@ export const ar: Messages = {
       check: "البحث عن تحديثات",
       upToDate: "لا يوجد إصدار جديد لتثبيته.",
       autoCheck: "يتحقق Tolon من GitHub مرة يوميًا بحثًا عن إصدار جديد، ولا يثبّت أي شيء دون أن يسألك.",
+      help: {
+        heading: "ساعدنا في حل مشكلة",
+        intro: "احفظ ملفًا يضم سجلات Tolon وإعداداته وأرسله إلينا. لا يرسل Tolon أي شيء بنفسه.",
+        save: "حفظ ملف التشخيص",
+        fileType: "ملف zip",
+        savedTo: (path: string) => `حُفظ في ${path}`,
+        reveal: {
+          finder: "إظهار في Finder",
+          explorer: "إظهار في المستكشف",
+          files: "إظهار في الملفات",
+        },
+        sendTo: "أرسل الملف إلى {support} مع ملاحظة عمّا حدث.",
+        whatsInside: "ما يحتويه الملف وما لا يحتويه أبدًا",
+      },
     },
   },
   interrupt: {
@@ -328,6 +342,8 @@ export const ar: Messages = {
       google_cancelled: "أُلغي تسجيل الدخول باستخدام Google.",
       google_sign_in: "تعذّر على Tolon إكمال تسجيل الدخول باستخدام Google. حاول مرة أخرى.",
       keychain: "تعذّر على Tolon حفظ تسجيل الدخول في سلسلة مفاتيح النظام.",
+      diagnostics_save: "تعذّر على Tolon حفظ الملف هناك. اختر مجلدًا آخر.",
+      diagnostics_reveal: "تعذّر على Tolon فتح المجلد. الملف محفوظ في المكان المذكور.",
     },
   },
 };

@@ -1553,13 +1553,26 @@ fn lead_time_limits_are_the_cores() {
 
 // ---- Capabilities ------------------------------------------------------------------------------
 
+/// L-072: the main window also gets the save dialog (Save diagnostics), and nothing else of the
+/// dialog plugin: the dialog answers a path, Tolon writes the file.
 #[test]
 fn no_webview_capability_grants_opener_or_notification_commands() -> TestResult {
-    for (name, text) in [
-        ("default", include_str!("../../capabilities/default.json")),
+    const LISTEN: [&str; 2] = ["core:event:allow-listen", "core:event:allow-unlisten"];
+    for (name, text, expected) in [
+        (
+            "default",
+            include_str!("../../capabilities/default.json"),
+            [&LISTEN[..], &["dialog:allow-save"]].concat(),
+        ),
         (
             "interrupt",
             include_str!("../../capabilities/interrupt.json"),
+            LISTEN.to_vec(),
+        ),
+        (
+            "panel",
+            include_str!("../../capabilities/panel.json"),
+            LISTEN.to_vec(),
         ),
     ] {
         let json: serde_json::Value = serde_json::from_str(text)?;
@@ -1569,11 +1582,10 @@ fn no_webview_capability_grants_opener_or_notification_commands() -> TestResult 
             .iter()
             .filter_map(serde_json::Value::as_str)
             .collect();
-        assert_eq!(
-            permissions,
-            ["core:event:allow-listen", "core:event:allow-unlisten"],
-            "{name}"
-        );
+        assert_eq!(permissions, expected, "{name}");
+        if name == "default" {
+            assert_eq!(json["windows"], serde_json::json!(["main"]));
+        }
     }
     Ok(())
 }

@@ -37,6 +37,10 @@ impl AppError {
     pub const GOOGLE_SIGN_IN: Self = Self("google_sign_in");
     /// The system keychain could not store or read the sign-in.
     pub const KEYCHAIN: Self = Self("keychain");
+    /// The diagnostics zip could not be written where the person chose (L-072).
+    pub const DIAGNOSTICS_SAVE: Self = Self("diagnostics_save");
+    /// The file manager could not be opened on the saved zip; the file is still there.
+    pub const DIAGNOSTICS_REVEAL: Self = Self("diagnostics_reveal");
 }
 
 impl fmt::Display for AppError {

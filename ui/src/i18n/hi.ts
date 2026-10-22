@@ -141,6 +141,20 @@ export const hi: Messages = {
       check: "अपडेट देखें",
       upToDate: "इंस्टॉल करने के लिए कोई नया वर्शन नहीं है।",
       autoCheck: "Tolon दिन में एक बार GitHub पर नया वर्शन देखता है। आपसे पूछे बिना वह कभी कुछ इंस्टॉल नहीं करता।",
+      help: {
+        heading: "किसी समस्या को ठीक करने में हमारी मदद करें",
+        intro: "Tolon के लॉग और सेटिंग वाली एक फ़ाइल सेव करें और हमें भेजें। Tolon खुद कुछ नहीं भेजता।",
+        save: "डायग्नॉस्टिक्स सेव करें",
+        fileType: "Zip फ़ाइल",
+        savedTo: (path: string) => `${path} में सेव किया गया`,
+        reveal: {
+          finder: "Finder में दिखाएं",
+          explorer: "Explorer में दिखाएं",
+          files: "Files में दिखाएं",
+        },
+        sendTo: "क्या हुआ, इसके बारे में एक नोट के साथ फ़ाइल {support} पर भेजें।",
+        whatsInside: "फ़ाइल में क्या होता है, और क्या कभी नहीं होता",
+      },
     },
   },
   interrupt: {
@@ -270,6 +284,8 @@ export const hi: Messages = {
       google_cancelled: "Google से साइन इन रद्द कर दिया गया।",
       google_sign_in: "Tolon, Google से साइन इन पूरा नहीं कर सका। फिर से कोशिश करें।",
       keychain: "Tolon साइन इन को सिस्टम कीचेन में सेव नहीं कर सका।",
+      diagnostics_save: "Tolon फ़ाइल को वहां सेव नहीं कर सका। कोई दूसरा फ़ोल्डर चुनें।",
+      diagnostics_reveal: "Tolon फ़ोल्डर नहीं खोल सका। फ़ाइल बताई गई जगह पर सेव है।",
     },
   },
 };
