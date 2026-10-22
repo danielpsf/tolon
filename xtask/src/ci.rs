@@ -45,6 +45,14 @@ pub fn run(root: &Path) -> Result<()> {
     run_step(root, "fmt", &cargo, &["fmt", "--all", "--check"])?;
     run_step(root, "clippy", &cargo, CLIPPY_ARGS)?;
     run_step(root, "test", &cargo, &["test", "--workspace"])?;
+    // Ignored tests hold all of Tauri's runtime workers for seconds (the quit revoke with a full
+    // runtime, L-057); alone in their step they stall no other test.
+    run_step(
+        root,
+        "test ignored (alone)",
+        &cargo,
+        &["test", "-p", "tolon-app", "--", "--ignored"],
+    )?;
     // The e2e-only seam is off in the steps above; lint and test it too (debug profile only).
     let mut seam_lint = vec!["clippy", "-p", "tolon-app", "--features", "e2e-loopback"];
     seam_lint.extend(&CLIPPY_ARGS[2..]);

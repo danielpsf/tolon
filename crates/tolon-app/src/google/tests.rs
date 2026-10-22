@@ -640,18 +640,34 @@ async fn ac13_3_quitting_inside_a_running_runtime_revokes_without_panicking() ->
     Ok(())
 }
 
-/// The one worker of the runtime is the caller, as on a one-CPU machine during an update install:
-/// the quit must still give up on a revocation that never answers after its limit, not hang.
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn ac13_3_quitting_on_a_runtime_with_one_busy_worker_gives_up_after_the_limit() -> TestResult
-{
+/// Every worker of Tauri's global runtime is busy, as on a one-CPU machine whose one worker is the
+/// caller (the updater's hook during an install): nothing drives that runtime's timer or network.
+/// A revocation that never answers must still be given up on after its limit, not hang. Ignored in
+/// the plain test run because it holds all of Tauri's workers for 6 s, which would stall the other
+/// tests that use them; `cargo xtask ci` runs it alone in its own step (`cargo test -- --ignored`).
+#[test]
+#[ignore = "fills Tauri's runtime for 6 s; runs alone in its own `cargo xtask ci` step"]
+fn ac13_3_quitting_while_tauris_runtime_is_full_gives_up_after_the_limit() -> TestResult {
+    let workers = std::thread::available_parallelism().map_or(1, usize::from);
+    let (busy, all_busy) = std::sync::mpsc::channel();
+    for _ in 0..workers {
+        let busy = busy.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = busy.send(());
+            std::thread::sleep(Duration::from_secs(6));
+        });
+    }
+    for _ in 0..workers {
+        all_busy.recv_timeout(Duration::from_secs(5))?;
+    }
+
     let db = db()?;
     let slot: Slot<Pending> = Mutex::new(Some(unpicked()));
     let started = std::time::Instant::now();
     drop_pending_on_exit(&db, Some(&Silent), &slot);
     let took = started.elapsed();
     assert!(took >= REVOKE_WAIT - Duration::from_millis(200), "{took:?}");
-    assert!(took < REVOKE_WAIT + Duration::from_secs(5), "{took:?}");
+    assert!(took < REVOKE_WAIT + Duration::from_secs(2), "{took:?}");
     assert!(take(&slot).is_none());
     Ok(())
 }
