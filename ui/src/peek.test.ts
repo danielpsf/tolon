@@ -160,7 +160,7 @@ describe("the Peek reminder (AC4.3, AC4.4, L-050)", () => {
     initCopy("en-US");
     const html = view(true);
     const scene = /<div class="tl-peek" aria-hidden="true"[^>]*>.*<\/div>/.exec(html)?.[0] ?? "";
-    expect(scene).toContain('<svg class="tl-peek-art" viewBox="0 0 1280 600" focusable="false">');
+    expect(scene).toContain('<svg class="tl-peek-art" viewBox="0 78 1280 362" preserveAspectRatio="xMidYMax meet" focusable="false">');
     for (const part of ["eye", "pupil", "shine", "cheek", "smile", "dome"]) expect(scene).toContain(`tl-peek-${part}`);
     expect(scene).toContain('<p class="tl-peek-say">It&#x27;s time.</p>');
     // Colours come from local.css: no fill or stroke in the markup but the fireflies' gradient reference (L-062), and nothing moves.
@@ -191,5 +191,46 @@ describe("the Peek reminder (AC4.3, AC4.4, L-050)", () => {
     expect(view(true)).toContain('<p class="tl-peek-say">حان الوقت.</p>');
     expect(local).toMatch(/:root:lang\(ar\) \{[^}]*--sm-font-display: "Inter Tight", Inter, "Noto Sans Arabic"/);
     expect(local).toMatch(/:root\[dir="rtl"\]\[data-style="peek"\] \.tl-peek-art \{\s*transform: scaleX\(-1\);/);
+  });
+});
+
+describe("Peek stands on the bottom edge on every aspect ratio (L-070)", () => {
+  const peekBlock = () => local.slice(local.indexOf(" * Peek (L-050"), local.indexOf(" * Right to left"));
+  const rule = (selector: string) => new RegExp(`\\n\\[data-style="peek"\\] ${selector.replace(/\./g, "\\.")} \\{([^}]*)\\}`).exec(peekBlock())?.[1] ?? "";
+
+  it("splits the page's curve from the character: two SVGs, the bubble inside the character's box", () => {
+    initCopy("en-US");
+    const scene = /<div class="tl-peek" aria-hidden="true"[^>]*>.*<\/div>/.exec(view(true))?.[0] ?? "";
+    const curve = /<svg class="tl-peek-curve"[^>]*>.*?<\/svg>/.exec(scene)?.[0] ?? "";
+    const char = /<div class="tl-peek-char">.*<\/div>/.exec(scene)?.[0] ?? "";
+    expect(curve).toContain('viewBox="0 0 1280 78"');
+    for (const part of ["page", "edge"]) expect(curve).toContain(`tl-peek-${part}`);
+    for (const part of ["dome", "mound", "eye", "fly"]) expect(curve).not.toContain(`tl-peek-${part}`);
+    for (const part of ["dome", "mound", "eye", "fly", "say"]) expect(char).toContain(`tl-peek-${part}`);
+    expect(char).not.toContain("tl-peek-page");
+    expect(scene.indexOf("tl-peek-curve")).toBeLessThan(scene.indexOf("tl-peek-char"));
+  });
+
+  it("anchors the character to the bottom: xMidYMax, margin-top auto in a column, the hill as the background", () => {
+    initCopy("en-US");
+    expect(view(true)).toContain('preserveAspectRatio="xMidYMax meet"');
+    expect(rule(".tl-peek")).toMatch(/display: flex;\s*flex-direction: column;/);
+    expect(rule(".tl-peek")).toContain("background: var(--tl-bg);");
+    expect(rule(".tl-peek-char")).toContain("margin-top: auto;");
+    expect(rule(".tl-peek-curve")).toMatch(/width: 100%;/);
+  });
+
+  it("scales with the width and stops at 45vh, so the buttons stay clear", () => {
+    const char = rule(".tl-peek-char");
+    expect(char).toContain("width: min(100%, calc(45vh * 1280 / 362));");
+    expect(char).toContain("aspect-ratio: 1280 / 362;");
+    // The bubble is placed in percent of that box, so it follows Peek at any size.
+    expect(rule(".tl-peek-say")).toMatch(/top: 0\.5%;\s*inset-inline-start: calc\(50% \+ 15\.5%\);/);
+    expect(rule(".tl-peek-say")).not.toMatch(/vw/);
+  });
+
+  it("the card keeps its crop: the character fills the card's width and the card cuts its foot", () => {
+    expect(local).toMatch(/\[data-style="peek"\] \.tl-peek-card \.tl-peek-char \{\s*width: 100%;/);
+    expect(local).toMatch(/\[data-style="peek"\] \.tl-peek-card \{[^}]*aspect-ratio: 1280 \/ 340;/);
   });
 });
