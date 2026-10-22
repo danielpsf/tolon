@@ -640,6 +640,22 @@ async fn ac13_3_quitting_inside_a_running_runtime_revokes_without_panicking() ->
     Ok(())
 }
 
+/// The one worker of the runtime is the caller, as on a one-CPU machine during an update install:
+/// the quit must still give up on a revocation that never answers after its limit, not hang.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn ac13_3_quitting_on_a_runtime_with_one_busy_worker_gives_up_after_the_limit() -> TestResult
+{
+    let db = db()?;
+    let slot: Slot<Pending> = Mutex::new(Some(unpicked()));
+    let started = std::time::Instant::now();
+    drop_pending_on_exit(&db, Some(&Silent), &slot);
+    let took = started.elapsed();
+    assert!(took >= REVOKE_WAIT - Duration::from_millis(200), "{took:?}");
+    assert!(took < REVOKE_WAIT + Duration::from_secs(5), "{took:?}");
+    assert!(take(&slot).is_none());
+    Ok(())
+}
+
 #[tokio::test]
 async fn ac13_3_quitting_inside_a_one_thread_runtime_revokes_too() -> TestResult {
     let db = db()?;

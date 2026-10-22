@@ -178,16 +178,9 @@ pub struct GoogleClient {
 
 impl GoogleClient {
     pub fn new(cfg: GoogleConfig) -> Result<Self, GoogleError> {
-        let http = reqwest::Client::builder()
-            .timeout(TIMEOUT)
-            // Token endpoints must not redirect (oauth2 crate guidance); plain http only reaches the test mock.
-            .redirect(redirect::Policy::none())
-            .https_only(!cfg!(test))
-            .build()
-            .map_err(|_| GoogleError::Network)?;
         Ok(Self {
             cfg,
-            http,
+            http: http_client()?,
             access: Mutex::new(HashMap::new()),
         })
     }
@@ -491,9 +484,9 @@ impl GoogleClient {
     pub async fn revoke(&self, refresh: &str) -> Result<(), GoogleError> {
         self.forget(refresh);
         // One form POST (RFC 7009). Not through oauth2: it refuses a non-https revocation URL, so
-        // the mock server could not test it.
-        let sent = self
-            .http
+        // the mock server could not test it. A client of its own: this also runs at quit, on a
+        // runtime other than the one the shared client's pooled connections belong to.
+        let sent = http_client()?
             .post(&self.cfg.revoke_url)
             .form(&[("token", refresh)])
             .send()
@@ -508,6 +501,16 @@ impl GoogleClient {
         }
         result
     }
+}
+
+fn http_client() -> Result<reqwest::Client, GoogleError> {
+    reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        // Token endpoints must not redirect (oauth2 crate guidance); plain http only reaches the test mock.
+        .redirect(redirect::Policy::none())
+        .https_only(!cfg!(test))
+        .build()
+        .map_err(|_| GoogleError::Network)
 }
 
 /// Accepts connections until one is Google's redirect carrying `state` and returns its code.

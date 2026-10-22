@@ -450,8 +450,10 @@ async fn drop_pending_within(
 }
 
 /// Tolon is quitting with a sign-in nobody picked calendars from: revoke it now, as on cancel.
-/// It blocks, and runs on a thread of its own: `block_on` panics where a runtime already runs on
-/// the calling thread, and the updater's hook reaches this from an async command (Windows).
+/// It blocks, on a thread of its own with a runtime of its own. Not on the caller's thread:
+/// `block_on` panics where a runtime already runs there, and the updater's hook reaches this from
+/// an async command (Windows). Not on Tauri's runtime either: with one worker, which the caller
+/// may be, nothing would drive the timer or the network, and the 3 s limit would never fire.
 pub fn drop_pending_on_exit(
     db: &Db,
     google: Option<&(impl GoogleApi + Sync)>,
@@ -461,16 +463,28 @@ pub fn drop_pending_on_exit(
         return;
     };
     let done = std::thread::scope(|scope| {
-        scope
-            .spawn(|| tauri::async_runtime::block_on(drop_pending(db, google, pending)))
-            .join()
+        std::thread::Builder::new()
+            .name("tolon-quit-revoke".into())
+            .spawn_scoped(scope, || {
+                // No runtime, no revoke: `pending` is dropped here, and its token with it.
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .inspect_err(|e| {
+                        tracing::warn!(error = %e, "no runtime to revoke an abandoned sign-in");
+                    })
+                    .ok()?;
+                Some(rt.block_on(drop_pending(db, google, pending)))
+            })
+            .map(|thread| thread.join())
     });
     match done {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => {
-            tracing::warn!(error = %e, "an abandoned sign-in could not be dropped at quit")
+        Ok(Ok(Some(Err(e)))) => {
+            tracing::warn!(error = %e, "an abandoned sign-in could not be dropped at quit");
         }
-        Err(_) => tracing::warn!("dropping an abandoned sign-in at quit stopped early"),
+        Ok(Ok(_)) => {}
+        Ok(Err(_)) => tracing::warn!("dropping an abandoned sign-in at quit stopped early"),
+        Err(e) => tracing::warn!(error = %e, "no thread to revoke an abandoned sign-in at quit"),
     }
 }
 
