@@ -313,3 +313,10 @@ The first `v0.1.0-beta.1` release run failed on Windows: WiX refuses a non-numer
 ## 2026-10-22 Release notes say what is new
 The first draft's notes were only `docs/install.md`, with a relative link that breaks on GitHub, and nothing about what the release contains.
 - (Daniel asked) Every release's notes are `docs/releases/<tag>.md` (what is new, known limits, how to report) followed by `docs/install.md` with its relative links rewritten to absolute `blob/<tag>/docs/...` links. The release workflow fails in preflight when `docs/releases/<tag>.md` is missing, so no tag ships without notes.
+
+## 2026-10-22 Real-world feeds, calendar names and Cmd-Tab (owner's first install)
+Daniel's work Google calendar is a 13.2 MB feed with 6,359 events back to 2021; Tolon refused it ("too large to read", 5 MB cap). Google's public address of a private calendar answers 404. Tolon does not show in Cmd-Tab, and calendars cannot be renamed.
+- (Daniel reported; detail by the orchestrator) The feed cap rises to 64 MB. Parsing keeps only what can matter: every recurring master with its overrides, and single events that end after the scheduler's look-back; older single events are dropped before they reach the store. A 15 MB synthetic fixture must sync within the sync interval's budget on CI.
+- A 404 (and 403) on a Google `/public/basic.ics` address says the calendar is not public and points to the secret address in the help guide; other 404s keep the plain message.
+- Calendars get a name the person can change in Settings, Calendars (inline edit). The custom name wins over `X-WR-CALNAME` and the host until it is cleared; it is stored locally only.
+- While the settings window is shown, Tolon uses the Regular activation policy on macOS, so it appears in Cmd-Tab and the Dock; when settings hides, and before any reminder is raised, it goes back to Accessory, so L-042 (above full-screen apps) keeps working. Windows and Linux already list the settings window.
