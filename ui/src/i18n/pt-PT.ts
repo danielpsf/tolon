@@ -196,7 +196,7 @@ export const ptPT: Messages = {
     tryBody: "Um alarme de teste mostra exatamente o que vai acontecer. Esc adia, Enter entra na chamada.",
     trayMenuBar: "O Tolon fica na barra de menus",
     traySystemTray: "O Tolon fica na área de notificação",
-    trayBody: "Esta janela fecha-se quando adicionar um calendário. Clique no ícone do Tolon para ver as reuniões de hoje, pausar os alarmes ou abrir as definições.",
+    trayBody: "Esta janela fecha-se quando adicionar um calendário. Para ver as reuniões de hoje, pausar os alarmes ou abrir as definições, clique no ícone\u00a0do\u00a0Tolon.",
     trayHiddenMenuBar: "Se a barra de menus ocultar o ícone, abra novamente o Tolon a partir do Finder ou do Spotlight para voltar a ver esta janela.",
     trayHiddenSystemTray: "Se o ícone estiver oculto, abra novamente o Tolon a partir da lista de aplicações para voltar a ver esta janela.",
     pasteIcal: "Colar uma ligação iCal",

@@ -193,7 +193,7 @@ export const tr: Messages = {
     tryBody: "Test alarmı sana tam olarak ne olacağını gösterir. Esc: ertele, Enter: katıl.",
     trayMenuBar: "Tolon menü çubuğunda",
     traySystemTray: "Tolon sistem tepsisinde",
-    trayBody: "Bir takvim eklediğinde bu pencere kapanır. Bugünkü toplantıları görmek, alarmları duraklatmak veya ayarları açmak için Tolon simgesine tıkla.",
+    trayBody: "Bir takvim eklediğinde bu pencere kapanır. Bugünkü toplantıları görmek, alarmları duraklatmak veya ayarları açmak için Tolon\u00a0simgesine tıkla.",
     trayHiddenMenuBar: "Menü çubuğu simgeyi gizlerse bu pencereyi geri getirmek için Tolon'u Finder'dan veya Spotlight'tan yeniden aç.",
     trayHiddenSystemTray: "Simge gizliyse bu pencereyi geri getirmek için Tolon'u uygulama listenden yeniden aç.",
     pasteIcal: "iCal bağlantısı yapıştır",
