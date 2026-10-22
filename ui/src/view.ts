@@ -24,6 +24,20 @@ export function titleOf(calendar: CalendarDto, c: Copy): string {
   return calendar.name;
 }
 
+/** The longest custom calendar name; Rust cuts at 80 characters too. */
+export const MAX_NAME_LENGTH = 80;
+
+/** What to send to `calendars_rename` for a typed name: the trimmed text, or null while it is the name already shown. A blank string clears the custom name. */
+export function renameValue(draft: string, shown: string): string | null {
+  const name = draft.trim();
+  return name === shown ? null : name;
+}
+
+/** Enter saves through the form; Esc cancels, unless an input method is composing. */
+export function cancelsRename(e: Pick<KeyboardEvent, "key" | "isComposing">): boolean {
+  return e.key === "Escape" && !e.isComposing;
+}
+
 /** Any rejection from a command, as the sentence to show. */
 export function errorText(e: unknown, c: Copy): string {
   return c.commandError(asCommandError(e));

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { asCommandError } from "./api";
 import type { CalendarDto } from "./api-types";
 import { createCopy } from "./copy";
-import { errorText, statusOf, titleOf } from "./view";
+import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusOf, titleOf } from "./view";
 
 const en = createCopy("en-US");
 const now = Date.parse("2026-10-20T10:00:00Z");
@@ -90,5 +90,36 @@ describe("error mapping", () => {
 
   it("falls back to the internal sentence for a code from a newer core", () => {
     expect(errorText({ code: "from_the_future" }, en)).toBe("Something went wrong inside Tolon. Try again.");
+  });
+});
+
+describe("renaming a calendar (L-067)", () => {
+  it("sends the trimmed name, and null while it is the name already shown", () => {
+    expect(renameValue("  Standups  ", "Work")).toBe("Standups");
+    expect(renameValue("Work ", "Work")).toBeNull();
+  });
+
+  it("sends an empty string for a blank name, so the feed name comes back", () => {
+    expect(renameValue("   ", "Standups")).toBe("");
+  });
+
+  it("caps the field at 80, as Rust does", () => {
+    expect(MAX_NAME_LENGTH).toBe(80);
+  });
+
+  it("cancels on Esc, not while an input method is composing, and not on other keys", () => {
+    expect(cancelsRename({ key: "Escape", isComposing: false })).toBe(true);
+    expect(cancelsRename({ key: "Escape", isComposing: true })).toBe(false);
+    expect(cancelsRename({ key: "Enter", isComposing: false })).toBe(false);
+  });
+
+  it("shows the custom name in the row title, as the core sends it in `name`", () => {
+    expect(titleOf(calendar({ name: "Standups" }), en)).toBe("Standups, iCal subscription");
+  });
+
+  it("has the strings in the catalogue", () => {
+    const { calendars } = en.t;
+    expect([calendars.rename, calendars.renameSave, calendars.cancel]).toEqual(["Rename", "Save", "Cancel"]);
+    expect(calendars.renameLabel("Work")).toBe("Rename calendar Work");
   });
 });

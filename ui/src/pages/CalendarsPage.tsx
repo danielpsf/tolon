@@ -3,7 +3,7 @@ import { api, asCommandError } from "../api";
 import type { CalendarDto, GoogleAccountDto } from "../api-types";
 import { copy } from "../copy";
 import { useCalendars } from "../store";
-import { errorText, statusOf, titleOf } from "../view";
+import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusOf, titleOf } from "../view";
 
 const TICK_MS = 30_000;
 
@@ -32,20 +32,106 @@ function Row({
   const { calendars: t } = c.t;
   const status = statusOf(calendar, c, now);
   const dot = status.failed ? "signal" : calendar.enabled ? "" : "muted";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const renameButton = useRef<HTMLButtonElement>(null);
+  // The edit replaces the Rename button, so focus goes back to it once the edit has closed.
+  const backToRow = useRef(false);
+  useEffect(() => {
+    if (!editing && backToRow.current) {
+      backToRow.current = false;
+      renameButton.current?.focus();
+    }
+  }, [editing]);
+
+  function startEdit() {
+    setDraft(calendar.name);
+    setError(null);
+    setEditing(true);
+  }
+
+  function closeEdit() {
+    backToRow.current = true;
+    setEditing(false);
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const name = renameValue(draft, calendar.name);
+    if (name === null) return closeEdit();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.calendarsRename(calendar.id, name);
+      closeEdit();
+    } catch (err) {
+      setError(errorText(err, c));
+    }
+    setBusy(false);
+  }
+
   return (
     <li className="sm-card tl-row">
       <span className={`sm-badge dot ${dot}`} aria-hidden="true" />
-      <span className="tl-text">
-        <span className="tl-name">{titleOf(calendar, c)}</span>
-        {calendar.display_url && <span className="sm-caption">{calendar.display_url}</span>}
-        {calendar.account && (
-          <span className="sm-caption">
-            <bdi>{calendar.account}</bdi>
+      {editing ? (
+        <form className="tl-edit sm-cluster" aria-busy={busy} onSubmit={(e) => void save(e)}>
+          <input
+            className="sm-input"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+            maxLength={MAX_NAME_LENGTH}
+            aria-label={t.renameField(calendar.name)}
+            placeholder={t.renamePlaceholder}
+            aria-invalid={error !== null}
+            value={draft}
+            disabled={busy}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (cancelsRename(e.nativeEvent)) closeEdit();
+            }}
+          />
+          <button type="submit" className="sm-btn primary sm" aria-disabled={busy}>
+            {t.renameSave}
+          </button>
+          <button type="button" className="sm-btn quiet sm" disabled={busy} onClick={closeEdit}>
+            {t.cancel}
+          </button>
+          {error && (
+            <span className="sm-error" role="alert">
+              {error}
+            </span>
+          )}
+        </form>
+      ) : (
+        <span className="tl-text">
+          <span className="tl-name" onClick={startEdit}>
+            {titleOf(calendar, c)}
           </span>
-        )}
-      </span>
+          {calendar.display_url && <span className="sm-caption">{calendar.display_url}</span>}
+          {calendar.account && (
+            <span className="sm-caption">
+              <bdi>{calendar.account}</bdi>
+            </span>
+          )}
+        </span>
+      )}
       <span className={`tl-status${status.failed ? " failed" : ""}`}>{status.text}</span>
       <span className="tl-remove">
+        <button
+          ref={renameButton}
+          type="button"
+          className="sm-btn quiet sm"
+          aria-label={t.renameLabel(calendar.name)}
+          disabled={editing}
+          onClick={startEdit}
+        >
+          {t.rename}
+        </button>
         <button
           type="button"
           className="sm-btn quiet sm"
