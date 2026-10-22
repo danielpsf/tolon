@@ -504,7 +504,7 @@ impl Windows for TauriWindows<'_> {
             let settings = app
                 .get_webview_window(crate::tray::MAIN)
                 .is_some_and(|w| w.is_visible().unwrap_or(false));
-            let reminder = window_states(&app).iter().any(|s| s.visible);
+            let reminder = reminder_shown(&app);
             if let Err(e) = regular_or_keep(settings, reminder, platform) {
                 tracing::warn!(error = %e, "could not return to the Regular activation policy");
             }
@@ -653,9 +653,12 @@ pub fn window_states(app: &AppHandle) -> Vec<WindowState> {
     .states()
 }
 
-/// True while any interrupt window is shown: a reminder is up (L-068).
+/// True from the moment a reminder's payload is set until it closes: a reminder is up (L-068).
+/// Window visibility would be too late: the payload is set before the windows are queued to show,
+/// and a settings show that lands in between must keep the Accessory policy (L-042).
 pub fn reminder_shown(app: &AppHandle) -> bool {
-    window_states(app).iter().any(|s| s.visible)
+    app.try_state::<InterruptState>()
+        .is_some_and(|state| state.get().is_some())
 }
 
 /// True while a shown interrupt window has keyboard focus.
@@ -1193,6 +1196,52 @@ mod tests {
         windows.own_window.set(true);
         windows.run_queued();
         assert_eq!(windows.calls(), ["forget", "queue yield", "keep"]);
+    }
+
+    /// L-068: the reminder's payload is set while its windows are still hidden (queued, not shown
+    /// yet). A settings show in that gap sees the reminder through the payload, not the windows,
+    /// and does not switch to Regular.
+    #[test]
+    fn l068_settings_shown_while_a_reminder_is_queued_stays_accessory() -> TestResult {
+        let state = InterruptState::default();
+        assert!(state.get().is_none());
+        state.set(Some(AlarmShow::sample(at(13, 58)?)));
+        let windows = FakeWindows::with(&[], &["interrupt-1"]);
+        assert!(windows.states().iter().all(|s| !s.visible));
+        crate::tray::bring_forward(
+            || Ok(()),
+            || Ok(()),
+            &StubPlatform,
+            state.get().is_some(),
+            || Ok(()),
+        );
+        assert_eq!(StubPlatform.policy_calls(), Vec::<bool>::new());
+        state.set(None);
+        crate::tray::bring_forward(
+            || Ok(()),
+            || Ok(()),
+            &StubPlatform,
+            state.get().is_some(),
+            || Ok(()),
+        );
+        assert_eq!(StubPlatform.policy_calls(), [true]);
+        Ok(())
+    }
+
+    /// A source check: both reads of "a reminder is up" use the payload flag.
+    #[test]
+    fn l068_a_reminder_is_up_from_the_payload_not_from_window_visibility() {
+        let shipped = include_str!("interrupt.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default();
+        let read = shipped
+            .split("pub fn reminder_shown(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_default();
+        assert!(read.contains("state.get().is_some()"), "{read}");
+        assert!(shipped.contains("let reminder = reminder_shown(&app);"));
     }
 
     /// L-068: a reminder opens with settings shown. The Accessory switch is queued after the app is

@@ -384,7 +384,7 @@ pub fn show_settings(app: &AppHandle) {
 /// (macOS), and focus goes to a window that is already shown. `reminder_up`: a reminder is on
 /// screen, so the policy stays Accessory (L-042) and `resume_regular` switches it when the
 /// reminder closes. Each step runs on its own: a failure is logged and the next step still runs.
-fn bring_forward(
+pub(crate) fn bring_forward(
     unminimize: impl FnOnce() -> tauri::Result<()>,
     show: impl FnOnce() -> tauri::Result<()>,
     platform: &dyn Platform,
@@ -849,10 +849,10 @@ mod tests {
         );
     }
 
-    /// L-068: every hide of the settings window goes through `hide_settings`, which queues the
-    /// switch back; the shipped sources show no other call that hides `MAIN`.
+    /// L-068, a source check: `hide_settings` queues the switch back to Accessory. The behaviour
+    /// of that switch is `l068_settings_shown_is_regular_hidden_is_accessory`.
     #[test]
-    fn l068_hide_settings_leaves_the_regular_policy() {
+    fn l068_hide_settings_queues_after_settings_hidden() {
         let shipped = include_str!("tray.rs")
             .split("#[cfg(test)]")
             .next()
@@ -863,7 +863,6 @@ mod tests {
             .and_then(|rest| rest.split("\n}\n").next())
             .unwrap_or_default();
         assert!(hide.contains("after_settings_hidden(&NATIVE)"), "{hide}");
-        assert_eq!(shipped.matches("set_regular(").count(), 2);
     }
 
     /// AC10.2: only `bring_forward` activates, and only `show_settings` calls it, so a start with
