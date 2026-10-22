@@ -5,6 +5,8 @@
   release_assets.py prerelease TAG            print true when TAG is a pre-release (has a `-`), else false
   release_assets.py check-key SIG             a probe signature was made by the key in tauri.conf.json
   release_assets.py latest-json DIR TAG REPO  write DIR/latest.json for the Tauri updater
+  release_assets.py stamp-install SRC OUT TAG write OUT: SRC (install.sh) with the version of TAG stamped in, so the
+                                              copy attached to a release installs that release and no other
   release_assets.py notes TAG INSTALL_MD OUT [REPO]
                                               write the release notes: docs/releases/TAG.md, `---`, then INSTALL_MD with
                                               its relative links made absolute (REPO defaults to $GITHUB_REPOSITORY)
@@ -24,6 +26,9 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[2]
 TAURI_CONF = ROOT / "crates/tolon-app/tauri.conf.json"
+INSTALL_SH = ROOT / "install.sh"
+# The one line of install.sh that holds the version. The script reads a value that starts with `@` as "not stamped".
+INSTALL_STAMP = re.compile(r'^(  version=)"@TOLON_VERSION@"$', re.M)
 
 # Updater manifest keys and the artifact patterns behind them, best first. The artifact is the file with a
 # `.sig` next to it. Tauri 2 signs the installer itself (the AppImage, `-setup.exe`, `.msi`, `.deb`) and
@@ -79,7 +84,20 @@ def check_tag(tag):
     updater = conf.get("plugins", {}).get("updater", {})
     if not updater.get("pubkey") or not updater.get("endpoints"):
         errors.append("plugins.updater needs a pubkey and endpoints in tauri.conf.json (L-019)")
+    if len(INSTALL_STAMP.findall(INSTALL_SH.read_text())) != 1:
+        errors.append('install.sh needs exactly one line `  version="@TOLON_VERSION@"` for the release to stamp (L-073)')
     return errors
+
+
+def stamp_install(src, out, tag):
+    """Write OUT: SRC with the version of TAG in place of the placeholder. Nothing is written on an error."""
+    if not re.fullmatch(r"v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?", tag):
+        return [f"tag {tag!r} is not v<semver>"]
+    text = Path(src).read_text()
+    if len(INSTALL_STAMP.findall(text)) != 1:
+        return [f'{src} needs exactly one line `  version="@TOLON_VERSION@"` to stamp; without it the copy would install the latest version, not {tag}']
+    Path(out).write_text(INSTALL_STAMP.sub(rf'\g<1>"{tag.removeprefix("v")}"', text))
+    return []
 
 
 def key_id(minisign_b64):
@@ -163,6 +181,8 @@ def main(argv):
         elif cmd == "latest-json" and len(args) == 3:
             latest_json(*args)
             errors = []
+        elif cmd == "stamp-install" and len(args) == 3:
+            errors = stamp_install(*args)
         elif cmd == "notes" and len(args) in (3, 4):
             repo = args[3] if len(args) == 4 else os.environ.get("GITHUB_REPOSITORY")
             errors = notes(*args[:3], repo) if repo else ["notes needs a repo: pass REPO or set GITHUB_REPOSITORY"]

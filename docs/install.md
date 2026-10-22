@@ -34,6 +34,35 @@ If you prefer the Terminal, check the download against `SHA256SUMS` first (see "
 xattr -dr com.apple.quarantine /Applications/Tolon.app
 ```
 
+### Install from the Terminal
+
+One line in the Terminal installs Tolon and skips the Open Anyway steps:
+
+```
+curl -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
+```
+
+The copy of `install.sh` on each release installs that release. Here is what it does, in order:
+
+1. It stops unless this is a Mac.
+2. It downloads the `.dmg` and `SHA256SUMS` of the release into a temporary folder.
+3. It checks the `.dmg` against its line in `SHA256SUMS`. If the line is missing or the checksum does not match, it stops and deletes the download.
+4. It opens the `.dmg` read-only at a temporary mount point.
+5. It copies Tolon into `/Applications`, or into `Applications` in your home folder when you cannot write to `/Applications`. If Tolon is already installed and running, it quits Tolon first and then replaces it.
+6. It closes the `.dmg`, deletes the temporary folder, tells you where Tolon is installed and opens it.
+
+It never asks for your password and never uses `sudo`.
+
+To read the script before you run it, save it, look at it, and run the saved copy:
+
+```
+curl -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh -o install.sh
+less install.sh
+sh install.sh
+```
+
+macOS shows the Open Anyway warning for files that a browser downloads, because the browser marks them. `curl` does not mark the file, so macOS does not ask. The script checks the file itself instead. The checksum proves that the download is intact. It does not prove who built it, because the checksum comes from the same release as the file. Tolon is still signed by its author, not by Apple.
+
 ## Windows
 
 1. Download the `.exe`. Your browser may block it as "not commonly downloaded". In Edge or Chrome, open the downloads list, click the three dots next to the file, choose Keep, then choose Keep anyway.

@@ -147,6 +147,9 @@ jobs:
           path: dist
       - name: Write latest.json for the updater
         run: python3 .github/scripts/release_assets.py latest-json dist "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY"
+      # install.sh is stamped with the tag's version, so the copy attached to this release installs this release.
+      - name: Stamp install.sh with the version
+        run: python3 .github/scripts/release_assets.py stamp-install install.sh dist/install.sh "$GITHUB_REF_NAME"
       - name: Write SHA256SUMS
         working-directory: dist
         run: |
