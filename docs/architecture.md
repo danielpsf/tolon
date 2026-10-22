@@ -130,7 +130,7 @@ Migrations live in `crates/tolon-store/migrations/V{n}__{name}.sql` and run on s
 ## Tauri commands (the whole API between UI and core)
 
 ```
-calendars.list | calendars.add_ics(url) | calendars.add_google() | calendars.remove(id) | calendars.set_enabled(id, bool) | calendars.sync_now(id?)
+calendars.list | calendars.add_ics(url) | calendars.add_google() | calendars.remove(id) | calendars.rename(id, name) | calendars.set_enabled(id, bool) | calendars.sync_now(id?)
 occurrences.today | occurrences.next
 alarms.snooze(key, minutes) | alarms.dismiss(key) | alarms.join(key) | alarms.already_there(key) | alarms.test
 settings.get | settings.set(key, value)
