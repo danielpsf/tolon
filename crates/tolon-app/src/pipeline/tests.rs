@@ -705,6 +705,26 @@ fn ac1_3_display_url_is_redact_url() {
     assert_eq!(dto.display_url, Some(redact_url(SECRET_URL)));
 }
 
+#[test]
+fn debug_output_of_a_listed_meeting_omits_its_title_key_and_join_link() {
+    let listed = ListedDto {
+        key: "event-SECRET@2026-10-22T08:00:00Z".into(),
+        title: "Salary talk SECRET".into(),
+        start: "2026-10-22T10:00:00+02:00".into(),
+        end: "2026-10-22T10:30:00+02:00".into(),
+        all_day: false,
+        people: 2,
+        ignored: None,
+        join: crate::interrupt::JoinDto::Link {
+            host: "meet-SECRET.example".into(),
+            recognised: true,
+        },
+    };
+    let text = format!("{listed:?}");
+    assert!(!text.contains("SECRET"), "{text}");
+    assert!(text.contains("people: 2"), "{text}");
+}
+
 #[tokio::test]
 async fn occurrences_today_sends_no_url_for_any_join_kind() -> TestResult {
     let db = db()?;

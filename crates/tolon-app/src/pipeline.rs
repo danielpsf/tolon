@@ -305,7 +305,7 @@ pub(crate) fn decode_events(stored: Vec<tolon_store::Event>) -> Vec<Event> {
 /// and window checks"). No URL: joining goes through `occurrences_join`. `ignored` says why it
 /// gets no alarm, if it gets none (S8.1): `keyword`, `all_day`, `declined`, `cancelled` or
 /// `no_attendees`.
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct ListedDto {
     /// `OccurrenceKey`'s text form, for `occurrences_join`.
     pub key: String,
@@ -317,6 +317,19 @@ pub struct ListedDto {
     pub people: u32,
     pub ignored: Option<&'static str>,
     pub join: JoinDto,
+}
+
+/// The key (it holds the event id), the title and the join link are not printed.
+impl std::fmt::Debug for ListedDto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ListedDto")
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("all_day", &self.all_day)
+            .field("people", &self.people)
+            .field("ignored", &self.ignored)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ListedDto {

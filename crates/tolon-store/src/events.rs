@@ -1,22 +1,43 @@
+use std::fmt;
+
 use rusqlite::{params, Connection, Row};
 
 use crate::StoreError;
 
 /// One event as fetched: the feed UID and its canonical JSON payload (opaque here).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FeedEvent {
     pub uid: String,
     pub payload: String,
 }
 
+// The payload holds the title, the place and the description: a `{:?}` shows none of it.
+impl fmt::Debug for FeedEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FeedEvent")
+            .field("payload_bytes", &self.payload.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// A stored event.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Event {
     pub id: String,
     pub calendar_id: String,
     pub uid: String,
     pub payload: String,
     pub updated_at: String,
+}
+
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Event")
+            .field("calendar_id", &self.calendar_id)
+            .field("updated_at", &self.updated_at)
+            .field("payload_bytes", &self.payload.len())
+            .finish_non_exhaustive()
+    }
 }
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Event> {
@@ -107,6 +128,20 @@ mod tests {
                 payload: (*p).into(),
             })
             .collect()
+    }
+
+    #[test]
+    fn debug_output_omits_uids_and_payloads() -> TestResult {
+        let store = Store::open_in_memory()?;
+        let cal = store.calendars().insert("ics", "W", None, true, "t")?;
+        let ev = store.events();
+        let sent = feed(&[("uid-SECRET", "title-SECRET")]);
+        ev.replace_for_calendar(&cal.id, &sent, "t1")?;
+        let stored = ev.list_by_calendar(&cal.id)?;
+        let text = format!("{sent:?} {stored:?}");
+        assert!(!text.contains("SECRET"), "{text}");
+        assert!(text.contains("FeedEvent") && text.contains("Event"));
+        Ok(())
     }
 
     #[test]

@@ -110,6 +110,8 @@ pub struct AppState {
     pub google_pending: Slot<Pending>,
     /// Ends the Google sign-in that is waiting for the browser.
     pub google_cancel: Slot<tokio::sync::oneshot::Sender<()>>,
+    /// How many times the person cancelled; a sign-in that is finishing checks it (`keep_pending`).
+    pub google_cancels: std::sync::atomic::AtomicU64,
 }
 
 /// The state, or `not_ready` when startup failed and it was never set up.
@@ -225,6 +227,7 @@ pub async fn calendars_google_sign_in(
     let signed = async {
         let s = state(&app)?;
         let client = s.google.as_ref().ok_or(AppError::GOOGLE_UNAVAILABLE)?;
+        let began = google::cancels_so_far(&s.google_cancels);
         let (tx, rx) = tokio::sync::oneshot::channel();
         // A sign-in already waiting is replaced: its receiver sees the sender go and it ends.
         put(&s.google_cancel, tx);
@@ -244,12 +247,16 @@ pub async fn calendars_google_sign_in(
         )
         .await?;
         let (dto, pending, healed) = google::signed_in(&s.db, &s.secrets, signed).await?;
-        // Revoking a token ends the account's whole grant, so an earlier unpicked sign-in of the
-        // same account is only forgotten: revoking it would end the one that just finished.
-        if let Some(old) = take(&s.google_pending).filter(|old| old.account != pending.account) {
-            google::drop_pending(&s.db, s.google.as_ref(), old).await?;
-        }
-        put(&s.google_pending, pending);
+        // A cancel that came while the tokens were being stored revokes this grant here.
+        google::keep_pending(
+            &s.db,
+            s.google.as_ref(),
+            &s.google_pending,
+            &s.google_cancels,
+            began,
+            pending,
+        )
+        .await?;
         anyhow::Ok((dto, healed))
     }
     .await;
@@ -306,6 +313,7 @@ pub async fn calendars_google_cancel(
             s.google.as_ref(),
             &s.google_cancel,
             &s.google_pending,
+            &s.google_cancels,
         )
         .await
     }

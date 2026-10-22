@@ -12,7 +12,7 @@ mod settings;
 mod sync_log;
 
 pub use alarms::{AlarmRow, AlarmsRepo, TERMINAL_STATES};
-pub use calendars::{Calendar, CalendarsRepo};
+pub use calendars::{Calendar, CalendarsRepo, NewGoogleCalendar};
 pub use events::{Event, EventsRepo, FeedEvent};
 pub use settings::SettingsRepo;
 pub use sync_log::{SyncLogEntry, SyncLogRepo};

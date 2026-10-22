@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -626,6 +627,64 @@ fn ac13_3_quitting_with_a_sign_in_nobody_picked_from_revokes_it_and_drops_the_to
     Ok(())
 }
 
+/// The updater's hook reaches `settle_store` from an async command, where `block_on` on the
+/// calling thread panics ("Cannot start a runtime from within a runtime").
+#[tokio::test(flavor = "multi_thread")]
+async fn ac13_3_quitting_inside_a_running_runtime_revokes_without_panicking() -> TestResult {
+    let db = db()?;
+    let google = FakeGoogle::default();
+    let slot: Slot<Pending> = Mutex::new(Some(unpicked()));
+    drop_pending_on_exit(&db, Some(&google), &slot);
+    assert_eq!(revoked(&google), [REFRESH]);
+    assert!(take(&slot).is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac13_3_quitting_inside_a_one_thread_runtime_revokes_too() -> TestResult {
+    let db = db()?;
+    let google = FakeGoogle::default();
+    let slot: Slot<Pending> = Mutex::new(Some(unpicked()));
+    drop_pending_on_exit(&db, Some(&google), &slot);
+    assert_eq!(revoked(&google), [REFRESH]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ac13_1_a_cancel_while_the_sign_in_finishes_revokes_it_and_it_is_not_kept() -> TestResult {
+    let db = db()?;
+    let google = FakeGoogle::default();
+    let slot: Slot<Pending> = Mutex::new(None);
+    let waiting: Slot<tokio::sync::oneshot::Sender<()>> = Mutex::new(None);
+    let epoch = AtomicU64::new(0);
+
+    // No cancel: the sign-in is kept, and an earlier unpicked one of another account is revoked.
+    let began = cancels_so_far(&epoch);
+    let other = Pending {
+        account: "other@example.com".into(),
+        refresh_token: REFRESH_2.into(),
+        calendars: vec![],
+    };
+    put(&slot, other);
+    keep_pending(&db, Some(&google), &slot, &epoch, began, unpicked()).await?;
+    assert_eq!(revoked(&google), [REFRESH_2]);
+    assert_eq!(take(&slot).map(|p| p.refresh_token), Some(REFRESH.into()));
+
+    // A cancel lands after the sign-in began and before it is kept (while its tokens were stored).
+    let began = cancels_so_far(&epoch);
+    cancel(&db, Some(&google), &waiting, &slot, &epoch).await?;
+    let kept = keep_pending(&db, Some(&google), &slot, &epoch, began, unpicked()).await;
+    assert_eq!(kept, Err(AppError::GOOGLE_CANCELLED));
+    assert_eq!(revoked(&google), [REFRESH_2, REFRESH]);
+    assert!(take(&slot).is_none(), "nothing is left pending");
+
+    // A sign-in that begins after the cancel is kept again.
+    let began = cancels_so_far(&epoch);
+    keep_pending(&db, Some(&google), &slot, &epoch, began, unpicked()).await?;
+    assert!(take(&slot).is_some());
+    Ok(())
+}
+
 #[tokio::test]
 async fn ac13_3_a_revocation_that_never_answers_is_given_up_on() -> TestResult {
     let db = db()?;
@@ -644,11 +703,12 @@ async fn ac13_1_cancel_ends_a_waiting_sign_in_and_drops_a_finished_one() -> Test
     let (tx, rx) = tokio::sync::oneshot::channel();
     let waiting: Slot<tokio::sync::oneshot::Sender<()>> = Mutex::new(Some(tx));
     let pending: Slot<Pending> = Mutex::new(Some(unpicked()));
+    let epoch = AtomicU64::new(0);
 
     // The sign-in is still waiting for the browser; the select! in `until_cancelled` ends it.
     let silent = std::future::pending::<Result<(), AppError>>();
     let (ended, cancelled) = tokio::join!(until_cancelled(silent, rx), async {
-        cancel(&db, Some(&google), &waiting, &pending).await
+        cancel(&db, Some(&google), &waiting, &pending, &epoch).await
     });
     cancelled?;
     assert_eq!(ended, Err(AppError::GOOGLE_CANCELLED));
@@ -656,7 +716,7 @@ async fn ac13_1_cancel_ends_a_waiting_sign_in_and_drops_a_finished_one() -> Test
     assert!(take(&waiting).is_none() && take(&pending).is_none());
 
     // Cancel with nothing open does nothing.
-    cancel(&db, Some(&google), &waiting, &pending).await?;
+    cancel(&db, Some(&google), &waiting, &pending, &epoch).await?;
     assert_eq!(revoked(&google).len(), 1);
     Ok(())
 }

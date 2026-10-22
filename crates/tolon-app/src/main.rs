@@ -64,6 +64,7 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
         secrets: std::sync::Arc::new(tolon_platform::secrets::Keychain),
         google_pending: Mutex::new(None),
         google_cancel: Mutex::new(None),
+        google_cancels: std::sync::atomic::AtomicU64::new(0),
     });
     scheduler::setup_fallback_actions(app)?;
     app.manage(commands::AppScheduler::new(scheduler::TauriHost::new(

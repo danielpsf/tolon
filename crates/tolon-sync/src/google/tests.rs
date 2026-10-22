@@ -460,9 +460,13 @@ fn debug_output_omits_the_address_titles_and_the_sync_token() {
     };
     let item = items(json!([{
         "id": "id-SECRET", "summary": "Salary talk SECRET", "description": "d-SECRET",
-        "location": "l-SECRET", "htmlLink": "https://x.example/SECRET", "status": "confirmed"
+        "location": "l-SECRET", "htmlLink": "https://x.example/SECRET", "status": "confirmed",
+        "conferenceData": {"entryPoints": [{"entryPointType": "video", "uri": "https://meet.example/SECRET?pwd=SECRET"}]}
     }]));
-    let text = format!("{cal:?} {synced:?} {:?}", item[0]);
+    let text = format!(
+        "{cal:?} {synced:?} {:?} {:?}",
+        item[0], item[0].conference_data
+    );
     assert!(!text.contains("SECRET"), "{text}");
     assert!(text.contains("RemoteCalendar") && text.contains("Synced") && text.contains("Item"));
     assert!(text.contains("skipped: 2"), "{text}");

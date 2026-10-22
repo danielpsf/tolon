@@ -10,6 +10,7 @@
 
 use std::fmt;
 use std::future::Future;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -17,7 +18,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tolon_core::{CalendarId, Event};
 use tolon_platform::secrets::{SecretError, Secrets};
-use tolon_store::{Calendar, CalendarsRepo, StoreError};
+use tolon_store::{Calendar, CalendarsRepo, NewGoogleCalendar};
 use tolon_sync::google::{GoogleClient, GoogleConfig, GoogleError, RemoteCalendar, SignIn, Synced};
 
 use crate::errors::AppError;
@@ -223,7 +224,7 @@ pub async fn signed_in(
 
 /// Adds the picked calendars of `pending` (those not added yet) and keeps the refresh token in
 /// the keychain for each. The tokens are stored first, with no database lock held, under ids made
-/// up front; the rows follow in one short lock. When a token cannot be stored, or the rows cannot
+/// up front; the rows follow in one transaction. When a token cannot be stored, or the rows cannot
 /// be written, nothing is added and the tokens already stored are deleted again.
 pub async fn add(
     db: &Db,
@@ -262,28 +263,18 @@ pub async fn add(
         stored.push(id);
     }
     let at = now.to_rfc3339();
-    let rows = {
-        let store = lock(db);
-        planned
-            .iter()
-            .try_for_each(|(id, remote)| -> Result<(), StoreError> {
-                store.calendars().insert_with_id(
-                    id,
-                    KIND,
-                    &remote.name,
-                    Some(&remote.id),
-                    true,
-                    &at,
-                )?;
-                store.calendars().set_account(id, &pending.account)
-            })
-            .inspect_err(|_| {
-                for (id, _) in &planned {
-                    let _ = store.calendars().remove(id);
-                }
-            })
-    };
-    if let Err(e) = rows {
+    let rows: Vec<_> = planned
+        .iter()
+        .map(|(id, remote)| NewGoogleCalendar {
+            id,
+            name: &remote.name,
+            remote_id: &remote.id,
+        })
+        .collect();
+    let written = lock(db)
+        .calendars()
+        .insert_google_many(&rows, &pending.account, &at);
+    if let Err(e) = written {
         forget_tokens(secrets, &stored).await;
         return Err(e.into());
     }
@@ -459,23 +450,83 @@ async fn drop_pending_within(
 }
 
 /// Tolon is quitting with a sign-in nobody picked calendars from: revoke it now, as on cancel.
-/// Called with no runtime running (the exit event of the event loop), so it blocks.
-pub fn drop_pending_on_exit(db: &Db, google: Option<&impl GoogleApi>, pending: &Slot<Pending>) {
-    if let Some(pending) = take(pending) {
-        if let Err(e) = tauri::async_runtime::block_on(drop_pending(db, google, pending)) {
-            tracing::warn!(error = %e, "an abandoned sign-in could not be dropped at quit");
+/// It blocks, and runs on a thread of its own: `block_on` panics where a runtime already runs on
+/// the calling thread, and the updater's hook reaches this from an async command (Windows).
+pub fn drop_pending_on_exit(
+    db: &Db,
+    google: Option<&(impl GoogleApi + Sync)>,
+    pending: &Slot<Pending>,
+) {
+    let Some(pending) = take(pending) else {
+        return;
+    };
+    let done = std::thread::scope(|scope| {
+        scope
+            .spawn(|| tauri::async_runtime::block_on(drop_pending(db, google, pending)))
+            .join()
+    });
+    match done {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "an abandoned sign-in could not be dropped at quit")
         }
+        Err(_) => tracing::warn!("dropping an abandoned sign-in at quit stopped early"),
     }
 }
 
+/// What a sign-in compares to know a cancel came while it was finishing: the cancel count when
+/// it began.
+pub fn cancels_so_far(epoch: &AtomicU64) -> u64 {
+    epoch.load(Ordering::SeqCst)
+}
+
+/// The sign-in that began at cancel count `began` has finished with `pending`. It becomes the
+/// pending pick, unless a cancel came meanwhile: then its grant is revoked at once (as cancel
+/// would have) and the sign-in ends as cancelled. The check and the put share the slot's lock, and
+/// `cancel` counts before it takes the slot, so a cancel never slips between them.
+pub async fn keep_pending(
+    db: &Db,
+    google: Option<&impl GoogleApi>,
+    slot: &Slot<Pending>,
+    epoch: &AtomicU64,
+    began: u64,
+    pending: Pending,
+) -> Result<(), AppError> {
+    let account = pending.account.clone();
+    let (earlier, rejected) = {
+        let mut slot = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        if cancels_so_far(epoch) == began {
+            (slot.replace(pending), None)
+        } else {
+            (None, Some(pending))
+        }
+    };
+    // Revoking a token ends the account's whole grant, so an earlier unpicked sign-in of the same
+    // account is only forgotten: revoking it would end the one that just finished.
+    if let Some(earlier) = earlier.filter(|e| e.account != account) {
+        drop_pending(db, google, earlier)
+            .await
+            .map_err(|_| AppError::GOOGLE_SIGN_IN)?;
+    }
+    if let Some(rejected) = rejected {
+        // Best effort: the sign-in is over either way.
+        let _ = drop_pending(db, google, rejected).await;
+        return Err(AppError::GOOGLE_CANCELLED);
+    }
+    Ok(())
+}
+
 /// Ends the sign-in waiting for the browser (its receiver sees the sender go) and drops a finished
-/// one nobody picked calendars from.
+/// one nobody picked calendars from. The count goes up first: a sign-in that is finishing sees it
+/// in `keep_pending` and revokes its own grant.
 pub async fn cancel(
     db: &Db,
     google: Option<&impl GoogleApi>,
     waiting: &Slot<tokio::sync::oneshot::Sender<()>>,
     pending: &Slot<Pending>,
+    epoch: &AtomicU64,
 ) -> anyhow::Result<()> {
+    epoch.fetch_add(1, Ordering::SeqCst);
     if let Some(cancel) = take(waiting) {
         let _ = cancel.send(());
     }
