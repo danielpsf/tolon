@@ -360,7 +360,11 @@ test("l067 a calendar is renamed in its row, and clearing the name brings the fe
     const field = await row.findElement(By.css("input.sm-input"));
     assert.equal(await field.getAttribute("value"), "Team fixture");
     assert.equal(await driver.executeScript("return document.activeElement === arguments[0]", field), true, "the edit takes focus");
-    await field.sendKeys(Key.chord(Key.CONTROL, "a"), Key.chord(Key.COMMAND, "a"), "  Standups  ", Key.ENTER);
+    // select() works on every OS; Ctrl+A is a line start on macOS.
+    await driver.executeScript("arguments[0].select()", field);
+    await field.sendKeys("  Standups  ");
+    assert.equal(await field.getAttribute("value"), "  Standups  ");
+    await field.sendKeys(Key.ENTER);
     const renamed = await waitFor("the new name", async () => (await calendarRows("Standups"))[0]);
     assert.equal(await renamed.findElement(By.css(".tl-name")).getText(), "Standups, iCal subscription");
     assert.equal((await driver.findElements(By.css("input.sm-input"))).length, 0, "the edit closes");
@@ -375,7 +379,10 @@ test("l067 a calendar is renamed in its row, and clearing the name brings the fe
     // An empty name clears it: the feed's own name shows again.
     await renamed.findElement(By.css(".tl-remove button:first-child")).click();
     const again = await renamed.findElement(By.css("input.sm-input"));
-    await again.sendKeys(Key.chord(Key.CONTROL, "a"), Key.chord(Key.COMMAND, "a"), Key.BACK_SPACE, Key.ENTER);
+    await driver.executeScript("arguments[0].select()", again);
+    await again.sendKeys(Key.BACK_SPACE);
+    assert.equal(await again.getAttribute("value"), "");
+    await again.sendKeys(Key.ENTER);
     const restored = await waitFor("the feed name", async () => (await fixtureRows())[0]);
     assert.equal(await restored.findElement(By.css(".tl-name")).getText(), "Team fixture, iCal subscription");
   } finally {
