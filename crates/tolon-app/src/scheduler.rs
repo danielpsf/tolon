@@ -91,7 +91,8 @@ pub trait Host: Send + Sync {
     /// Ends the interrupt's claim on the front, once it is known that no waiting reminder took the
     /// screen (decision 2026-10-22, "Closing a reminder gives focus back"). `restore`: give the
     /// front back to the app that was in front when the interrupt opened. Otherwise (after a Join,
-    /// where the browser has focus) forget that app.
+    /// where the browser has focus) forget that app and give up Tolon's activation (L-060), unless
+    /// settings or the panel is shown.
     fn settle_focus(&self, restore: bool);
     /// One shot of the alarm sound; failures are logged and ignored.
     fn play(&self, sound: Sound);
