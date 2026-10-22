@@ -273,10 +273,29 @@ pub fn plan_and_tick(
     let store = pipeline::lock(db);
     let stored = stored_alarms(&store)?;
     let mut alarms = plan(occurrences, settings, &stored, now);
+    // The alarm codes of the debug lines (L-072); without the secret the lines say "unknown".
+    let refs = crate::diagnostics::AlarmRefs::load(&store)
+        .inspect_err(|e| tracing::warn!(error = %e, "no alarm code secret"))
+        .ok();
+    let code = |a: &tolon_core::OccurrenceKey| {
+        refs.as_ref()
+            .map_or_else(|| "unknown".to_owned(), |r| r.of(&a.to_string()))
+    };
+    log_plan(&stored, &alarms, occurrences.len(), &code);
     let planned: Vec<AlarmRow> = alarms.iter().map(|a| to_row(a, now)).collect();
     store.alarms().upsert_all(&planned)?;
     store.alarms().prune_before(&ts(now))?;
     let transitions = tick(&alarms, now, pause, quiet);
+    for t in &transitions {
+        tracing::debug!(
+            alarm = %code(&t.occurrence),
+            kind = t.kind.as_str(),
+            to = t.to.name(),
+            paused = pause.is_some(),
+            quiet_hours = quiet.is_some(),
+            "alarm transition"
+        );
+    }
     apply_transitions(&mut alarms, &transitions);
     // Only the alarms that changed: a pruned row must not come back.
     let changed: Vec<AlarmRow> = transitions
@@ -302,6 +321,50 @@ pub fn plan_and_tick(
         transitions,
         firing,
     })
+}
+
+/// Debug lines for the plan's decisions (L-072): each alarm that is new or moved, and each one
+/// the plan dropped, named by their `AlarmRefs` code (the key holds the event's UID), never by title. Nothing
+/// when the plan did not change, so a quiet day writes few lines.
+fn log_plan(
+    stored: &[Alarm],
+    planned: &[Alarm],
+    occurrences: usize,
+    code: &dyn Fn(&tolon_core::OccurrenceKey) -> String,
+) {
+    let same = |a: &Alarm, b: &Alarm| a.occurrence == b.occurrence && a.kind == b.kind;
+    let mut changed = false;
+    for a in planned {
+        let before = stored.iter().find(|s| same(s, a));
+        if before.is_some_and(|s| s.at == a.at && s.start == a.start) {
+            continue;
+        }
+        changed = true;
+        tracing::debug!(
+            alarm = %code(&a.occurrence),
+            kind = a.kind.as_str(),
+            at = %ts(a.at),
+            meeting_start = %ts(a.start),
+            state = a.state.name(),
+            moved = before.is_some(),
+            "alarm planned"
+        );
+    }
+    for s in stored
+        .iter()
+        .filter(|s| !planned.iter().any(|a| same(a, s)))
+    {
+        changed = true;
+        tracing::debug!(
+            alarm = %code(&s.occurrence),
+            kind = s.kind.as_str(),
+            state = s.state.name(),
+            "alarm dropped: its meeting is gone, ignored or over"
+        );
+    }
+    if changed {
+        tracing::debug!(occurrences, alarms = planned.len(), "plan changed");
+    }
 }
 
 /// Applies a person's action to the stored alarms of `keys`, in one store lock.

@@ -36,7 +36,32 @@ export const COMMAND_ERROR_CODES = [
   "google_cancelled",
   "google_sign_in",
   "keychain",
+  "diagnostics_save",
+  "diagnostics_reveal",
 ] as const;
+
+/** `diagnostics_plan` (L-072): what "Show in ..." names, and where to send the file. */
+export interface DiagnosticsPlanDto {
+  file_manager: "finder" | "explorer" | "files";
+  /** The support address, the text of the mailto link. */
+  support_email: string;
+  /** `mailto:` the address with a subject and a short template. */
+  support_url: string;
+  /** GitHub issues, for a public report. */
+  issues_url: string;
+  /** `docs/help/diagnostics.md` at this version. */
+  doc_url: string;
+}
+
+/** The fixed links `diagnostics_open` opens; the page never sends a URL. */
+export type DiagnosticsLink = "support" | "issues" | "doc";
+
+/** What the settings window adds to `environment.json`: its language and the webview's user agent. */
+export interface DiagnosticsClient {
+  locale: string;
+  languages: string[];
+  user_agent: string;
+}
 
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
 

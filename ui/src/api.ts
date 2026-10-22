@@ -5,6 +5,9 @@ import type {
   AlarmShowDto,
   CalendarDto,
   CommandError,
+  DiagnosticsClient,
+  DiagnosticsLink,
+  DiagnosticsPlanDto,
   GoogleAccountDto,
   ListedDto,
   NotifyCopyDto,
@@ -72,6 +75,14 @@ export const api = {
   updateInstall: () => invoke<void>("update_install"),
   updateSkip: () => invoke<UpdateDto>("update_skip"),
   updateLater: () => invoke<UpdateDto>("update_later"),
+  // Save diagnostics (L-072), settings window only. Nothing is sent anywhere.
+  diagnosticsPlan: () => invoke<DiagnosticsPlanDto>("diagnostics_plan"),
+  /** Rust opens the system save dialog and writes the zip; answers where, or null when cancelled. */
+  diagnosticsSave: (client: DiagnosticsClient) => invoke<string | null>("diagnostics_save", { client }),
+  /** Shows the zip saved last in Finder, Explorer or the file manager. */
+  diagnosticsReveal: () => invoke<void>("diagnostics_reveal"),
+  /** Opens the support email (mailto with a template), GitHub issues or the diagnostics doc. */
+  diagnosticsOpen: (link: DiagnosticsLink) => invoke<void>("diagnostics_open", { link }),
 };
 
 export const onSettingsChanged = (handler: () => void): Promise<UnlistenFn> => listen("settings:changed", handler);

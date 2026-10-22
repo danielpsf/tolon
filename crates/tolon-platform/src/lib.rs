@@ -17,6 +17,7 @@ mod windows;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 use std::num::NonZeroIsize;
+use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -383,6 +384,15 @@ pub trait Platform: Send + Sync {
     /// tray click arrives to find the icon's screen with [`Screen::contains_placement_point`].
     /// Linux and the stub return [`PlatformError::Unsupported`]: the app asks Tauri there.
     fn pointer(&self) -> Result<(f64, f64), PlatformError>;
+
+    /// The OS and its version for the diagnostics zip (L-072), such as "macOS Version 27.0 (Build
+    /// 25A123)". Any thread. "unknown" when the OS cannot be read; it never fails.
+    fn os_version(&self) -> String;
+
+    /// Shows the saved diagnostics file in the system file manager (L-072): selected in Finder
+    /// (`open -R`) or Explorer (`explorer /select,`); Linux opens its folder (`xdg-open`). Any
+    /// thread; it waits for the launcher to start, not for the window.
+    fn reveal_file(&self, path: &Path) -> Result<(), PlatformError>;
 }
 
 /// The app [`Platform::remember_frontmost`] noted, until [`Platform::restore_previous`] takes it or
@@ -441,6 +451,7 @@ static STUB_RESTORES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static STUB_YIELDS: AtomicUsize = AtomicUsize::new(0);
 static STUB_JOIN_TARGET: Previous<String> = Previous::new();
 static STUB_HANDOVERS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static STUB_REVEALS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 thread_local! {
     /// The `set_regular` arguments of this thread, so parallel tests do not see each other's.
@@ -474,6 +485,14 @@ impl StubPlatform {
     /// deactivation: it counts in [`StubPlatform::yields`] only.
     pub fn handed_over(&self) -> Vec<String> {
         STUB_HANDOVERS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The files [`Platform::reveal_file`] was asked to show, oldest first.
+    pub fn revealed(&self) -> Vec<PathBuf> {
+        STUB_REVEALS
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -608,6 +627,72 @@ impl Platform for StubPlatform {
     fn pointer(&self) -> Result<(f64, f64), PlatformError> {
         Err(PlatformError::Unsupported)
     }
+
+    fn os_version(&self) -> String {
+        "stub".to_owned()
+    }
+
+    fn reveal_file(&self, path: &Path) -> Result<(), PlatformError> {
+        STUB_REVEALS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(path.to_owned());
+        Ok(())
+    }
+}
+
+/// Makes `dir` readable by the person's own account only (0700) on macOS and Linux, for the log
+/// folder (L-072 review). Windows keeps the profile folder's own ACL, which is already per user.
+pub fn private_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let _ = dir;
+    Ok(())
+}
+
+/// Runs a file manager launcher and waits for it to exit (L-072). `check_status: false` for
+/// Explorer, which exits with 1 even when it showed the file.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
+    allow(dead_code)
+)]
+pub(crate) fn run_launcher(
+    call: &'static str,
+    command: &mut std::process::Command,
+    check_status: bool,
+) -> Result<(), PlatformError> {
+    let status = command
+        .status()
+        .map_err(|e| PlatformError::Io(format!("{call}: {}", e.kind())))?;
+    if check_status && !status.success() {
+        return Err(PlatformError::Os {
+            call,
+            code: status
+                .code()
+                .map_or(u32::MAX, |c| u32::from_ne_bytes(c.to_ne_bytes())),
+        });
+    }
+    Ok(())
+}
+
+/// The Linux "OS and version" line: `PRETTY_NAME` from os-release, then the kernel release.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn linux_version(os_release: Option<&str>, kernel: Option<&str>) -> String {
+    let pretty = os_release.and_then(|text| {
+        text.lines().find_map(|l| {
+            l.strip_prefix("PRETTY_NAME=")
+                .map(|v| v.trim().trim_matches('"').to_owned())
+        })
+    });
+    let name = pretty.unwrap_or_else(|| "Linux".to_owned());
+    match kernel.map(str::trim).filter(|k| !k.is_empty()) {
+        Some(k) => format!("{name}, kernel {k}"),
+        None => name,
+    }
 }
 
 /// The `NSView` behind an AppKit window handle, or why there is none.
@@ -680,6 +765,25 @@ pub(crate) mod fake {
 mod tests {
     use super::*;
     use raw_window_handle::{AppKitWindowHandle, Win32WindowHandle, XlibWindowHandle};
+
+    #[test]
+    fn l072_linux_version_reads_os_release_and_the_kernel() {
+        let release = "NAME=\"Ubuntu\"\nPRETTY_NAME=\"Ubuntu 22.04.4 LTS\"\nID=ubuntu\n";
+        assert_eq!(
+            linux_version(Some(release), Some("6.8.0-45-generic\n")),
+            "Ubuntu 22.04.4 LTS, kernel 6.8.0-45-generic"
+        );
+        assert_eq!(linux_version(None, None), "Linux");
+    }
+
+    #[test]
+    fn l072_the_stub_notes_what_it_reveals() -> Result<(), PlatformError> {
+        let path = Path::new("/tmp/Tolon-diagnostics.zip");
+        StubPlatform.reveal_file(path)?;
+        assert!(StubPlatform.revealed().iter().any(|p| p == path));
+        assert_eq!(StubPlatform.os_version(), "stub");
+        Ok(())
+    }
 
     #[test]
     fn stub_platform_reports_its_name() {

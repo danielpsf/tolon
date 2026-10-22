@@ -148,6 +148,20 @@ export const ja: Messages = {
       check: "アップデートを確認",
       upToDate: "インストールできる新しいバージョンはありません。",
       autoCheck: "Tolon は 1 日に 1 回 GitHub で新しいバージョンを確認します。確認なしにインストールすることはありません。",
+      help: {
+        heading: "問題の解決にご協力ください",
+        intro: "Tolon のログと設定を含むファイルを保存して、私たちに送ってください。Tolon が自分で何かを送信することはありません。",
+        save: "診断ファイルを保存",
+        savedTo: (path: string) => `保存先: ${path}`,
+        reveal: {
+          finder: "Finder で表示",
+          explorer: "エクスプローラーで表示",
+          files: "ファイルで表示",
+        },
+        sendTo: "ファイルを添付し、何が起きたかを書き添えて {support} に送ってください。",
+        issues: "または GitHub で公開の Issue を作成する",
+        whatsInside: "ファイルに含まれるものと、決して含まれないもの",
+      },
     },
   },
   interrupt: {
@@ -275,6 +289,8 @@ export const ja: Messages = {
       google_cancelled: "Google でのログインはキャンセルされました。",
       google_sign_in: "Tolon は Google でのログインを完了できませんでした。もう一度お試しください。",
       keychain: "Tolon はログイン情報をシステムのキーチェーンに保存できませんでした。",
+      diagnostics_save: "Tolon はその場所にファイルを保存できませんでした。別のフォルダを選んでください。",
+      diagnostics_reveal: "Tolon はフォルダを開けませんでした。ファイルは表示されている場所に保存されています。",
     },
   },
 };

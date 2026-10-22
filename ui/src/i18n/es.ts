@@ -149,6 +149,20 @@ export const es: Messages = {
       check: "Buscar actualizaciones",
       upToDate: "No hay ninguna versión nueva para instalar.",
       autoCheck: "Una vez al día, Tolon consulta en GitHub si hay una versión nueva. Nunca instala nada sin preguntarte.",
+      help: {
+        heading: "Ayúdanos a resolver un problema",
+        intro: "Guarda un archivo con los registros y los ajustes de Tolon y envíanoslo. Tolon no envía nada por sí mismo.",
+        save: "Guardar diagnóstico",
+        savedTo: (path: string) => `Guardado en ${path}`,
+        reveal: {
+          finder: "Mostrar en Finder",
+          explorer: "Mostrar en el Explorador",
+          files: "Mostrar en Archivos",
+        },
+        sendTo: "Envíalo a {support} con el archivo adjunto y una nota sobre lo que pasó.",
+        issues: "O abre una incidencia pública en GitHub",
+        whatsInside: "Qué contiene el archivo y qué no contiene nunca",
+      },
     },
   },
   interrupt: {
@@ -279,6 +293,8 @@ export const es: Messages = {
       google_cancelled: "Se canceló el inicio de sesión con Google.",
       google_sign_in: "Tolon no pudo terminar de iniciar sesión con Google. Inténtalo de nuevo.",
       keychain: "Tolon no pudo guardar la sesión en el llavero del sistema.",
+      diagnostics_save: "Tolon no pudo guardar el archivo ahí. Elige otra carpeta.",
+      diagnostics_reveal: "Tolon no pudo abrir la carpeta. El archivo está guardado donde se indica.",
     },
   },
 };

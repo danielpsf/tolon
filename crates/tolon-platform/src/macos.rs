@@ -14,7 +14,7 @@ use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSEvent,
     NSRunningApplication, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
 };
-use objc2_foundation::{ns_string, NSBundle, NSError, NSNumber, NSString, NSURL};
+use objc2_foundation::{ns_string, NSBundle, NSError, NSNumber, NSProcessInfo, NSString, NSURL};
 use objc2_service_management::SMAppService;
 use raw_window_handle::HasWindowHandle;
 
@@ -287,6 +287,21 @@ impl Platform for MacPlatform {
             .map_or(0.0, |s| s.frame().size.height);
         let p = NSEvent::mouseLocation();
         Ok((p.x, top_left_y(p.y, 0.0, primary_height)))
+    }
+
+    fn os_version(&self) -> String {
+        let version = NSProcessInfo::processInfo().operatingSystemVersionString();
+        format!("macOS {version}")
+    }
+
+    fn reveal_file(&self, path: &std::path::Path) -> Result<(), PlatformError> {
+        crate::run_launcher(
+            "open -R",
+            std::process::Command::new("/usr/bin/open")
+                .arg("-R")
+                .arg(path),
+            true,
+        )
     }
 
     fn start_at_login(&self) -> Result<StartAtLogin, PlatformError> {

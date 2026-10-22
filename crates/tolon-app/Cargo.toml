@@ -28,8 +28,23 @@ chrono-tz = "0.10.4"
 # Machine IANA zone name for "today"; already in the tree through chrono.
 iana-time-zone = "0.1.65"
 tracing = "0.1"
-# Without a subscriber the warn lines are dropped; stderr only, level info.
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# Without a subscriber the warn lines are dropped. Two layers: stderr at info (debug with
+# TOLON_LOG=debug), and the log files at debug for Tolon's own crates only (L-072). No `tracing-log`
+# feature: dependency `log` records stay out (L-061).
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "registry"] }
+# L-072: daily log files in the data folder for the diagnostics zip. Tokio's own crate, passes
+# `cargo deny`; it adds only `symlink` (crossbeam-channel, time and tracing-subscriber were in the tree).
+# Only `RollingFileAppender` is used (no non-blocking worker); Tolon caps the files at 10 MB itself.
+tracing-appender = "0.2.5"
+# L-072: the diagnostics zip is written by a small writer of our own (`zip_writer.rs`): the `zip`
+# crate stays out (L-019, decision 2026-10-21). Both crates were already in the tree through png.
+flate2 = "1"
+crc32fast = "1"
+# L-072 review: alarm codes in the logs and the zip are SipHash-2-4 of the alarm key under a
+# per-install 128-bit secret (settings table, never exported). siphasher is already in the tree
+# through chrono-tz; getrandom 0.3 through rand 0.9 (tauri-plugin-notification).
+siphasher = "1"
+getrandom = "0.3"
 # Sleep in the refresh loop; a oneshot carries the screen list back from the main thread; `select!` and `Notify` in the scheduler loop. Tauri's async runtime is tokio. `rt` and `net`: at quit, a sign-in nobody picked from is revoked on a small runtime of its own (google.rs), so the 3 s limit holds even when Tauri's runtime has one busy worker; the features were already enabled in the tree through tauri and reqwest, no new dependency.
 tokio = { version = "1", features = ["time", "sync", "macros", "rt", "net"] }
 # Blocking error dialog when the database cannot be opened or migrated.

@@ -148,6 +148,20 @@ export const zhCN: Messages = {
       check: "检查更新",
       upToDate: "没有可安装的新版本。",
       autoCheck: "Tolon 每天在 GitHub 上检查一次新版本，未经你同意绝不会安装。",
+      help: {
+        heading: "帮助我们解决问题",
+        intro: "保存一个包含 Tolon 日志和设置的文件，然后发送给我们。Tolon 自己不会发送任何内容。",
+        save: "保存诊断信息",
+        savedTo: (path: string) => `已保存到 ${path}`,
+        reveal: {
+          finder: "在访达中显示",
+          explorer: "在文件资源管理器中显示",
+          files: "在“文件”中显示",
+        },
+        sendTo: "请将文件作为附件发送到 {support}，并附上一段说明，描述发生了什么。",
+        issues: "或在 GitHub 上提交公开的 Issue",
+        whatsInside: "文件包含哪些内容，以及从不包含哪些内容",
+      },
     },
   },
   interrupt: {
@@ -275,6 +289,8 @@ export const zhCN: Messages = {
       google_cancelled: "已取消使用 Google 登录。",
       google_sign_in: "Tolon 无法完成 Google 登录，请重试。",
       keychain: "Tolon 无法将登录信息保存到系统钥匙串。",
+      diagnostics_save: "Tolon 无法将文件保存到该位置。请选择其他文件夹。",
+      diagnostics_reveal: "Tolon 无法打开该文件夹。文件已保存在所示位置。",
     },
   },
 };

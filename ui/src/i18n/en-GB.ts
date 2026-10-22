@@ -149,6 +149,20 @@ export const enGB: Messages = {
       check: "Check for updates",
       upToDate: "There is no new version to install.",
       autoCheck: "Once a day Tolon asks GitHub for a new version. It never installs one without asking you.",
+      help: {
+        heading: "Help us fix a problem",
+        intro: "Save a file with Tolon's logs and settings, and send it to us. Tolon sends nothing itself.",
+        save: "Save diagnostics",
+        savedTo: (path: string) => `Saved to ${path}`,
+        reveal: {
+          finder: "Show in Finder",
+          explorer: "Show in Explorer",
+          files: "Show in Files",
+        },
+        sendTo: "Send it to {support} with the file attached and a note on what happened.",
+        issues: "Or open a public issue on GitHub",
+        whatsInside: "What the file holds, and what it never holds",
+      },
     },
   },
   interrupt: {
@@ -279,6 +293,8 @@ export const enGB: Messages = {
       google_cancelled: "Signing in with Google was cancelled.",
       google_sign_in: "Tolon could not finish signing in with Google. Try again.",
       keychain: "Tolon could not save the sign-in in the system keychain.",
+      diagnostics_save: "Tolon could not save the file there. Choose another folder.",
+      diagnostics_reveal: "Tolon could not open the folder. The file is saved where it says.",
     },
   },
 };

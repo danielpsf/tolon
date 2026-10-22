@@ -729,6 +729,54 @@ test("window rights: the settings window reads the pause and the current alarm, 
   assert.deepEqual(await invoke("notify_copy_set", { copy: {} }), { code: "invalid:notify_copy" });
 });
 
+// ---- Save diagnostics (L-072) ---------------------------------------------------------------------
+// The system save dialog opens from Rust and cannot be driven here, so the suite saves through
+// `diagnostics_e2e_save` (end-to-end build only), which skips the dialog and writes to a temp path.
+
+/** The names in a zip's central directory (no zip64, as Tolon writes it). */
+function zipNames(bytes) {
+  const end = bytes.length - 22;
+  assert.equal(bytes.readUInt32LE(end), 0x06054b50, "end of central directory");
+  const count = bytes.readUInt16LE(end + 10);
+  let at = bytes.readUInt32LE(end + 16);
+  const names = [];
+  for (let i = 0; i < count; i++) {
+    assert.equal(bytes.readUInt32LE(at), 0x02014b50, "central directory entry");
+    const nameLength = bytes.readUInt16LE(at + 28);
+    names.push(bytes.toString("utf8", at + 46, at + 46 + nameLength));
+    at += 46 + nameLength + bytes.readUInt16LE(at + 30) + bytes.readUInt16LE(at + 32);
+  }
+  return names;
+}
+
+test("l072 Save diagnostics writes a zip with the listed files to the chosen path", async () => {
+  const plan = await invoke("diagnostics_plan");
+  assert.equal(plan.answer?.support_email, "tolon@danielpsf.net", JSON.stringify(plan));
+  assert.match(plan.answer.support_url, /^mailto:tolon@danielpsf\.net\?subject=Tolon%20diagnostics%20/);
+  assert.equal(plan.answer.issues_url, "https://github.com/danielpsf/tolon/issues");
+  // The page cannot choose a path: the command that opens the dialog takes none.
+  const dir = mkdtempSync(join(tmpdir(), "tolon-diagnostics-"));
+  try {
+    // No `.zip`: Tolon adds it, as for a dialog that leaves the extension off.
+    const saved = await invoke("diagnostics_e2e_save", {
+      path: join(dir, "diagnostics"),
+      client: { locale: "en-US", languages: ["en-US"], user_agent: "e2e" },
+    });
+    assert.equal(saved.answer, join(dir, "diagnostics.zip"), JSON.stringify(saved));
+    const names = zipNames(readFileSync(saved.answer));
+    for (const name of ["README.txt", "environment.json", "settings.json", "calendars.json", "sync-log.json", "alarms.json"]) {
+      assert.ok(names.includes(name), `${name} in ${names}`);
+    }
+    assert.ok(names.some((n) => /^logs\/tolon\.\d{4}-\d{2}-\d{2}\.log$/.test(n)), `a log file in ${names}`);
+    // A relative path is refused; nothing is written.
+    assert.deepEqual(await invoke("diagnostics_e2e_save", { path: "relative.zip", client: { locale: "", languages: [], user_agent: "" } }), {
+      code: "diagnostics_save",
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- Reminder colour (L-043) ---------------------------------------------------------------------
 // The interrupt reads `interrupt_color` from `settings_get` and draws its fill from the Swiss Moss token
 // of that pair. The expected colour is the token itself, resolved by the same webview.

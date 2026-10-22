@@ -97,6 +97,10 @@ Nothing is installed until you click Install and restart. To check at once, clic
 
 If an update fails, Tolon keeps running the version you have. You can always download the new file from the Releases page and install it over the old one.
 
+## Troubleshooting
+
+If Tolon does something wrong, such as an alarm that did not ring or a calendar that does not sync, save a diagnostics file: in Settings, About, under "Help us fix a problem", click Save diagnostics. Tolon saves a zip file on your computer and sends nothing. Then email the file to tolon@danielpsf.net and say what happened, or attach it to an issue on GitHub. [What the file holds, and what it never holds](help/diagnostics.md).
+
 ## Known limits
 
 - macOS: the first start needs the Open Anyway step above.

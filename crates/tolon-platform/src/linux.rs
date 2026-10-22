@@ -133,6 +133,24 @@ impl Platform for LinuxPlatform {
         Err(PlatformError::Unsupported)
     }
 
+    fn os_version(&self) -> String {
+        let release = std::fs::read_to_string("/etc/os-release")
+            .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
+            .ok();
+        let kernel = std::fs::read_to_string("/proc/sys/kernel/osrelease").ok();
+        crate::linux_version(release.as_deref(), kernel.as_deref())
+    }
+
+    /// Opens the folder: file managers have no common "select this file" call.
+    fn reveal_file(&self, path: &std::path::Path) -> Result<(), PlatformError> {
+        let folder = path.parent().unwrap_or(path);
+        crate::run_launcher(
+            "xdg-open",
+            std::process::Command::new("xdg-open").arg(folder),
+            true,
+        )
+    }
+
     fn takeover_support(&self) -> Takeover {
         takeover_for(detect_session(
             env("XDG_SESSION_TYPE").as_deref(),
