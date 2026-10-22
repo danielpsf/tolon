@@ -101,6 +101,8 @@ pub trait Host: Send + Sync {
     /// Notes the app that opens `url`, right before a Join opens it, so the front can go to that app
     /// when the last reminder closes (decision 2026-10-22, L-061). Never fails the Join.
     fn remember_join_target(&self, url: &str);
+    /// Drops what [`Host::remember_join_target`] noted, when the link did not open (L-063).
+    fn forget_join_target(&self);
     /// Opens an https link in the default browser. The error never carries the URL.
     fn open_url(&self, url: &str) -> anyhow::Result<()>;
     /// The F4.5 fallback: a system notification with Join and Snooze. `id` is the notification's
@@ -1013,7 +1015,10 @@ impl<H: Host> Scheduler<H> {
         let joined = open.joined || act == Act::Join;
         if let Some(url) = &link {
             self.host.remember_join_target(url);
-            self.host.open_url(url).map_err(|_| AppError::INTERNAL)?;
+            if self.host.open_url(url).is_err() {
+                self.host.forget_join_target();
+                return Err(AppError::INTERNAL.into());
+            }
         }
         if !test {
             apply_action(db, &targets, act, now)?;

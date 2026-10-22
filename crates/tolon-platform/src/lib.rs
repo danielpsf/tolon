@@ -319,6 +319,11 @@ pub trait Platform: Send + Sync {
     /// logged above debug, and never the URL). Windows, Linux: nothing. The stub keeps the URL.
     fn remember_join_target(&self, url: &str) -> Result<(), PlatformError>;
 
+    /// Drop the app noted by [`Platform::remember_join_target`] without handing the front to it:
+    /// when the hand-over is skipped (settings or the panel is shown) or the link did not open
+    /// (L-063), so a later close cannot activate an app that no join led to. Works on any thread.
+    fn forget_join_target(&self) -> Result<(), PlatformError>;
+
     /// Hand the front on once no interrupt window is left after a Join (decision 2026-10-22,
     /// L-060, L-061); the caller skips it while the settings window or the panel is shown. macOS:
     /// activate the running app noted by [`Platform::remember_join_target`] and forget it; with
@@ -504,6 +509,11 @@ impl Platform for StubPlatform {
 
     fn remember_join_target(&self, url: &str) -> Result<(), PlatformError> {
         STUB_JOIN_TARGET.remember(url.to_owned());
+        Ok(())
+    }
+
+    fn forget_join_target(&self) -> Result<(), PlatformError> {
+        STUB_JOIN_TARGET.forget();
         Ok(())
     }
 
@@ -964,6 +974,26 @@ mod tests {
         // The target was used up: the next yield is a plain deactivation.
         assert_eq!(StubPlatform.yield_focus(), Ok(()));
         assert_eq!(StubPlatform.handed_over().len(), before + 1);
+    }
+
+    /// L-063: a target dropped before the yield is not handed the front; the yield is a plain
+    /// deactivation.
+    #[test]
+    fn l063_stub_forgets_the_join_target_so_a_later_yield_hands_nothing_over() {
+        let _one_at_a_time = FOCUS_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let (yields, handed) = (StubPlatform.yields(), StubPlatform.handed_over().len());
+        assert_eq!(
+            StubPlatform.remember_join_target("https://a.example/x"),
+            Ok(())
+        );
+        assert_eq!(StubPlatform.forget_join_target(), Ok(()));
+        assert_eq!(StubPlatform.yield_focus(), Ok(()));
+        assert_eq!(StubPlatform.yields(), yields + 1);
+        assert_eq!(
+            StubPlatform.handed_over().len(),
+            handed,
+            "nothing was left to hand to"
+        );
     }
 
     #[test]

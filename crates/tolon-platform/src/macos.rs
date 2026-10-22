@@ -144,6 +144,12 @@ impl Platform for MacPlatform {
         Ok(())
     }
 
+    /// Drops the noted bundle id; it touches no AppKit object, so it works on any thread.
+    fn forget_join_target(&self) -> Result<(), PlatformError> {
+        JOIN_TARGET.forget();
+        Ok(())
+    }
+
     /// Activates the running app noted by `remember_join_target` (`NSRunningApplication.
     /// activateWithOptions`, as `restore_previous`: Tolon is the active app here, so the plain
     /// request is honoured). `NSApp.deactivate()` did not hand the front to the browser on macOS
@@ -395,5 +401,6 @@ mod tests {
         );
         // Dropping the noted pid touches no AppKit object, so it works anywhere.
         assert_eq!(MacPlatform.forget_frontmost(), Ok(()));
+        assert_eq!(MacPlatform.forget_join_target(), Ok(()));
     }
 }

@@ -124,14 +124,14 @@ export function InterruptView({
     return () => window.removeEventListener("focus", onWindowFocus);
   }, []);
 
-  /** One action per alarm (see `createActionGate`): a partial join leaves the rest of the group free to act. */
+  /** One press per meeting (see `createActionGate`): a partial join leaves the rest of the group free to act. */
   const run = async (action: Action, meeting: MeetingDto) => {
-    if (!gate.take(alarm)) return;
+    if (!gate.take(alarm, action, meeting.key)) return;
     setError(null);
     try {
       await perform(action, meeting.key);
     } catch (e) {
-      gate.release(alarm);
+      gate.release(alarm, action, meeting.key);
       setError(errorText(e, c));
     }
   };

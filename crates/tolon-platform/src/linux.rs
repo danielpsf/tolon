@@ -82,6 +82,11 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    /// Nothing, as for `remember_join_target`.
+    fn forget_join_target(&self) -> Result<(), PlatformError> {
+        Ok(())
+    }
+
     /// Nothing: no app-level activation without a window.
     fn yield_focus(&self) -> Result<(), PlatformError> {
         Ok(())
@@ -160,6 +165,7 @@ mod tests {
             LinuxPlatform.remember_join_target("https://x.example/j"),
             Ok(())
         );
+        assert_eq!(LinuxPlatform.forget_join_target(), Ok(()));
         assert_eq!(LinuxPlatform.yield_focus(), Ok(()));
         assert_eq!(LinuxPlatform.forget_frontmost(), Ok(()));
     }

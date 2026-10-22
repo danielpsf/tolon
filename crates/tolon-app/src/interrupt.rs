@@ -342,10 +342,10 @@ pub trait Windows {
     /// Drops the app noted by `remember_frontmost` without bringing it forward.
     fn forget_frontmost(&self);
     /// Hands the front on once no window is left after a Join: to the app noted for the link, else
-    /// Tolon gives up its activation (L-060, L-061).
-    fn yield_focus(&self);
-    /// True while the settings window or the panel is on screen: Tolon keeps the front then.
-    fn own_window_shown(&self) -> bool;
+    /// Tolon gives up its activation (L-060, L-061). Not while the settings window or the panel is on
+    /// screen: Tolon keeps the front then and drops the app noted for the link (L-063). That is
+    /// read when the call runs, on the main thread, so a window opened since it was queued counts.
+    fn yield_unless_own_window_shown(&self);
 }
 
 struct TauriWindows<'a> {
@@ -473,15 +473,37 @@ impl Windows for TauriWindows<'_> {
         self.on_main_thread("forget the frontmost app", |p| p.forget_frontmost());
     }
 
-    fn yield_focus(&self) {
-        self.on_main_thread("give up the active app", |p| p.yield_focus());
+    fn yield_unless_own_window_shown(&self) {
+        let (app, platform) = (self.app.clone(), self.platform);
+        let sent = self.app.run_on_main_thread(move || {
+            if let Err(e) = yield_or_keep(own_window_shown(&app), platform) {
+                tracing::warn!(error = %e, "could not give up the active app");
+            }
+        });
+        if let Err(e) = sent {
+            tracing::warn!(error = %e, "could not reach the main thread to give up the active app");
+        }
     }
+}
 
-    fn own_window_shown(&self) -> bool {
-        [crate::tray::MAIN, crate::tray::PANEL]
-            .into_iter()
-            .filter_map(|label| self.app.get_webview_window(label))
-            .any(|w| w.is_visible().unwrap_or(false))
+/// True while the settings window or the panel is on screen: Tolon keeps the front then.
+fn own_window_shown(app: &AppHandle) -> bool {
+    [crate::tray::MAIN, crate::tray::PANEL]
+        .into_iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .any(|w| w.is_visible().unwrap_or(false))
+}
+
+/// The main-thread end of a joined close. `shown`: settings or the panel is on screen, so nothing
+/// is handed over and the app noted for the link is dropped, or a later close would activate it
+/// (L-063).
+fn yield_or_keep(shown: bool, platform: &dyn Platform) -> Result<(), PlatformError> {
+    if shown {
+        tracing::debug!("settle: skipped, the settings window or the panel is shown");
+        platform.forget_join_target()
+    } else {
+        tracing::debug!("settle: yield the front after a join");
+        platform.yield_focus()
     }
 }
 
@@ -638,8 +660,9 @@ pub fn close_all(app: &AppHandle) {
 /// back", L-060 and L-061). `restore`: give the front back to the app that was in front when it
 /// opened. Otherwise (Join: the browser has focus) drop the note and hand the front on, to the app
 /// that opened the link or by giving up Tolon's activation; not while settings or the panel is
-/// shown. Hiding alone leaves Tolon the active app. Every call is queued after the hides. Each
-/// path logs at debug, so a run on screen shows which one was taken.
+/// shown, which is read on the main thread when the hand-over runs. Hiding alone leaves Tolon the
+/// active app. Every call is queued after the hides. Each path logs at debug, so a run on screen
+/// shows which one was taken.
 pub fn settle_focus(app: &AppHandle, restore: bool) {
     settle(
         &TauriWindows {
@@ -657,12 +680,7 @@ fn settle(windows: &dyn Windows, restore: bool) {
         return;
     }
     windows.forget_frontmost();
-    if windows.own_window_shown() {
-        tracing::debug!("settle: skipped, the settings window or the panel is shown");
-    } else {
-        tracing::debug!("settle: yield the front after a join");
-        windows.yield_focus();
-    }
+    windows.yield_unless_own_window_shown();
 }
 
 /// Notes the app that opens `url` (decision 2026-10-22, L-061), on the main thread and in order
@@ -678,6 +696,18 @@ pub fn remember_join_target(app: &AppHandle, url: &str) {
     if let Err(e) = sent {
         tracing::warn!(error = %e, "could not reach the main thread to note the join link's app");
     }
+}
+
+/// Drops the app noted by [`remember_join_target`], on the main thread and in order with it: the
+/// link did not open, so no close should hand the front to that app (L-063).
+pub fn forget_join_target(app: &AppHandle) {
+    TauriWindows {
+        app,
+        platform: native(),
+    }
+    .on_main_thread("drop the app noted for the join link", |p| {
+        p.forget_join_target()
+    });
 }
 
 /// The key a command was called with, checked against the text form the payload carries.
@@ -877,6 +907,8 @@ mod tests {
         fail_open_of: Option<String>,
         /// Settings or the panel is on screen.
         own_window: std::cell::Cell<bool>,
+        /// Hand-overs queued for the main thread and not run yet: the check is read by `run_queued`.
+        queued: std::cell::Cell<usize>,
     }
 
     impl FakeWindows {
@@ -898,6 +930,17 @@ mod tests {
         }
         fn calls(&self) -> Vec<String> {
             self.calls.borrow().clone()
+        }
+        /// The main thread gets to the queued hand-overs, and reads the windows as they are now.
+        fn run_queued(&self) {
+            for _ in 0..self.queued.replace(0) {
+                let call = if self.own_window.get() {
+                    "keep"
+                } else {
+                    "yield"
+                };
+                self.calls.borrow_mut().push(call.to_owned());
+            }
         }
         fn labels(&self) -> Vec<String> {
             let mut labels: Vec<String> = self
@@ -922,8 +965,9 @@ mod tests {
         }
     }
 
-    /// Windows whose yield goes to the stub platform, to see what it was handed.
-    struct StubWindows;
+    /// Windows whose yield goes to the stub platform, to see what it was handed; `.0` is whether
+    /// settings or the panel is shown.
+    struct StubWindows(bool);
 
     impl Windows for StubWindows {
         fn states(&self) -> Vec<WindowState> {
@@ -940,11 +984,8 @@ mod tests {
         fn remember_frontmost(&self) {}
         fn restore_previous(&self) {}
         fn forget_frontmost(&self) {}
-        fn yield_focus(&self) {
-            let _ = StubPlatform.yield_focus();
-        }
-        fn own_window_shown(&self) -> bool {
-            false
+        fn yield_unless_own_window_shown(&self) {
+            let _ = yield_or_keep(self.0, &StubPlatform);
         }
     }
 
@@ -1000,11 +1041,9 @@ mod tests {
         fn forget_frontmost(&self) {
             self.calls.borrow_mut().push("forget".to_owned());
         }
-        fn yield_focus(&self) {
-            self.calls.borrow_mut().push("yield".to_owned());
-        }
-        fn own_window_shown(&self) -> bool {
-            self.own_window.get()
+        fn yield_unless_own_window_shown(&self) {
+            self.calls.borrow_mut().push("queue yield".to_owned());
+            self.queued.set(self.queued.get() + 1);
         }
     }
 
@@ -1012,13 +1051,15 @@ mod tests {
     fn l060_a_joined_close_forgets_then_yields_once() {
         let windows = FakeWindows::with(&[], &["interrupt-1"]);
         settle(&windows, false);
-        assert_eq!(windows.calls(), ["forget", "yield"]);
+        windows.run_queued();
+        assert_eq!(windows.calls(), ["forget", "queue yield", "yield"]);
     }
 
     #[test]
     fn l060_a_close_without_a_join_restores_and_does_not_yield() {
         let windows = FakeWindows::with(&[], &["interrupt-1"]);
         settle(&windows, true);
+        windows.run_queued();
         assert_eq!(windows.calls(), ["restore"]);
     }
 
@@ -1027,7 +1068,12 @@ mod tests {
         let windows = FakeWindows::default();
         windows.own_window.set(true);
         settle(&windows, false);
-        assert_eq!(windows.calls(), ["forget"], "no yield, no restore");
+        windows.run_queued();
+        assert_eq!(
+            windows.calls(),
+            ["forget", "queue yield", "keep"],
+            "no yield, no restore"
+        );
     }
 
     #[test]
@@ -1035,6 +1081,7 @@ mod tests {
         let windows = FakeWindows::default();
         windows.own_window.set(true);
         settle(&windows, true);
+        windows.run_queued();
         assert_eq!(
             windows.calls(),
             ["restore"],
@@ -1042,32 +1089,64 @@ mod tests {
         );
     }
 
+    /// L-056: the front goes back to the app that was in front when settings is open and nothing
+    /// was joined. Settings was in front only because the person opened it; the app noted before
+    /// the reminder still gets the front back, and nothing is queued that could read the guard.
+    #[test]
+    fn l063_restore_still_runs_with_settings_visible_and_nothing_joined() {
+        let windows = FakeWindows::with(&["interrupt-1"], &[]);
+        windows.own_window.set(true);
+        hide_windows(&windows);
+        settle(&windows, true);
+        windows.run_queued();
+        assert_eq!(windows.calls(), ["hide interrupt-1", "restore"]);
+        assert_eq!(windows.queued.get(), 0);
+    }
+
     #[test]
     fn l061_settings_hidden_again_after_a_join_yields() {
-        // Open, then hidden: the check reads what is shown now, not what was shown before.
+        // Open, then hidden: the check reads what is shown when it runs.
         let windows = FakeWindows::default();
         windows.own_window.set(true);
-        windows.own_window.set(false);
         settle(&windows, false);
-        assert_eq!(windows.calls(), ["forget", "yield"]);
+        windows.own_window.set(false);
+        windows.run_queued();
+        assert_eq!(windows.calls(), ["forget", "queue yield", "yield"]);
     }
+
+    /// L-063: the hand-over is queued for the main thread, and settings can open in the gap before
+    /// it runs. The check is made when it runs, so that window keeps the front.
+    #[test]
+    fn l063_a_window_opened_after_the_hand_over_was_queued_keeps_the_front() {
+        let windows = FakeWindows::default();
+        settle(&windows, false);
+        windows.own_window.set(true);
+        windows.run_queued();
+        assert_eq!(windows.calls(), ["forget", "queue yield", "keep"]);
+    }
+
+    /// The stub platform keeps one join target for the whole process.
+    static STUB_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// The target noted at Join is used once at the close; a second close has none left and falls
     /// back to deactivation (the stub counts it as a yield without a hand-over).
     #[test]
     fn l061_the_stub_hands_over_to_the_noted_target_once() {
+        let _one_at_a_time = STUB_TESTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let yields = StubPlatform.yields();
         let handed = StubPlatform.handed_over().len();
         assert_eq!(
             StubPlatform.remember_join_target("https://meet.example.com/x"),
             Ok(())
         );
-        settle(&StubWindows, false);
+        settle(&StubWindows(false), false);
         assert_eq!(
             StubPlatform.handed_over()[handed..],
             ["https://meet.example.com/x"]
         );
-        settle(&StubWindows, false);
+        settle(&StubWindows(false), false);
         assert_eq!(StubPlatform.yields(), yields + 2);
         assert_eq!(
             StubPlatform.handed_over().len(),
@@ -1076,12 +1155,43 @@ mod tests {
         );
     }
 
-    /// A source check: the yield is queued through the main-thread queue, like the restore.
+    /// L-063: the guard skipped the yield, so the target is dropped. A later close, after the
+    /// settings window is gone, must not activate an app that no join led to.
+    #[test]
+    fn l063_a_skipped_yield_drops_the_join_target() {
+        let _one_at_a_time = STUB_TESTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (yields, handed) = (StubPlatform.yields(), StubPlatform.handed_over().len());
+        assert_eq!(
+            StubPlatform.remember_join_target("https://meet.example.com/x"),
+            Ok(())
+        );
+        settle(&StubWindows(true), false);
+        assert_eq!(StubPlatform.yields(), yields, "the yield was skipped");
+        settle(&StubWindows(false), false);
+        assert_eq!(StubPlatform.yields(), yields + 1);
+        assert_eq!(
+            StubPlatform.handed_over().len(),
+            handed,
+            "nothing is left to hand the front to"
+        );
+    }
+
+    /// A source check: the yield is queued through the main-thread queue, and the settings and
+    /// panel visibility is read inside its closure (L-063), not before it is queued.
     #[test]
     fn l060_the_yield_goes_through_the_main_thread_queue() {
         let source = include_str!("interrupt.rs");
         let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
-        assert!(shipped.contains("self.on_main_thread(\"give up the active app\""));
+        let queued = shipped
+            .split("fn yield_unless_own_window_shown(&self) {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n    }\n").next())
+            .unwrap_or_default();
+        assert!(queued.contains("run_on_main_thread(move ||"));
+        assert!(queued.contains("yield_or_keep(own_window_shown(&app), platform)"));
+        assert!(!shipped.contains("fn own_window_shown(&self)"));
     }
 
     #[test]
