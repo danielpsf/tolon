@@ -22,7 +22,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 
 ## Windows
 - [ ] S4.2 Two monitors.
-- [ ] AC12.3 Fresh machine or VM: `.msi` through SmartScreen "More info, Run anyway"; reach first run.
+- [ ] AC12.3 Fresh machine or VM: the installer (`-setup.exe` for betas, `.msi` from 0.1.0) through SmartScreen "More info, Run anyway"; reach first run.
 - [ ] AC9.4 Start at login appears in Task Manager, Startup apps. Disable it there, then turn the switch on in Tolon, and note what the switch shows (Windows keeps the Task Manager choice).
 - [ ] S4.4 When the interrupt cannot take focus, the fallback notification shows Snooze and Join; each acts on that meeting only.
 - [ ] L-044 Starting Tolon a second time from the Start menu brings the running settings window forward and starts no second copy.
