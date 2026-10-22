@@ -5,12 +5,17 @@
   release_assets.py prerelease TAG            print true when TAG is a pre-release (has a `-`), else false
   release_assets.py check-key SIG             a probe signature was made by the key in tauri.conf.json
   release_assets.py latest-json DIR TAG REPO  write DIR/latest.json for the Tauri updater
+  release_assets.py notes TAG INSTALL_MD OUT [REPO]
+                                              write the release notes: docs/releases/TAG.md, `---`, then INSTALL_MD with
+                                              its relative links made absolute (REPO defaults to $GITHUB_REPOSITORY)
 
 Tests: python3 -m unittest discover -s .github/scripts
 """
 import base64
 import fnmatch
 import json
+import os
+import posixpath
 import re
 import sys
 from datetime import datetime, timezone
@@ -119,6 +124,27 @@ def latest_json(dist, tag, repo, now=None):
     return manifest
 
 
+def absolute_links(text, repo, tag):
+    """Rewrite `](path)` links, relative to docs/ (where install.md lives), to blob/TAG URLs."""
+    def fix(m):
+        target = m.group(1)
+        if re.match(r"([a-z][a-z0-9+.-]*:|#|/)", target, re.I):
+            return m.group(0)
+        path = posixpath.normpath(posixpath.join("docs", target))
+        return f"](https://github.com/{repo}/blob/{tag}/{path})"
+    # shortcut: no support for links with a title or parentheses in the path; upgrade if install.md grows one.
+    return re.sub(r"\]\(([^)\s]*)\)", fix, text)
+
+
+def notes(tag, install_md, out, repo):
+    head = ROOT / "docs/releases" / f"{tag}.md"
+    if not head.is_file():
+        return [f"docs/releases/{tag}.md is missing: write the release notes before tagging"]
+    body = absolute_links(Path(install_md).read_text(), repo, tag)
+    Path(out).write_text(head.read_text().rstrip("\n") + "\n\n---\n\n" + body)
+    return []
+
+
 def main(argv):
     try:
         cmd, args = argv[1], argv[2:]
@@ -132,6 +158,9 @@ def main(argv):
         elif cmd == "latest-json" and len(args) == 3:
             latest_json(*args)
             errors = []
+        elif cmd == "notes" and len(args) in (3, 4):
+            repo = args[3] if len(args) == 4 else os.environ.get("GITHUB_REPOSITORY")
+            errors = notes(*args[:3], repo) if repo else ["notes needs a repo: pass REPO or set GITHUB_REPOSITORY"]
         else:
             raise IndexError
     except IndexError:

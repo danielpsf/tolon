@@ -101,5 +101,47 @@ class Tag(unittest.TestCase):
         self.assertTrue(any("version" in e for e in ra.check_tag("v9.9.9")))
 
 
+class Notes(unittest.TestCase):
+    B = "https://github.com/o/r/blob/v1.0.0/"
+
+    def fix(self, text):
+        return ra.absolute_links(text, "o/r", "v1.0.0")
+
+    def test_relative_links_resolve_against_docs(self):
+        self.assertEqual(self.fix("[a](help/x.md)"), f"[a]({self.B}docs/help/x.md)")
+        self.assertEqual(self.fix("[a](x.md#frag)"), f"[a]({self.B}docs/x.md#frag)")
+
+    def test_parent_link_leaves_docs(self):
+        self.assertEqual(self.fix("[a](../README.md)"), f"[a]({self.B}README.md)")
+
+    def test_absolute_and_anchor_links_stay(self):
+        for link in ("https://x.io/a", "http://x.io", "mailto:a@b.c", "#know", "/abs/path"):
+            self.assertEqual(self.fix(f"[a]({link})"), f"[a]({link})")
+
+    def test_several_links_and_plain_text(self):
+        out = self.fix("see [a](a.md) and [b](https://x.io) (not a link)")
+        self.assertEqual(out, f"see [a]({self.B}docs/a.md) and [b](https://x.io) (not a link)")
+
+    def test_notes_file_is_head_rule_install(self):
+        install = Path(tempfile.mkdtemp()) / "install.md"
+        install.write_text("# Install\n[h](help/x.md)\n")
+        out = install.parent / "notes.md"
+        head = ra.ROOT / "docs/releases/v1.0.0-test.md"
+        head.write_text("# Head\n")
+        try:
+            self.assertEqual(ra.notes("v1.0.0-test", install, out, "o/r"), [])
+        finally:
+            head.unlink()
+        self.assertEqual(
+            out.read_text(),
+            "# Head\n\n---\n\n# Install\n[h](https://github.com/o/r/blob/v1.0.0-test/docs/help/x.md)\n",
+        )
+
+    def test_missing_head_is_an_error(self):
+        errors = ra.notes("v0.0.0-nope", "unused", "unused", "o/r")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("docs/releases/v0.0.0-nope.md", errors[0])
+
+
 if __name__ == "__main__":
     unittest.main()
