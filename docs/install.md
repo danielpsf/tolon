@@ -99,4 +99,5 @@ If an update fails, Tolon keeps running the version you have. You can always dow
 - Windows: Windows can move Tolon's icon into the hidden icons. Click the small arrow next to the clock to show it, or start Tolon again from the Start menu to bring up its window.
 - Linux: some panels hide tray icons, and GNOME shows none without the AppIndicator extension. Start Tolon again from your applications menu, or run the AppImage again, to bring up its window.
 - On Linux, if Tolon was still closing, opening it again may fail once; open it again.
+- macOS 13: after you join a call from the alarm, the keyboard may stay with Tolon until you click the call window. macOS 14 and later hand it over by themselves.
 - Windows: if you turn Tolon off in Task Manager, under Startup apps, Windows keeps it off until you turn it on there again. The Start at login switch in Tolon cannot override that.
