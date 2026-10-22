@@ -5,6 +5,7 @@ import { PeekMark } from "../PeekMark";
 import { copy } from "../copy";
 import {
   countdownText,
+  createActionGate,
   detailsText,
   handlesKey,
   hintText,
@@ -105,7 +106,7 @@ export function InterruptView({
   const { interrupt: t } = c.t;
   const now = useNow();
   const root = useRef<HTMLElement>(null);
-  const busy = useRef(false);
+  const [gate] = useState(createActionGate);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState<Action | null>(null);
 
@@ -123,15 +124,14 @@ export function InterruptView({
     return () => window.removeEventListener("focus", onWindowFocus);
   }, []);
 
-  /** One action, once: the window closes on success, so a second press must not send a second command. */
+  /** One action per alarm (see `createActionGate`): a partial join leaves the rest of the group free to act. */
   const run = async (action: Action, meeting: MeetingDto) => {
-    if (busy.current) return;
-    busy.current = true;
+    if (!gate.take(alarm)) return;
     setError(null);
     try {
       await perform(action, meeting.key);
     } catch (e) {
-      busy.current = false;
+      gate.release(alarm);
       setError(errorText(e, c));
     }
   };
