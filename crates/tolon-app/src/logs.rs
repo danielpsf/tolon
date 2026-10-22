@@ -214,7 +214,11 @@ pub fn list(dir: &Path) -> io::Result<Vec<(PathBuf, NaiveDate, u64)>> {
         let Some(day) = name.to_str().and_then(day_of) else {
             continue;
         };
-        files.push((entry.path(), day, entry.metadata()?.len()));
+        // Not `entry.metadata()`: on Windows it is the size the directory listing recorded, which
+        // NTFS does not update while the appender still holds today's file open, so the budget
+        // saw 0 bytes. `symlink_metadata` asks the file itself and never follows a link.
+        let size = fs::symlink_metadata(entry.path())?.len();
+        files.push((entry.path(), day, size));
     }
     files.sort_by_key(|f| f.1);
     Ok(files)
