@@ -78,6 +78,7 @@ pub fn fetch_code(e: &FetchError) -> String {
         FetchError::Timeout => "timeout".to_owned(),
         FetchError::Connect => "connect".to_owned(),
         FetchError::NotCalendar => "not_calendar".to_owned(),
+        FetchError::NotPublic => "not_public".to_owned(),
         FetchError::TooLarge { .. } => "too_large".to_owned(),
         FetchError::Network => "network".to_owned(),
         FetchError::UnsupportedScheme => "unsupported_scheme".to_owned(),

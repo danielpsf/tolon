@@ -116,7 +116,7 @@ Migrations live in `crates/tolon-store/migrations/V{n}__{name}.sql` and run on s
 
 ## Sync (tolon-sync)
 
-- `IcsSource`: GET with `If-None-Match`, 30 s timeout, 5 MB cap, `webcal://` rewritten to `https://`; on 2xx parse and upsert by UID; on 304 touch `last_sync_at`; on error write `last_error` and a sync_log row. Runs every 5 minutes per calendar, staggered.
+- `IcsSource`: GET with `If-None-Match`, 30 s timeout, 64 MB cap (read in chunks, so an endless body is cut off early), `webcal://` rewritten to `https://`; on 2xx parse and upsert by UID; on 304 touch `last_sync_at`; on error write `last_error` and a sync_log row. Runs every 5 minutes per calendar, staggered.
 - `GoogleSource` (beta 2): `oauth2` crate, PKCE, loopback on `127.0.0.1:0`, scope `https://www.googleapis.com/auth/calendar.readonly`; `events.list` with `singleEvents=false` to keep recurrence rules, `syncToken` for increments, full resync on 410; `conferenceData.entryPoints` for the join link; `attendees[].self.responseStatus` for the decline rule.
 
 ## UI (ui/)

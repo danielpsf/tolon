@@ -5,7 +5,10 @@ use std::time::Duration;
 use reqwest::{header, redirect, StatusCode, Url};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_BODY: usize = 5 * 1024 * 1024;
+// A work calendar with years of history is 13 MB and more (decision 2026-10-22). The body is read
+// chunk by chunk and cut at this size, so the download itself never holds more than this. What the
+// parser makes of it is bounded separately: tolon-app caps the events a calendar keeps.
+const MAX_BODY: usize = 64 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 10;
 
 // A release build cannot carry the loopback seam: `debug_assertions` is off there.
@@ -39,6 +42,9 @@ pub enum FetchError {
     Connect,
     #[error("response is larger than {limit} bytes")]
     TooLarge { limit: usize },
+    /// Google answers 404 (or 403) on the public address of a calendar that is not public.
+    #[error("calendar is not public")]
+    NotPublic,
     #[error("response is not an iCalendar feed")]
     NotCalendar,
     #[error("network error")]
@@ -125,6 +131,7 @@ impl IcsFetcher {
 
     async fn fetch_inner(&self, url: &str, etag: Option<&str>) -> Result<FetchOutcome, FetchError> {
         let url = parse_url(url, self.cfg.allow_http)?;
+        let google_public = is_google_public_address(&url);
         let mut req = self.client.get(url);
         if let Some(etag) = etag {
             req = req.header(header::IF_NONE_MATCH, etag);
@@ -136,7 +143,7 @@ impl IcsFetcher {
             return Ok(FetchOutcome::NotModified);
         }
         if !status.is_success() {
-            return Err(FetchError::Status(status.as_u16()));
+            return Err(status_error(status, google_public));
         }
         let limit = self.cfg.max_body_bytes;
         if resp.content_length().is_some_and(|n| n > limit as u64) {
@@ -154,20 +161,45 @@ impl IcsFetcher {
             .is_some_and(|v| v.trim().to_ascii_lowercase().starts_with("text/calendar"));
 
         // Cap enforced chunk by chunk, so an endless body is cut off early.
-        let mut buf: Vec<u8> = Vec::new();
+        let known = resp
+            .content_length()
+            .and_then(|n| usize::try_from(n).ok())
+            .map_or(0, |n| n.min(limit));
+        let mut buf: Vec<u8> = Vec::with_capacity(known);
         while let Some(chunk) = resp.chunk().await.map_err(map_err)? {
             if buf.len() + chunk.len() > limit {
                 return Err(FetchError::TooLarge { limit });
             }
             buf.extend_from_slice(&chunk);
         }
-        let body = String::from_utf8_lossy(&buf).into_owned();
+        // Valid UTF-8 (nearly every feed) moves into the String without a second copy of up to 64 MB.
+        let body = String::from_utf8(buf)
+            .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
         // AC1.1: text/calendar passes; other types (hosts often send text/plain) only if the body is a VCALENDAR.
         if !is_calendar_type && !body.trim_start().starts_with("BEGIN:VCALENDAR") {
             return Err(FetchError::NotCalendar);
         }
         Ok(FetchOutcome::Modified { body, etag })
     }
+}
+
+/// 404 and 403 on Google's public address mean the calendar is not public; any other failure,
+/// or any other host, keeps the plain status.
+fn status_error(status: StatusCode, google_public: bool) -> FetchError {
+    if google_public && matches!(status, StatusCode::NOT_FOUND | StatusCode::FORBIDDEN) {
+        FetchError::NotPublic
+    } else {
+        FetchError::Status(status.as_u16())
+    }
+}
+
+/// `https://calendar.google.com/calendar/ical/<id>/public/basic.ics`: the address Google lists
+/// as "Public address in iCal format". The path holds the calendar id, so only the shape is read.
+fn is_google_public_address(url: &Url) -> bool {
+    url.host_str()
+        .is_some_and(|h| h.eq_ignore_ascii_case("calendar.google.com"))
+        && url.path().starts_with("/calendar/ical/")
+        && url.path().ends_with("/public/basic.ics")
 }
 
 /// Redirect target must be https (http only when `http_permitted`) and the chain shorter than `MAX_REDIRECTS`.
@@ -516,6 +548,42 @@ mod tests {
         assert_eq!(err.status(), Some(404));
     }
 
+    #[test]
+    fn s1_3_google_public_address_404_and_403_say_not_public() {
+        let public = Url::parse(
+            "https://calendar.google.com/calendar/ical/abc%40example.com/public/basic.ics",
+        )
+        .unwrap();
+        assert!(is_google_public_address(&public));
+        assert_eq!(
+            status_error(StatusCode::NOT_FOUND, true),
+            FetchError::NotPublic
+        );
+        assert_eq!(
+            status_error(StatusCode::FORBIDDEN, true),
+            FetchError::NotPublic
+        );
+        // Other statuses, and the same statuses elsewhere, keep today's message.
+        assert_eq!(
+            status_error(StatusCode::NOT_FOUND, false),
+            FetchError::Status(404)
+        );
+        assert_eq!(
+            status_error(StatusCode::INTERNAL_SERVER_ERROR, true),
+            FetchError::Status(500)
+        );
+        for other in [
+            "https://calendar.google.com/calendar/ical/abc/private-123/basic.ics",
+            "https://example.com/calendar/ical/abc/public/basic.ics",
+            "https://calendar.google.com.example.com/calendar/ical/abc/public/basic.ics",
+        ] {
+            assert!(
+                !is_google_public_address(&Url::parse(other).unwrap()),
+                "{other}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn s1_5_sends_if_none_match_and_304_is_not_modified() {
         let (base, seen) = serve(vec![http("304 Not Modified", "", "")]).await;
@@ -551,6 +619,22 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err, FetchError::TooLarge { limit: 1000 });
+    }
+
+    #[tokio::test]
+    async fn s1_3_a_13_mb_feed_is_within_the_default_cap() {
+        // The owner's work calendar is 13.2 MB (decision 2026-10-22).
+        let body = format!("{ICS}{}", "X-PAD:x\r\n".repeat(1_600_000));
+        assert!(body.len() > 13 * 1024 * 1024);
+        let (base, _) = serve(vec![http(
+            "200 OK",
+            "Content-Type: text/calendar\r\n",
+            &body,
+        )])
+        .await;
+        let out = quick().fetch(&format!("{base}/a.ics"), None).await;
+        assert!(matches!(out, Ok(FetchOutcome::Modified { .. })));
+        assert_eq!(FetchConfig::default().max_body_bytes, 64 * 1024 * 1024);
     }
 
     #[tokio::test]

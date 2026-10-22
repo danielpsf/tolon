@@ -234,6 +234,7 @@ export const ptPT: Messages = {
       timeout: "A sincronização falhou: o calendário demorou demasiado tempo a responder.",
       connect: "A sincronização falhou: o Tolon não conseguiu ligar ao servidor.",
       not_calendar: "A sincronização falhou: essa ligação não é um calendário iCal.",
+      not_public: "A sincronização falhou: este calendário não é público. Em vez disso, utilize o “Endereço secreto em formato iCal”.",
       too_large: "A sincronização falhou: o calendário é demasiado grande para ser lido.",
       network: "A sincronização falhou: não há ligação à rede.",
       unsupported_scheme: "A sincronização falhou: só as ligações https e webcal funcionam.",

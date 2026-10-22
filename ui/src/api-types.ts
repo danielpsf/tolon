@@ -5,6 +5,7 @@ export const SYNC_ERROR_KINDS = [
   "timeout",
   "connect",
   "not_calendar",
+  "not_public",
   "too_large",
   "network",
   "unsupported_scheme",

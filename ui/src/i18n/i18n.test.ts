@@ -8,6 +8,7 @@ const SYNC_KINDS = [
   "timeout",
   "connect",
   "not_calendar",
+  "not_public",
   "too_large",
   "network",
   "unsupported_scheme",
@@ -351,6 +352,17 @@ describe("error codes", () => {
     const c = createCopy("en-US");
     expect(c.syncError({ kind: "http", status: 404 })).toBe("Sync failed: 404");
     expect(c.syncLogDetail("skipped:1")).toBe("1 component skipped");
+  });
+
+  it("pins the not-public sentence in en-US and keeps it apart from a plain 404 in every locale", () => {
+    expect(createCopy("en-US").syncError({ kind: "not_public" })).toBe(
+      "Sync failed: this calendar is not public. Use its “Secret address in iCal format” instead.",
+    );
+    for (const locale of LOCALES) {
+      const c = createCopy(locale);
+      expect(c.syncError({ kind: "not_public" })).not.toBe(c.t.errors.sync.http(404));
+      expect(c.syncError({ kind: "not_public" })).toContain("iCal");
+    }
   });
 
   const s13: Record<Locale, string> = {
