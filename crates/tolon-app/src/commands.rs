@@ -336,6 +336,22 @@ pub async fn calendars_set_enabled(
     Ok(())
 }
 
+/// Renames a calendar; a blank name brings the feed's name back. Tells every window.
+#[tauri::command]
+pub async fn calendars_rename(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    name: String,
+) -> Result<(), CommandError> {
+    main_only(window.label())?;
+    state(&app)
+        .and_then(|s| pipeline::rename(&s.db, &id, &name))
+        .map_err(|e| command_error(&e))?;
+    notify(&app);
+    Ok(())
+}
+
 /// With an id the calendar syncs even when disabled (the person asked); without one, only enabled ones.
 #[tauri::command]
 pub async fn calendars_sync_now(
@@ -1207,6 +1223,7 @@ mod tests {
         ("calendars_add_ics", "main_only"),
         ("calendars_remove", "main_only"),
         ("calendars_set_enabled", "main_only"),
+        ("calendars_rename", "main_only"),
         ("calendars_sync_now", "main_only"),
         ("calendars_google_available", "main_only"),
         ("calendars_google_sign_in", "main_only"),

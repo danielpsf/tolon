@@ -138,12 +138,12 @@ mod tests {
     #[test]
     fn migrations_apply_to_empty_db() -> TestResult {
         let store = Store::open_in_memory()?;
-        assert_eq!(store.schema_version()?, 2);
+        assert_eq!(store.schema_version()?, 3);
         assert_eq!(
             store.migration_status()?,
             MigrationStatus {
-                applied: 2,
-                expected: 2
+                applied: 3,
+                expected: 3
             }
         );
         assert!(store.migration_status()?.is_current());
@@ -168,6 +168,7 @@ mod tests {
                     "last_sync_at",
                     "last_error",
                     "created_at",
+                    "custom_name",
                 ],
             ),
             (
@@ -254,14 +255,14 @@ mod tests {
             .settings()
             .set("k", &serde_json::json!(1))?;
         let again = Store::open(&path)?;
-        assert_eq!(again.schema_version()?, 2);
+        assert_eq!(again.schema_version()?, 3);
         let history: i64 =
             again
                 .conn
                 .query_row("select count(*) from refinery_schema_history", [], |r| {
                     r.get(0)
                 })?;
-        assert_eq!(history, 2);
+        assert_eq!(history, 3);
         assert_eq!(again.settings().get("k")?, Some(serde_json::json!(1)));
         Ok(())
     }
@@ -270,7 +271,7 @@ mod tests {
     fn broken_migration_errors_and_rolls_back() -> TestResult {
         let mut migrations = embedded::migrations::runner().get_migrations().clone();
         migrations.push(Migration::unapplied(
-            "V3__broken",
+            "V4__broken",
             "create table half_done (id integer); insert into no_such_table values (1);",
         )?);
         let dir = tempfile::tempdir()?;
@@ -278,9 +279,9 @@ mod tests {
         let result = Store::init(Connection::open(&path)?, Runner::new(&migrations));
         assert!(matches!(result, Err(StoreError::Migration(_))));
 
-        // V1 and V2 stayed applied, V3 left nothing behind, and a normal open still works.
+        // V1 to V3 stayed applied, V4 left nothing behind, and a normal open still works.
         let store = Store::open(&path)?;
-        assert_eq!(store.schema_version()?, 2);
+        assert_eq!(store.schema_version()?, 3);
         let leftover: i64 = store.conn.query_row(
             "select count(*) from sqlite_master where name = 'half_done'",
             [],
@@ -290,14 +291,19 @@ mod tests {
         Ok(())
     }
 
-    fn v1_runner() -> Runner {
-        let v1: Vec<Migration> = embedded::migrations::runner()
+    /// The runner as it was when `version` was the newest migration.
+    fn runner_to(version: i32) -> Runner {
+        let some: Vec<Migration> = embedded::migrations::runner()
             .get_migrations()
             .iter()
-            .filter(|m| m.version() == 1)
+            .filter(|m| m.version() <= version)
             .cloned()
             .collect();
-        Runner::new(&v1)
+        Runner::new(&some)
+    }
+
+    fn v1_runner() -> Runner {
+        runner_to(1)
     }
 
     #[test]
@@ -309,7 +315,7 @@ mod tests {
         assert!(!columns(&v1, "alarms")?.contains(&"start".to_string()));
         drop(v1);
         let v2 = Store::open(&path)?;
-        assert_eq!(v2.schema_version()?, 2);
+        assert_eq!(v2.schema_version()?, 3);
         assert!(v2.migration_status()?.is_current());
         assert_eq!(
             columns(&v2, "alarms")?.last().map(String::as_str),
@@ -331,7 +337,7 @@ mod tests {
         )?;
         drop(v1);
         let store = Store::open(&path)?;
-        assert_eq!(store.schema_version()?, 2);
+        assert_eq!(store.schema_version()?, 3);
         let row = store.alarms().get("m1", "lead")?;
         assert_eq!(
             row,
@@ -351,6 +357,24 @@ mod tests {
             |r| r.get(0),
         )?;
         assert_eq!(raw.as_deref(), Some("2026-10-22T09:58:00Z"));
+        Ok(())
+    }
+
+    #[test]
+    fn v3_adds_custom_name_and_keeps_calendar_rows() -> TestResult {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("tolon.db");
+        let v2 = Store::init(Connection::open(&path)?, runner_to(2))?;
+        assert!(!columns(&v2, "calendars")?.contains(&"custom_name".to_string()));
+        v2.conn.execute(
+            "insert into calendars (id, kind, name, created_at) values ('c1', 'ics', 'Work', 'now')",
+            [],
+        )?;
+        drop(v2);
+        let store = Store::open(&path)?;
+        assert_eq!(store.schema_version()?, 3);
+        let c = store.calendars().get("c1")?.ok_or("gone")?;
+        assert_eq!((c.name.as_str(), c.custom_name), ("Work", None));
         Ok(())
     }
 

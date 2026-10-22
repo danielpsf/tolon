@@ -245,7 +245,7 @@ test("a link Tolon cannot add shows its sentence and adds no row", async () => {
 
 test("removing a calendar asks first and then removes it", async () => {
   const row = await waitForRow();
-  await row.findElement(By.css(".tl-remove button")).click();
+  await row.findElement(By.css(".tl-remove button:last-child")).click();
   const dialog = await find("dialog[open]");
   assert.match(await dialog.getText(), /Tolon stops reading this calendar\. The calendar itself is not changed\./);
 
@@ -254,7 +254,7 @@ test("removing a calendar asks first and then removes it", async () => {
   await waitFor("the dialog to close after Cancel", async () => (await driver.findElements(By.css("dialog[open]"))).length === 0);
   assert.ok(await rowForTestCalendar(), "Cancel keeps the calendar");
 
-  await (await waitForRow()).findElement(By.css(".tl-remove button")).click();
+  await (await waitForRow()).findElement(By.css(".tl-remove button:last-child")).click();
   await (await find("dialog[open] .sm-btn.danger")).click();
   await waitFor("the calendar to leave the list", async () => !(await rowForTestCalendar()));
   await waitFor("the dialog to close after Remove calendar", async () => (await driver.findElements(By.css("dialog[open]"))).length === 0);
@@ -315,7 +315,7 @@ async function removeCalendar(name) {
   try {
     const [row] = await calendarRows(name);
     if (!row) return;
-    await row.findElement(By.css(".tl-remove button")).click();
+    await row.findElement(By.css(".tl-remove button:last-child")).click();
     await (await find("dialog[open] .sm-btn.danger")).click();
     await waitFor(`the ${name} calendar to leave the list`, async () => (await calendarRows(name)).length === 0);
   } catch (e) {
@@ -344,6 +344,52 @@ test("s1_1 a valid feed is added, named from X-WR-CALNAME and synced", async () 
   } finally {
     await removeFixtureCalendar();
     server.closeAllConnections(); // reqwest keeps the connection alive; close() alone would wait for it
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("l067 a calendar is renamed in its row, and clearing the name brings the feed name back", async () => {
+  const { server, port } = await fixtureServer();
+  try {
+    const input = await openAddForm();
+    await input.sendKeys(`http://127.0.0.1:${port}/calendar/private-123/basic.ics`);
+    await (await find('#add-calendar button[type="submit"]')).click();
+    const row = await waitFor("a row named from the feed", async () => (await fixtureRows())[0]);
+
+    // The Rename button opens the edit on the name shown; Enter saves.
+    await row.findElement(By.css(".tl-remove button:first-child")).click();
+    const field = await row.findElement(By.css("input.sm-input"));
+    assert.equal(await field.getAttribute("value"), "Team fixture");
+    assert.equal(await driver.executeScript("return document.activeElement === arguments[0]", field), true, "the edit takes focus");
+    // select() works on every OS; Ctrl+A is a line start on macOS.
+    await driver.executeScript("arguments[0].select()", field);
+    await field.sendKeys("  Standups  ");
+    assert.equal(await field.getAttribute("value"), "  Standups  ");
+    await field.sendKeys(Key.ENTER);
+    const renamed = await waitFor("the new name", async () => (await calendarRows("Standups"))[0]);
+    assert.equal(await renamed.findElement(By.css(".tl-name")).getText(), "Standups, iCal subscription");
+    assert.equal((await driver.findElements(By.css("input.sm-input"))).length, 0, "the edit closes");
+    assert.equal(await driver.executeScript("return document.activeElement?.textContent ?? ''"), "Rename", "focus returns to the row");
+
+    // Esc cancels and keeps the name.
+    await renamed.findElement(By.css(".tl-remove button:first-child")).click();
+    await (await renamed.findElement(By.css("input.sm-input"))).sendKeys("Other", Key.ESCAPE);
+    await waitFor("the edit to close", async () => (await renamed.findElements(By.css("input.sm-input"))).length === 0);
+    assert.equal(await renamed.findElement(By.css(".tl-name")).getText(), "Standups, iCal subscription");
+
+    // An empty name clears it: the feed's own name shows again.
+    await renamed.findElement(By.css(".tl-remove button:first-child")).click();
+    const again = await renamed.findElement(By.css("input.sm-input"));
+    await driver.executeScript("arguments[0].select()", again);
+    await again.sendKeys(Key.BACK_SPACE);
+    assert.equal(await again.getAttribute("value"), "");
+    await again.sendKeys(Key.ENTER);
+    const restored = await waitFor("the feed name", async () => (await fixtureRows())[0]);
+    assert.equal(await restored.findElement(By.css(".tl-name")).getText(), "Team fixture, iCal subscription");
+  } finally {
+    await removeFixtureCalendar();
+    await removeCalendar("Standups");
+    server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
 });

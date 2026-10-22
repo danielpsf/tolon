@@ -85,6 +85,7 @@ mod tests {
             id: id.into(),
             kind: "ics".into(),
             name: id.into(),
+            custom_name: None,
             enabled,
             url: Some("https://example.com/a.ics".into()),
             account: None,

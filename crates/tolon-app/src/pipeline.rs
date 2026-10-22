@@ -28,11 +28,15 @@ pub(crate) const IGNORE_ALL_DAY: &str = "ignore_all_day";
 pub(crate) const IGNORE_DECLINED: &str = "ignore_declined";
 pub(crate) const IGNORE_CANCELLED: &str = "ignore_cancelled";
 
+/// The longest custom calendar name, in characters (not bytes).
+pub const MAX_NAME_CHARS: usize = 80;
+
 /// What the UI sees of a calendar. The full URL never leaves the core (AC1.3): `display_url` is
 /// scheme and host only, from `redact_url`.
 #[derive(Serialize)]
 pub struct CalendarDto {
     pub id: String,
+    /// The name to show everywhere: the custom name, else the feed's.
     pub name: String,
     pub kind: String,
     pub enabled: bool,
@@ -49,8 +53,8 @@ impl From<Calendar> for CalendarDto {
         // A Google calendar's `url` is its Google calendar id, not a link: it is not shown.
         let google = c.kind == google::KIND;
         Self {
+            name: c.display_name().to_owned(),
             id: c.id,
-            name: c.name,
             enabled: c.enabled,
             display_url: c.url.as_deref().filter(|_| !google).map(redact_url),
             last_sync_at: c.last_sync_at,
@@ -103,6 +107,33 @@ pub fn remove(db: &Db, id: &str) -> anyhow::Result<()> {
 
 pub fn set_enabled(db: &Db, id: &str, enabled: bool) -> anyhow::Result<()> {
     lock(db).calendars().set_enabled(id, enabled)?;
+    Ok(())
+}
+
+/// Direction marks, embeddings, overrides and isolates: a name must not reorder the text around it.
+fn is_bidi_control(c: char) -> bool {
+    matches!(c, '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// What a typed name becomes: control and direction characters dropped, trimmed, cut to 80
+/// characters. The cut is by `char`, not by grapheme (that needs a new dependency). `None`
+/// (blank) clears the custom name.
+pub fn clean_name(raw: &str) -> Option<String> {
+    let name: String = raw
+        .chars()
+        .filter(|c| !c.is_control() && !is_bidi_control(*c))
+        .collect();
+    let name: String = name.trim().chars().take(MAX_NAME_CHARS).collect();
+    let name = name.trim_end();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+/// Gives the calendar the typed name, or the feed's name again when `raw` is blank. An unknown id
+/// is `not_found`. The name is kept on this computer only.
+pub fn rename(db: &Db, id: &str, raw: &str) -> anyhow::Result<()> {
+    lock(db)
+        .calendars()
+        .set_custom_name(id, clean_name(raw).as_deref())?;
     Ok(())
 }
 

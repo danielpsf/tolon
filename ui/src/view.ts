@@ -24,6 +24,31 @@ export function titleOf(calendar: CalendarDto, c: Copy): string {
   return calendar.name;
 }
 
+const NAME_MARK = "\u0001";
+
+/**
+ * The row title as three parts, so the component can isolate the name: the locale decides where the
+ * name goes (and may isolate it too, ar and he do), the page keeps it from reordering the words around it.
+ */
+export function titleParts(calendar: CalendarDto, c: Copy): [before: string, name: string, after: string] {
+  const [before = "", after = ""] = titleOf({ ...calendar, name: NAME_MARK }, c).split(NAME_MARK);
+  return [before, calendar.name, after];
+}
+
+/** The longest custom calendar name; Rust cuts at 80 characters too. */
+export const MAX_NAME_LENGTH = 80;
+
+/** What to send to `calendars_rename` for a typed name: the trimmed text, or null while it is the name already shown. A blank string clears the custom name. */
+export function renameValue(draft: string, shown: string): string | null {
+  const name = draft.trim();
+  return name === shown ? null : name;
+}
+
+/** Enter saves through the form; Esc cancels, unless an input method is composing. */
+export function cancelsRename(e: Pick<KeyboardEvent, "key" | "isComposing">): boolean {
+  return e.key === "Escape" && !e.isComposing;
+}
+
 /** Any rejection from a command, as the sentence to show. */
 export function errorText(e: unknown, c: Copy): string {
   return c.commandError(asCommandError(e));

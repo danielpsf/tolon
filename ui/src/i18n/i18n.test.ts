@@ -63,6 +63,8 @@ describe("catalogues", () => {
     const results = [
       t.calendars.googleName("a@example.com"),
       t.calendars.toggleLabel("Work"),
+      t.calendars.renameLabel("Work"),
+      t.calendars.renameField("Work"),
       t.calendars.ignoreMatching("Focus, Lunch"),
       t.relative.syncedAgo("1 min"),
       t.relative.startsIn("2 min"),
