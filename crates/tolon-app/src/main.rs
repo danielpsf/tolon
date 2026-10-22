@@ -61,9 +61,10 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
         db: Mutex::new(store),
         fetcher,
         google,
-        secrets: Box::new(tolon_platform::secrets::Keychain),
+        secrets: std::sync::Arc::new(tolon_platform::secrets::Keychain),
         google_pending: Mutex::new(None),
         google_cancel: Mutex::new(None),
+        google_cancels: std::sync::atomic::AtomicU64::new(0),
     });
     scheduler::setup_fallback_actions(app)?;
     app.manage(commands::AppScheduler::new(scheduler::TauriHost::new(
@@ -82,11 +83,13 @@ fn start(app: &tauri::AppHandle) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The last thing before the process ends (Quit, Cmd+Q, logout): waits for the store lock, so a
-/// tick or a command that is writing finishes its transaction first. Every write commits on its
-/// own, so nothing else needs flushing.
+/// The last thing before the process ends (Quit, Cmd+Q, logout): revokes a Google sign-in nobody
+/// picked calendars from, then waits for the store lock, so a tick or a command that is writing
+/// finishes its transaction first. Every write commits on its own, so nothing else needs flushing.
 fn settle_store(app: &tauri::AppHandle) {
     if let Ok(state) = commands::state(app) {
+        // First: a Google sign-in nobody picked calendars from is revoked (a few seconds at most).
+        google::drop_pending_on_exit(&state.db, state.google.as_ref(), &state.google_pending);
         drop(pipeline::lock(&state.db));
     }
 }
@@ -305,6 +308,21 @@ mod tests {
         let stop = quit.find("scheduler.shutdown(").unwrap_or(usize::MAX);
         let exit = quit.find("app.exit(0)").unwrap_or(0);
         assert!(stop < exit, "Quit stops the scheduler before it exits");
+    }
+
+    /// L-057: the exit event revokes a Google sign-in nobody picked calendars from, before the
+    /// store settles. A source check: the exit event cannot be sent in a test.
+    #[test]
+    fn the_exit_event_drops_a_pending_google_sign_in_before_the_store_settles() {
+        let source = include_str!("main.rs");
+        let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
+        let settle = shipped.split("fn settle_store(").nth(1).unwrap_or_default();
+        let drop = settle
+            .find("google::drop_pending_on_exit(")
+            .unwrap_or(usize::MAX);
+        let lock = settle.find("pipeline::lock(").unwrap_or(0);
+        assert!(drop < lock);
+        assert!(shipped.contains("settle_store(app);"), "Exit calls it");
     }
 
     /// Decision 2026-10-22: opening Tolon again from Finder, Spotlight or `open` while it runs

@@ -4,20 +4,69 @@
 //! `etag` and the account's address in `account`. Its refresh token is in the keychain under the
 //! calendar id, never in SQLite (AC13.3). Logs name the calendar id only: never a token, the
 //! account or the Google calendar id (which can be an address).
+//!
+//! The keychain can block (a locked login keychain asks the person for a password), so every call
+//! to it runs on a blocking thread, and never while the database lock is held.
 
+use std::fmt;
 use std::future::Future;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tolon_core::{CalendarId, Event};
-use tolon_platform::secrets::Secrets;
-use tolon_store::Calendar;
+use tolon_platform::secrets::{SecretError, Secrets};
+use tolon_store::{Calendar, CalendarsRepo, NewGoogleCalendar};
 use tolon_sync::google::{GoogleClient, GoogleConfig, GoogleError, RemoteCalendar, SignIn, Synced};
 
 use crate::errors::AppError;
 use crate::pipeline::{self, decode_events, feed_events, lock, Db};
 
 pub const KIND: &str = "google";
+
+/// The keychain, shared with the blocking threads that call it.
+pub type SharedSecrets = Arc<dyn Secrets>;
+
+/// How long an abandoned sign-in's grant gets to be revoked before Tolon goes on (or quits).
+const REVOKE_WAIT: Duration = Duration::from_secs(3);
+
+async fn blocking<R: Send + 'static>(
+    secrets: &SharedSecrets,
+    call: impl FnOnce(&dyn Secrets) -> Result<R, SecretError> + Send + 'static,
+) -> Result<R, SecretError> {
+    let secrets = Arc::clone(secrets);
+    tauri::async_runtime::spawn_blocking(move || call(&*secrets))
+        .await
+        .map_err(|_| SecretError)?
+}
+
+async fn keychain_get(secrets: &SharedSecrets, key: &str) -> Result<Option<String>, SecretError> {
+    let key = key.to_owned();
+    blocking(secrets, move |s| s.get(&key)).await
+}
+
+async fn keychain_set(secrets: &SharedSecrets, key: &str, value: &str) -> Result<(), SecretError> {
+    let (key, value) = (key.to_owned(), value.to_owned());
+    blocking(secrets, move |s| s.set(&key, &value)).await
+}
+
+async fn keychain_delete(secrets: &SharedSecrets, key: &str) -> Result<(), SecretError> {
+    let key = key.to_owned();
+    blocking(secrets, move |s| s.delete(&key)).await
+}
+
+/// A one-value slot in the app state, taken or replaced as a whole.
+pub type Slot<T> = Mutex<Option<T>>;
+
+pub fn take<T>(slot: &Slot<T>) -> Option<T> {
+    slot.lock().unwrap_or_else(PoisonError::into_inner).take()
+}
+
+pub fn put<T>(slot: &Slot<T>, value: T) {
+    *slot.lock().unwrap_or_else(PoisonError::into_inner) = Some(value);
+}
 
 /// The OAuth client: `TOLON_GOOGLE_CLIENT_ID` and, for a Google "Desktop app" client,
 /// `TOLON_GOOGLE_CLIENT_SECRET`, from the environment at run time or else baked in at build time.
@@ -94,7 +143,7 @@ pub struct Pending {
     pub calendars: Vec<RemoteCalendar>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct RemoteCalendarDto {
     /// Google's calendar id, sent back by `calendars_add_google`.
     pub id: String,
@@ -104,11 +153,30 @@ pub struct RemoteCalendarDto {
     pub added: bool,
 }
 
+/// The id can be an address and the name a title: neither is printed.
+impl fmt::Debug for RemoteCalendarDto {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RemoteCalendarDto")
+            .field("primary", &self.primary)
+            .field("added", &self.added)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The signed-in account and its calendars, for the picker. No token.
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct AccountDto {
     pub account: String,
     pub calendars: Vec<RemoteCalendarDto>,
+}
+
+/// The address is not printed.
+impl fmt::Debug for AccountDto {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AccountDto")
+            .field("calendars", &self.calendars.len())
+            .finish_non_exhaustive()
+    }
 }
 
 fn of_account<'a>(cals: &'a [Calendar], account: &'a str) -> impl Iterator<Item = &'a Calendar> {
@@ -119,16 +187,16 @@ fn of_account<'a>(cals: &'a [Calendar], account: &'a str) -> impl Iterator<Item 
 /// After a sign-in: calendars of this account already in Tolon get the new refresh token (this
 /// is how "sign in again" heals them), and the account's calendars become the pending pick.
 /// Returns the picker's view and the ids of the healed calendars, to sync at once.
-pub fn signed_in(
+pub async fn signed_in(
     db: &Db,
-    secrets: &dyn Secrets,
+    secrets: &SharedSecrets,
     signed: SignIn,
 ) -> anyhow::Result<(AccountDto, Pending, Vec<String>)> {
     let cals = lock(db).calendars().list()?;
     let mut healed = Vec::new();
     for c in of_account(&cals, &signed.account) {
-        secrets
-            .set(&c.id, &signed.refresh_token)
+        keychain_set(secrets, &c.id, &signed.refresh_token)
+            .await
             .map_err(|_| AppError::KEYCHAIN)?;
         healed.push(c.id.clone());
     }
@@ -155,46 +223,71 @@ pub fn signed_in(
 }
 
 /// Adds the picked calendars of `pending` (those not added yet) and keeps the refresh token in
-/// the keychain for each. A calendar whose token cannot be stored is taken out again.
-pub fn add(
+/// the keychain for each. The tokens are stored first, with no database lock held, under ids made
+/// up front; the rows follow in one transaction. When a token cannot be stored, or the rows cannot
+/// be written, nothing is added and the tokens already stored are deleted again.
+pub async fn add(
     db: &Db,
-    secrets: &dyn Secrets,
+    secrets: &SharedSecrets,
     pending: &Pending,
     ids: &[String],
     now: DateTime<Utc>,
 ) -> anyhow::Result<Vec<String>> {
-    let store = lock(db);
-    let existing = store.calendars().list()?;
-    let mut added = Vec::new();
-    let mut seen: Vec<&str> = Vec::new();
-    for id in ids {
-        let remote = pending
-            .calendars
-            .iter()
-            .find(|r| &r.id == id)
-            .ok_or(AppError::NOT_FOUND)?;
-        if seen.contains(&id.as_str())
-            || of_account(&existing, &pending.account)
-                .any(|c| c.url.as_deref() == Some(id.as_str()))
-        {
-            continue;
+    let mut planned: Vec<(String, &RemoteCalendar)> = Vec::new();
+    {
+        let existing = lock(db).calendars().list()?;
+        for id in ids {
+            let remote = pending
+                .calendars
+                .iter()
+                .find(|r| &r.id == id)
+                .ok_or(AppError::NOT_FOUND)?;
+            if planned.iter().any(|(_, r)| r.id == *id)
+                || of_account(&existing, &pending.account)
+                    .any(|c| c.url.as_deref() == Some(id.as_str()))
+            {
+                continue;
+            }
+            planned.push((CalendarsRepo::new_id(), remote));
         }
-        seen.push(id);
-        let cal = store.calendars().insert(
-            KIND,
-            &remote.name,
-            Some(&remote.id),
-            true,
-            &now.to_rfc3339(),
-        )?;
-        store.calendars().set_account(&cal.id, &pending.account)?;
-        if secrets.set(&cal.id, &pending.refresh_token).is_err() {
-            store.calendars().remove(&cal.id)?;
+    }
+    let mut stored: Vec<&str> = Vec::new();
+    for (id, _) in &planned {
+        if keychain_set(secrets, id, &pending.refresh_token)
+            .await
+            .is_err()
+        {
+            forget_tokens(secrets, &stored).await;
             return Err(AppError::KEYCHAIN.into());
         }
-        added.push(cal.id);
+        stored.push(id);
     }
-    Ok(added)
+    let at = now.to_rfc3339();
+    let rows: Vec<_> = planned
+        .iter()
+        .map(|(id, remote)| NewGoogleCalendar {
+            id,
+            name: &remote.name,
+            remote_id: &remote.id,
+        })
+        .collect();
+    let written = lock(db)
+        .calendars()
+        .insert_google_many(&rows, &pending.account, &at);
+    if let Err(e) = written {
+        forget_tokens(secrets, &stored).await;
+        return Err(e.into());
+    }
+    Ok(planned.into_iter().map(|(id, _)| id).collect())
+}
+
+/// Takes tokens out of the keychain again after a failed add. Best effort.
+async fn forget_tokens(secrets: &SharedSecrets, ids: &[&str]) {
+    for id in ids {
+        if keychain_delete(secrets, id).await.is_err() {
+            tracing::warn!(calendar = %id, "a token that was not used is still in the keychain");
+        }
+    }
 }
 
 /// Fetches the changes since the stored sync token and writes them, as `pipeline::sync_one` does
@@ -203,7 +296,7 @@ pub fn add(
 pub async fn sync_one(
     db: &Db,
     google: Option<&impl GoogleApi>,
-    secrets: &dyn Secrets,
+    secrets: &SharedSecrets,
     id: &str,
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
@@ -213,22 +306,24 @@ pub async fn sync_one(
         let stored = decode_events(store.events().list_by_calendar(id)?);
         (cal, stored)
     };
-    let result = match (google, secrets.get(id)) {
-        (None, _) => Err("google".to_owned()),
-        (_, Err(_)) => Err("keychain".to_owned()),
-        (_, Ok(None)) => Err("auth".to_owned()),
-        (Some(api), Ok(Some(refresh))) => {
-            let remote = cal.url.as_deref().ok_or(AppError::NO_URL)?;
-            api.sync(
-                &refresh,
-                remote,
-                cal.etag.as_deref(),
-                stored,
-                &CalendarId(cal.id.clone()),
-            )
-            .await
-            .map_err(|e| sync_code(&e))
-        }
+    let result = match google {
+        None => Err("google".to_owned()),
+        Some(api) => match keychain_get(secrets, id).await {
+            Err(_) => Err("keychain".to_owned()),
+            Ok(None) => Err("auth".to_owned()),
+            Ok(Some(refresh)) => {
+                let remote = cal.url.as_deref().ok_or(AppError::NO_URL)?;
+                api.sync(
+                    &refresh,
+                    remote,
+                    cal.etag.as_deref(),
+                    stored,
+                    &CalendarId(cal.id.clone()),
+                )
+                .await
+                .map_err(|e| sync_code(&e))
+            }
+        },
     };
     apply(db, id, result, now)
 }
@@ -237,7 +332,7 @@ pub async fn sync_one(
 pub async fn sync_all(
     db: &Db,
     google: Option<&impl GoogleApi>,
-    secrets: &dyn Secrets,
+    secrets: &SharedSecrets,
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     let mut first_err = None;
@@ -294,7 +389,7 @@ fn apply(
 pub async fn remove(
     db: &Db,
     google: Option<&impl GoogleApi>,
-    secrets: &dyn Secrets,
+    secrets: &SharedSecrets,
     id: &str,
 ) -> anyhow::Result<()> {
     let cal = lock(db).calendars().get(id)?;
@@ -303,8 +398,12 @@ pub async fn remove(
     let Some(cal) = cal.filter(|c| c.kind == KIND) else {
         return Ok(());
     };
-    let token = secrets.get(id).ok().flatten();
-    if secrets.delete(id).is_err() {
+    // Without the token there is nothing to revoke; the calendar is gone either way.
+    let token = keychain_get(secrets, id).await.unwrap_or_else(|_| {
+        tracing::warn!(calendar = %id, "removed calendar's token could not be read from the keychain");
+        None
+    });
+    if keychain_delete(secrets, id).await.is_err() {
         tracing::warn!(calendar = %id, "removed calendar's token is still in the keychain");
     }
     let last = cal
@@ -318,20 +417,149 @@ pub async fn remove(
     Ok(())
 }
 
-/// The person left the picker without adding anything: revoke the new grant unless calendars of
-/// the account already use it.
+/// The person left the picker without adding anything (or Tolon quits with one open): revoke the
+/// new grant unless calendars of the account already use it. The token is dropped with `pending`.
 pub async fn drop_pending(
     db: &Db,
     google: Option<&impl GoogleApi>,
     pending: Pending,
 ) -> anyhow::Result<()> {
+    drop_pending_within(db, google, pending, REVOKE_WAIT).await
+}
+
+/// Best effort: a revocation that takes longer than `wait` is given up on (the grant stays until
+/// the person revokes it in their Google account).
+async fn drop_pending_within(
+    db: &Db,
+    google: Option<&impl GoogleApi>,
+    pending: Pending,
+    wait: Duration,
+) -> anyhow::Result<()> {
     let cals = lock(db).calendars().list()?;
     if of_account(&cals, &pending.account).next().is_none() {
         if let Some(api) = google {
-            let _ = api.revoke(&pending.refresh_token).await;
+            if tokio::time::timeout(wait, api.revoke(&pending.refresh_token))
+                .await
+                .is_err()
+            {
+                tracing::warn!("revoking an abandoned sign-in timed out");
+            }
         }
     }
     Ok(())
+}
+
+/// Tolon is quitting with a sign-in nobody picked calendars from: revoke it now, as on cancel.
+/// It blocks, on a thread of its own with a runtime of its own. Not on the caller's thread:
+/// `block_on` panics where a runtime already runs there, and the updater's hook reaches this from
+/// an async command (Windows). Not on Tauri's runtime either: with one worker, which the caller
+/// may be, nothing would drive the timer or the network, and the 3 s limit would never fire.
+pub fn drop_pending_on_exit(
+    db: &Db,
+    google: Option<&(impl GoogleApi + Sync)>,
+    pending: &Slot<Pending>,
+) {
+    let Some(pending) = take(pending) else {
+        return;
+    };
+    let done = std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("tolon-quit-revoke".into())
+            .spawn_scoped(scope, || {
+                // No runtime, no revoke: `pending` is dropped here, and its token with it.
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .inspect_err(|e| {
+                        tracing::warn!(error = %e, "no runtime to revoke an abandoned sign-in");
+                    })
+                    .ok()?;
+                Some(rt.block_on(drop_pending(db, google, pending)))
+            })
+            .map(|thread| thread.join())
+    });
+    match done {
+        Ok(Ok(Some(Err(e)))) => {
+            tracing::warn!(error = %e, "an abandoned sign-in could not be dropped at quit");
+        }
+        Ok(Ok(_)) => {}
+        Ok(Err(_)) => tracing::warn!("dropping an abandoned sign-in at quit stopped early"),
+        Err(e) => tracing::warn!(error = %e, "no thread to revoke an abandoned sign-in at quit"),
+    }
+}
+
+/// What a sign-in compares to know a cancel came while it was finishing: the cancel count when
+/// it began.
+pub fn cancels_so_far(epoch: &AtomicU64) -> u64 {
+    epoch.load(Ordering::SeqCst)
+}
+
+/// The sign-in that began at cancel count `began` has finished with `pending`. It becomes the
+/// pending pick, unless a cancel came meanwhile: then its grant is revoked at once (as cancel
+/// would have) and the sign-in ends as cancelled. The check and the put share the slot's lock, and
+/// `cancel` counts before it takes the slot, so a cancel never slips between them.
+pub async fn keep_pending(
+    db: &Db,
+    google: Option<&impl GoogleApi>,
+    slot: &Slot<Pending>,
+    epoch: &AtomicU64,
+    began: u64,
+    pending: Pending,
+) -> Result<(), AppError> {
+    let account = pending.account.clone();
+    let (earlier, rejected) = {
+        let mut slot = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        if cancels_so_far(epoch) == began {
+            (slot.replace(pending), None)
+        } else {
+            (None, Some(pending))
+        }
+    };
+    // Revoking a token ends the account's whole grant, so an earlier unpicked sign-in of the same
+    // account is only forgotten: revoking it would end the one that just finished.
+    if let Some(earlier) = earlier.filter(|e| e.account != account) {
+        drop_pending(db, google, earlier)
+            .await
+            .map_err(|_| AppError::GOOGLE_SIGN_IN)?;
+    }
+    if let Some(rejected) = rejected {
+        // Best effort: the sign-in is over either way.
+        let _ = drop_pending(db, google, rejected).await;
+        return Err(AppError::GOOGLE_CANCELLED);
+    }
+    Ok(())
+}
+
+/// Ends the sign-in waiting for the browser (its receiver sees the sender go) and drops a finished
+/// one nobody picked calendars from. The count goes up first: a sign-in that is finishing sees it
+/// in `keep_pending` and revokes its own grant.
+pub async fn cancel(
+    db: &Db,
+    google: Option<&impl GoogleApi>,
+    waiting: &Slot<tokio::sync::oneshot::Sender<()>>,
+    pending: &Slot<Pending>,
+    epoch: &AtomicU64,
+) -> anyhow::Result<()> {
+    epoch.fetch_add(1, Ordering::SeqCst);
+    if let Some(cancel) = take(waiting) {
+        let _ = cancel.send(());
+    }
+    match take(pending) {
+        Some(pending) => drop_pending(db, google, pending).await,
+        None => Ok(()),
+    }
+}
+
+/// Runs the sign-in until it ends or `cancelled` fires or its sender goes. Dropping the sign-in
+/// closes its loopback port.
+pub async fn until_cancelled<T>(
+    sign_in: impl Future<Output = Result<T, AppError>>,
+    cancelled: tokio::sync::oneshot::Receiver<()>,
+) -> Result<T, AppError> {
+    tokio::select! {
+        r = sign_in => r,
+        _ = cancelled => Err(AppError::GOOGLE_CANCELLED),
+    }
 }
 
 #[cfg(test)]

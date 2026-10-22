@@ -7,13 +7,12 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tolon_platform::secrets::Secrets;
 use tolon_platform::PlatformError;
 use tolon_sync::google::{DonePage, GoogleClient, GoogleError};
 use tolon_sync::IcsFetcher;
 
 use crate::errors::{command_error, AppError, CommandError};
-use crate::google::{self, AccountDto, Pending};
+use crate::google::{self, put, take, AccountDto, Pending, SharedSecrets, Slot};
 use crate::interrupt::{AlarmShow, InterruptState, LABEL_PREFIX};
 use crate::notify_copy::{self, NotifyCopy, NotifyCopyState};
 use crate::pipeline::{self, CalendarDto, Db, ListedDto};
@@ -106,23 +105,13 @@ pub struct AppState {
     pub fetcher: IcsFetcher,
     /// `None` when this build has no Google client ID (F13).
     pub google: Option<GoogleClient>,
-    pub secrets: Box<dyn Secrets>,
+    pub secrets: SharedSecrets,
     /// A Google sign-in whose calendars are not picked yet. Memory only.
-    pub google_pending: std::sync::Mutex<Option<Pending>>,
+    pub google_pending: Slot<Pending>,
     /// Ends the Google sign-in that is waiting for the browser.
-    pub google_cancel: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
-}
-
-fn take<T>(slot: &std::sync::Mutex<Option<T>>) -> Option<T> {
-    slot.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .take()
-}
-
-fn put<T>(slot: &std::sync::Mutex<Option<T>>, value: T) {
-    *slot
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(value);
+    pub google_cancel: Slot<tokio::sync::oneshot::Sender<()>>,
+    /// How many times the person cancelled; a sign-in that is finishing checks it (`keep_pending`).
+    pub google_cancels: std::sync::atomic::AtomicU64,
 }
 
 /// The state, or `not_ready` when startup failed and it was never set up.
@@ -149,7 +138,7 @@ pub fn notify(app: &AppHandle) {
 pub async fn sync_and_notify(app: &AppHandle, id: Option<&str>) -> anyhow::Result<()> {
     let state = state(app)?;
     let now = Utc::now();
-    let (db, google, secrets) = (&state.db, state.google.as_ref(), &*state.secrets);
+    let (db, google, secrets) = (&state.db, state.google.as_ref(), &state.secrets);
     let result = match id {
         Some(id) => {
             let kind = pipeline::lock(db).calendars().get(id)?.map(|c| c.kind);
@@ -204,7 +193,7 @@ pub async fn calendars_remove(
     main_only(window.label())?;
     let removed = async {
         let s = state(&app)?;
-        google::remove(&s.db, s.google.as_ref(), &*s.secrets, &id).await
+        google::remove(&s.db, s.google.as_ref(), &s.secrets, &id).await
     }
     .await;
     removed.map_err(|e| command_error(&e))?;
@@ -238,6 +227,7 @@ pub async fn calendars_google_sign_in(
     let signed = async {
         let s = state(&app)?;
         let client = s.google.as_ref().ok_or(AppError::GOOGLE_UNAVAILABLE)?;
+        let began = google::cancels_so_far(&s.google_cancels);
         let (tx, rx) = tokio::sync::oneshot::channel();
         // A sign-in already waiting is replaced: its receiver sees the sender go and it ends.
         put(&s.google_cancel, tx);
@@ -246,21 +236,27 @@ pub async fn calendars_google_sign_in(
             title: &title,
             body: &body,
         };
-        let result = tokio::select! {
-            r = client.sign_in(open, &page) => r.map_err(|e| match e {
-                GoogleError::Denied => AppError::GOOGLE_DENIED,
-                _ => AppError::GOOGLE_SIGN_IN,
-            }),
-            _ = rx => Err(AppError::GOOGLE_CANCELLED),
-        };
-        let signed = result?;
-        let (dto, pending, healed) = google::signed_in(&s.db, &*s.secrets, signed)?;
-        // Revoking a token ends the account's whole grant, so an earlier unpicked sign-in of the
-        // same account is only forgotten: revoking it would end the one that just finished.
-        if let Some(old) = take(&s.google_pending).filter(|old| old.account != pending.account) {
-            google::drop_pending(&s.db, s.google.as_ref(), old).await?;
-        }
-        put(&s.google_pending, pending);
+        let signed = google::until_cancelled(
+            async {
+                client.sign_in(open, &page).await.map_err(|e| match e {
+                    GoogleError::Denied => AppError::GOOGLE_DENIED,
+                    _ => AppError::GOOGLE_SIGN_IN,
+                })
+            },
+            rx,
+        )
+        .await?;
+        let (dto, pending, healed) = google::signed_in(&s.db, &s.secrets, signed).await?;
+        // A cancel that came while the tokens were being stored revokes this grant here.
+        google::keep_pending(
+            &s.db,
+            s.google.as_ref(),
+            &s.google_pending,
+            &s.google_cancels,
+            began,
+            pending,
+        )
+        .await?;
         anyhow::Ok((dto, healed))
     }
     .await;
@@ -284,7 +280,7 @@ pub async fn calendars_add_google(
     let added = async {
         let s = state(&app)?;
         let pending = take(&s.google_pending).ok_or(AppError::NOT_FOUND)?;
-        let added = google::add(&s.db, &*s.secrets, &pending, &ids, Utc::now());
+        let added = google::add(&s.db, &s.secrets, &pending, &ids, Utc::now()).await;
         if added.is_err() {
             put(&s.google_pending, pending);
         }
@@ -312,13 +308,14 @@ pub async fn calendars_google_cancel(
     main_only(window.label())?;
     let done = async {
         let s = state(&app)?;
-        if let Some(cancel) = take(&s.google_cancel) {
-            let _ = cancel.send(());
-        }
-        match take(&s.google_pending) {
-            Some(pending) => google::drop_pending(&s.db, s.google.as_ref(), pending).await,
-            None => Ok(()),
-        }
+        google::cancel(
+            &s.db,
+            s.google.as_ref(),
+            &s.google_cancel,
+            &s.google_pending,
+            &s.google_cancels,
+        )
+        .await
     }
     .await;
     done.map_err(|e| command_error(&e))

@@ -57,7 +57,16 @@ impl Mock {
             token_url: format!("{}/token", self.base),
             revoke_url: format!("{}/revoke", self.base),
             api_base: format!("{}/calendar/v3", self.base),
+            sign_in_wait: SIGN_IN_WAIT,
         }
+    }
+
+    fn client_waiting(&self, wait: std::time::Duration) -> GoogleClient {
+        GoogleClient::new(GoogleConfig {
+            sign_in_wait: wait,
+            ..self.config()
+        })
+        .unwrap()
     }
 
     fn client(&self) -> GoogleClient {
@@ -309,6 +318,160 @@ async fn ac13_1_a_browser_that_cannot_open_ends_the_sign_in() {
     );
 }
 
+/// An `open` that keeps the loopback address of the consent URL and sends nobody back.
+fn silent_browser() -> (impl FnOnce(&str) -> bool, Arc<Mutex<String>>) {
+    let addr = Arc::new(Mutex::new(String::new()));
+    let keep = addr.clone();
+    let open = move |url: &str| {
+        let q: HashMap<String, String> = Url::parse(url)
+            .unwrap()
+            .query_pairs()
+            .into_owned()
+            .collect();
+        *keep.lock().unwrap() = q["redirect_uri"].trim_start_matches("http://").to_owned();
+        true
+    };
+    (open, addr)
+}
+
+#[tokio::test]
+async fn ac13_1_a_browser_that_never_comes_back_times_out_and_frees_the_port() {
+    let m = mock(Box::new(|_| token_ok())).await;
+    let (open, addr) = silent_browser();
+    let started = std::time::Instant::now();
+    let err = m
+        .client_waiting(std::time::Duration::from_millis(200))
+        .sign_in(open, &PAGE)
+        .await
+        .unwrap_err();
+    assert_eq!(err, GoogleError::Timeout);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert!(m.seen("/token").is_empty());
+    let addr = addr.lock().unwrap().clone();
+    assert!(
+        TcpStream::connect(&addr).await.is_err(),
+        "the port is closed"
+    );
+    // The default is five minutes (AC13.1).
+    assert_eq!(SIGN_IN_WAIT, std::time::Duration::from_secs(300));
+    assert_eq!(m.config().sign_in_wait, SIGN_IN_WAIT);
+}
+
+#[tokio::test]
+async fn ac13_1_cancelling_a_waiting_sign_in_frees_the_loopback_port() {
+    let m = mock(Box::new(|_| token_ok())).await;
+    let (open, addr) = silent_browser();
+    let client = m.client();
+    let (cancel, cancelled) = tokio::sync::oneshot::channel::<()>();
+    let waiting = async {
+        // The same race as `calendars_google_sign_in`: the sign-in against a cancel signal.
+        tokio::select! {
+            r = client.sign_in(open, &PAGE) => r.map(|_| ()),
+            _ = cancelled => Err(GoogleError::Denied),
+        }
+    };
+    let (result, ()) = tokio::join!(waiting, async {
+        while addr.lock().unwrap().is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let a = addr.lock().unwrap().clone();
+        // Waiting: the port accepts.
+        assert!(TcpStream::connect(&a).await.is_ok());
+        cancel.send(()).unwrap();
+    });
+    assert_eq!(result, Err(GoogleError::Denied));
+    let a = addr.lock().unwrap().clone();
+    assert!(TcpStream::connect(&a).await.is_err(), "the port is closed");
+    assert!(m.seen("/token").is_empty());
+}
+
+#[tokio::test]
+async fn a_flood_of_silent_connections_is_capped_and_extras_are_dropped_at_once() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let waiting =
+        tokio::spawn(async move { wait_for_code(&listener, "state-1234567890", &PAGE).await });
+    let mut idle = Vec::new();
+    for _ in 0..MAX_CONNECTIONS {
+        idle.push(TcpStream::connect(addr).await.unwrap());
+    }
+    // The next connection is accepted and closed without a read: the client sees the end of the
+    // stream long before READ_WAIT.
+    let mut extra = TcpStream::connect(addr).await.unwrap();
+    let mut byte = [0u8; 1];
+    let end = tokio::time::timeout(READ_WAIT / 5, extra.read(&mut byte))
+        .await
+        .expect("the extra connection was held open");
+    assert!(matches!(end, Ok(0) | Err(_)), "{end:?}");
+
+    // The idle ones give their room back when they go; the redirect then goes through.
+    drop(idle);
+    let request = "GET /?state=state-1234567890&code=the-code HTTP/1.1\r\nHost: x\r\n\r\n";
+    let mut answered = false;
+    for _ in 0..100 {
+        let mut s = TcpStream::connect(addr).await.unwrap();
+        let _ = s.write_all(request.as_bytes()).await;
+        let mut got = Vec::new();
+        let _ = s.read_to_end(&mut got).await;
+        if String::from_utf8_lossy(&got).starts_with("HTTP/1.1 200") {
+            answered = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(answered, "no room came back");
+    assert_eq!(waiting.await.unwrap(), Ok("the-code".to_owned()));
+}
+
+#[test]
+fn the_state_is_compared_in_full_with_no_early_exit() {
+    assert!(same(b"state-1234567890", b"state-1234567890"));
+    assert!(same(b"", b""));
+    // A difference in the first byte, the last byte, or the length.
+    assert!(!same(b"Xtate-1234567890", b"state-1234567890"));
+    assert!(!same(b"state-123456789X", b"state-1234567890"));
+    assert!(!same(b"state-123456789", b"state-1234567890"));
+    assert!(!same(b"state-12345678901", b"state-1234567890"));
+    assert!(!same(b"", b"s"));
+
+    let ok = redirect_result("GET /?state=s1&code=c HTTP/1.1\r\n\r\n", "s1");
+    assert_eq!(ok, Some(Ok("c".to_owned())));
+    for wrong in ["s2", "s", "s1x", ""] {
+        let head = format!("GET /?state={wrong}&code=c HTTP/1.1\r\n\r\n");
+        assert_eq!(redirect_result(&head, "s1"), None, "{wrong}");
+    }
+    assert_eq!(redirect_result("GET /?code=c HTTP/1.1\r\n\r\n", "s1"), None);
+}
+
+#[test]
+fn debug_output_omits_the_address_titles_and_the_sync_token() {
+    let cal = RemoteCalendar {
+        id: EMAIL.into(),
+        name: "Salary talks SECRET".into(),
+        primary: true,
+    };
+    let listed = json!([event("id-SECRET", "Salary talk SECRET")]);
+    let (events, _) = merge(Vec::new(), items(listed.clone()), &CalendarId("c".into()));
+    assert_eq!(events[0].title, "Salary talk SECRET");
+    let synced = Synced {
+        events,
+        sync_token: "sync-SECRET".into(),
+        skipped: 2,
+    };
+    let item = items(json!([{
+        "id": "id-SECRET", "summary": "Salary talk SECRET", "description": "d-SECRET",
+        "location": "l-SECRET", "htmlLink": "https://x.example/SECRET", "status": "confirmed",
+        "conferenceData": {"entryPoints": [{"entryPointType": "video", "uri": "https://meet.example/SECRET?pwd=SECRET"}]}
+    }]));
+    let text = format!(
+        "{cal:?} {synced:?} {:?} {:?}",
+        item[0], item[0].conference_data
+    );
+    assert!(!text.contains("SECRET"), "{text}");
+    assert!(text.contains("RemoteCalendar") && text.contains("Synced") && text.contains("Item"));
+    assert!(text.contains("skipped: 2"), "{text}");
+}
+
 fn event(id: &str, summary: &str) -> Value {
     json!({"id": id, "status": "confirmed", "summary": summary,
            "start": {"dateTime": "2026-10-22T10:00:00+02:00", "timeZone": "Europe/Berlin"},
@@ -388,6 +551,22 @@ async fn ac13_4_pages_sync_token_delta_and_full_resync_on_410() {
         .unwrap();
     assert_eq!(uids(&third.events), ["a", "c"]);
     assert_eq!(third.sync_token, "s3");
+
+    // Every page of a full listing starts one day back (HISTORY); a delta carries no `timeMin`
+    // (Google refuses it next to a sync token), and the full listing after a 410 has it again.
+    let seen = m.seen("/events");
+    let time_min: Vec<bool> = seen
+        .iter()
+        .map(|r| r.query.contains_key("timeMin"))
+        .collect();
+    assert_eq!(time_min, [true, true, false, true, true, false]);
+    let from = DateTime::parse_from_rfc3339(&seen[0].query["timeMin"]).unwrap();
+    let back = Utc::now().signed_duration_since(from);
+    assert!(
+        (back - HISTORY).abs() < chrono::Duration::minutes(1),
+        "{back}"
+    );
+    assert_eq!(seen[0].query["timeMin"], seen[1].query["timeMin"]);
 }
 
 #[tokio::test]

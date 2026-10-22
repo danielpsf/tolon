@@ -30,8 +30,8 @@ iana-time-zone = "0.1.65"
 tracing = "0.1"
 # Without a subscriber the warn lines are dropped; stderr only, level info.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
-# Sleep in the refresh loop; a oneshot carries the screen list back from the main thread; `select!` and `Notify` in the scheduler loop. Tauri's async runtime is tokio.
-tokio = { version = "1", features = ["time", "sync", "macros"] }
+# Sleep in the refresh loop; a oneshot carries the screen list back from the main thread; `select!` and `Notify` in the scheduler loop. Tauri's async runtime is tokio. `rt` and `net`: at quit, a sign-in nobody picked from is revoked on a small runtime of its own (google.rs), so the 3 s limit holds even when Tauri's runtime has one busy worker; the features were already enabled in the tree through tauri and reqwest, no new dependency.
+tokio = { version = "1", features = ["time", "sync", "macros", "rt", "net"] }
 # Blocking error dialog when the database cannot be opened or migrated.
 tauri-plugin-dialog = "2"
 # The F4.5 fallback: a system notification with Join and Snooze actions when the interrupt cannot take over the screen (AC4.5).

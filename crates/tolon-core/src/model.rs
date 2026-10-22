@@ -119,7 +119,7 @@ pub struct Override {
 }
 
 /// One VEVENT, possibly recurring, with its overrides folded in.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Event {
     pub id: EventId,
     pub calendar: CalendarId,
@@ -143,6 +143,21 @@ pub struct Event {
     /// The `URL` property.
     pub html_link: Option<String>,
     pub updated: DateTime<Utc>,
+}
+
+/// Titles, places, descriptions, links and ids can be private: a `{:?}` shows the times and the
+/// shape only. `Override` derives `Debug` and prints its event through this.
+impl fmt::Debug for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Event")
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .field("all_day", &self.all_day)
+            .field("status", &self.status)
+            .field("recurring", &self.rrule.is_some())
+            .field("overrides", &self.overrides.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// Stable across syncs: the event and the instant the generator first produced, so a moved
@@ -217,4 +232,47 @@ pub struct Occurrence {
     pub all_day: bool,
     pub join: JoinTarget,
     pub people: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn private_event(tag: &str) -> Event {
+        let at = DateTime::<Utc>::UNIX_EPOCH;
+        Event {
+            id: EventId(format!("id-{tag}")),
+            calendar: CalendarId(format!("cal-{tag}")),
+            uid: format!("uid-{tag}"),
+            title: format!("title-{tag}"),
+            start: EventTime::Utc { at },
+            end: EventTime::Utc { at },
+            all_day: false,
+            rrule: Some("FREQ=DAILY".into()),
+            exdates: vec![],
+            overrides: vec![],
+            status: EventStatus::Confirmed,
+            my_response: None,
+            attendees_count: 3,
+            location: Some(format!("place-{tag}")),
+            description: Some(format!("notes-{tag}")),
+            conference: Some(format!("https://meet.example/{tag}")),
+            html_link: Some(format!("https://cal.example/{tag}")),
+            updated: at,
+        }
+    }
+
+    #[test]
+    fn debug_output_of_an_event_and_its_overrides_omits_private_text() {
+        let mut event = private_event("SECRET");
+        event.overrides.push(Override {
+            recurrence_id: EventTime::Utc {
+                at: DateTime::<Utc>::UNIX_EPOCH,
+            },
+            event: private_event("SECRET-2"),
+        });
+        let text = format!("{event:?} {:?}", event.overrides[0]);
+        assert!(!text.contains("SECRET"), "{text}");
+        assert!(text.contains("Event") && text.contains("recurring: true"));
+    }
 }

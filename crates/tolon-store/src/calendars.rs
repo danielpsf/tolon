@@ -52,6 +52,13 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Calendar> {
     })
 }
 
+/// A Google calendar to add: its Tolon id, its name and its Google calendar id (kept in `url`).
+pub struct NewGoogleCalendar<'a> {
+    pub id: &'a str,
+    pub name: &'a str,
+    pub remote_id: &'a str,
+}
+
 /// Calendar subscriptions and their sync state.
 pub struct CalendarsRepo<'a> {
     conn: &'a Connection,
@@ -60,6 +67,11 @@ pub struct CalendarsRepo<'a> {
 impl<'a> CalendarsRepo<'a> {
     pub(crate) fn new(conn: &'a Connection) -> Self {
         Self { conn }
+    }
+
+    /// A fresh calendar id (uuid v4), for a caller that needs it before the row exists.
+    pub fn new_id() -> String {
+        uuid::Uuid::new_v4().to_string()
     }
 
     /// Inserts a calendar with a fresh uuid v4 id and returns it.
@@ -71,13 +83,32 @@ impl<'a> CalendarsRepo<'a> {
         enabled: bool,
         created_at: &str,
     ) -> Result<Calendar, StoreError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = Self::new_id();
         self.conn.execute(
             "insert into calendars (id, kind, name, enabled, url, created_at)
              values (?1, ?2, ?3, ?4, ?5, ?6)",
             params![id, kind, name, enabled, url, created_at],
         )?;
         self.get(&id)?.ok_or(StoreError::NotFound)
+    }
+
+    /// Inserts enabled Google calendars of one account under ids made up front (see
+    /// [`Self::new_id`]), all in one transaction: when one fails, none is added.
+    pub fn insert_google_many(
+        &self,
+        rows: &[NewGoogleCalendar<'_>],
+        account: &str,
+        created_at: &str,
+    ) -> Result<(), StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        for row in rows {
+            tx.execute(
+                "insert into calendars (id, kind, name, enabled, url, account, created_at)
+                 values (?1, 'google', ?2, 1, ?3, ?4, ?5)",
+                params![row.id, row.name, row.remote_id, account, created_at],
+            )?;
+        }
+        Ok(tx.commit()?)
     }
 
     pub fn get(&self, id: &str) -> Result<Option<Calendar>, StoreError> {
@@ -176,6 +207,68 @@ mod tests {
         assert!(!c.remove(&a.id)?);
         assert_eq!(c.get(&a.id)?, None);
         assert_eq!(c.list()?, vec![b]);
+        Ok(())
+    }
+
+    #[test]
+    fn insert_google_many_adds_all_rows_or_none() -> TestResult {
+        use super::NewGoogleCalendar;
+        let store = Store::open_in_memory()?;
+        let c = store.calendars();
+        let (a, b) = (
+            super::CalendarsRepo::new_id(),
+            super::CalendarsRepo::new_id(),
+        );
+        let (ida, idb) = (a.as_str(), b.as_str());
+        c.insert_google_many(
+            &[
+                NewGoogleCalendar {
+                    id: ida,
+                    name: "A",
+                    remote_id: "r-a",
+                },
+                NewGoogleCalendar {
+                    id: idb,
+                    name: "B",
+                    remote_id: "r-b",
+                },
+            ],
+            "me@example.com",
+            "t1",
+        )?;
+        let listed = c.list()?;
+        assert_eq!(listed.len(), 2);
+        let first = c.get(&a)?.ok_or("gone")?;
+        assert_eq!(
+            (
+                first.kind.as_str(),
+                first.url.as_deref(),
+                first.account.as_deref(),
+                first.enabled
+            ),
+            ("google", Some("r-a"), Some("me@example.com"), true)
+        );
+
+        // The second row repeats an id: the first of this batch does not stay behind.
+        let fresh = super::CalendarsRepo::new_id();
+        let r = c.insert_google_many(
+            &[
+                NewGoogleCalendar {
+                    id: &fresh,
+                    name: "C",
+                    remote_id: "r-c",
+                },
+                NewGoogleCalendar {
+                    id: ida,
+                    name: "A",
+                    remote_id: "r-a",
+                },
+            ],
+            "me@example.com",
+            "t2",
+        );
+        assert!(r.is_err());
+        assert_eq!(c.list()?, listed);
         Ok(())
     }
 

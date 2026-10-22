@@ -10,7 +10,7 @@ use tolon_core::{
     parse_recurrence, CalendarId, Event, EventId, EventStatus, EventTime, Override, Response,
 };
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub(crate) struct Item {
     pub id: String,
@@ -28,6 +28,16 @@ pub(crate) struct Item {
     pub attendees: Vec<Attendee>,
     pub conference_data: Option<Conference>,
     pub updated: Option<String>,
+}
+
+/// Id, title, description, location and links are not printed.
+impl std::fmt::Debug for Item {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Item")
+            .field("status", &self.status)
+            .field("attendees", &self.attendees.len())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -52,11 +62,20 @@ pub(crate) struct Conference {
     pub entry_points: Vec<EntryPoint>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub(crate) struct EntryPoint {
     pub entry_point_type: Option<String>,
     pub uri: Option<String>,
+}
+
+/// The link can carry a meeting passcode: it is not printed.
+impl std::fmt::Debug for EntryPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EntryPoint")
+            .field("entry_point_type", &self.entry_point_type)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Item {
