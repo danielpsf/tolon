@@ -43,6 +43,27 @@ class LatestJson(unittest.TestCase):
         self.assertTrue(p["linux-x86_64-deb"]["url"].endswith("/Tolon_0.1.0_amd64.deb"))
         self.assertEqual(m["platforms"]["linux-x86_64"]["url"], "https://github.com/o/r/releases/download/v0.1.0/Tolon_0.1.0_amd64.AppImage")
 
+    NO_MSI = [f for f in FULL if ".msi" not in f]
+
+    def test_prerelease_without_an_msi_leaves_the_msi_key_out(self):
+        m = ra.latest_json(self.dist(self.NO_MSI), "v0.1.0-beta.1", "o/r")
+        p = m["platforms"]
+        self.assertNotIn("windows-x86_64-msi", p)
+        self.assertEqual(p["windows-x86_64"], p["windows-x86_64-nsis"])
+        self.assertTrue(p["windows-x86_64"]["url"].endswith("/Tolon_0.1.0_x64-setup.exe"))
+        self.assertEqual(len(p), 7)
+
+    def test_plain_version_without_an_msi_is_an_error(self):
+        with self.assertRaises(SystemExit) as e:
+            ra.latest_json(self.dist(self.NO_MSI), "v0.1.0", "o/r")
+        self.assertIn("windows-x86_64-msi", str(e.exception))
+
+    def test_prerelease_still_needs_every_other_signed_artifact(self):
+        files = [f for f in self.NO_MSI if "setup.exe.sig" not in f]
+        with self.assertRaises(SystemExit) as e:
+            ra.latest_json(self.dist(files), "v0.1.0-beta.1", "o/r")
+        self.assertIn("windows-x86_64", str(e.exception))
+
     def test_missing_signature_is_an_error(self):
         files = [f for f in self.FULL if "msi.sig" not in f]
         with self.assertRaises(SystemExit) as e:
@@ -71,6 +92,10 @@ class KeyId(unittest.TestCase):
 
 
 class Tag(unittest.TestCase):
+    def test_prerelease_is_a_dash_in_the_version(self):
+        self.assertTrue(ra.is_prerelease("v0.1.0-beta.1"))
+        self.assertFalse(ra.is_prerelease("v0.1.0"))
+
     def test_bad_tags(self):
         self.assertTrue(ra.check_tag("0.1.0"))
         self.assertTrue(any("version" in e for e in ra.check_tag("v9.9.9")))

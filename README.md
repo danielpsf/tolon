@@ -75,7 +75,7 @@ Beta 1 is on its way. When it is out, download the file for your system from the
 | System | Download |
 | --- | --- |
 | macOS, Apple silicon and Intel | `.dmg` (universal) |
-| Windows | `.msi` or `.exe` |
+| Windows | `.exe` (the `.msi` comes with 0.1.0) |
 | Linux | `.AppImage` or `.deb` |
 
 Beta builds are not signed by Apple or by a Windows certificate authority yet, so your system asks you to confirm once. The install guide walks you through it.

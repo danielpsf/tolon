@@ -7,7 +7,7 @@ The first-run window asks for an iCal link. [Get an iCal link for your calendar]
 | System | File to download |
 | --- | --- |
 | macOS 13 Ventura or newer, Apple silicon and Intel | `Tolon_<version>_universal.dmg` |
-| Windows | `Tolon_<version>_x64-setup.exe` (or the `.msi`, if your IT team asks for it) |
+| Windows | `Tolon_<version>_x64-setup.exe` (the betas have no `.msi`; it comes with 0.1.0) |
 | Linux, built on Ubuntu 22.04 | `Tolon_<version>_amd64.AppImage` (any distribution) or `Tolon_<version>_amd64.deb` (Debian, Ubuntu) |
 
 ## macOS

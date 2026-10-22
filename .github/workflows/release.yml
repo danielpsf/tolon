@@ -13,6 +13,8 @@ jobs:
   preflight:
     name: preflight
     runs-on: ubuntu-22.04
+    outputs:
+      prerelease: ${{ steps.kind.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +35,11 @@ jobs:
         run: python3 -m unittest discover -s .github/scripts
       - name: Tag, versions and updater config agree
         run: python3 .github/scripts/release_assets.py check-tag "$GITHUB_REF_NAME"
+      # The one place that decides it (a `-` in the version). WiX refuses a non-numeric pre-release in an MSI version
+      # (decision "Windows betas ship the NSIS installer only"), so pre-releases ship NSIS only.
+      - name: Pre-release or plain version
+        id: kind
+        run: echo "prerelease=$(python3 .github/scripts/release_assets.py prerelease "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
@@ -68,8 +75,8 @@ jobs:
           - name: windows-x64
             os: windows-latest
             args: ""
-            bundles: msi,nsis
-            expect: "*.msi *.exe"
+            bundles: ${{ needs.preflight.outputs.prerelease == 'true' && 'nsis' || 'msi,nsis' }}
+            expect: ${{ needs.preflight.outputs.prerelease == 'true' && '*.exe' || '*.msi *.exe' }}
           - name: linux-x64
             os: ubuntu-22.04
             args: ""
