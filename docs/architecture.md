@@ -134,6 +134,7 @@ calendars.list | calendars.add_ics(url) | calendars.add_google() | calendars.rem
 occurrences.today | occurrences.next
 alarms.snooze(key, minutes) | alarms.dismiss(key) | alarms.join(key) | alarms.already_there(key) | alarms.test
 settings.get | settings.set(key, value)
+diagnostics.save(path) | diagnostics.reveal() | diagnostics.open(support|doc)
 app.pause(minutes) | app.resume | app.quit | app.version | app.check_updates
 ```
 
@@ -150,6 +151,6 @@ Events from core to UI: `alarm:show`, `alarm:hide`, `calendars:changed`, `occurr
 
 - `cargo xtask ci` = `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic`, `cargo test --workspace`, `cargo xtask layers`, `cargo xtask check-scenario-ids`, `npm run lint`, `npm run test`.
 - Errors: `thiserror` in crates, `anyhow` only in `tolon-app` and `xtask`. Every error that reaches the UI carries a short, human sentence.
-- Logging: `tracing`, levels info and below in release; never log event titles at info (they are personal data); debug level only. Info is the default in every build; `TOLON_LOG=debug` in the environment turns the debug lines on (focus hand-over paths, L-061).
+- Logging: `tracing`, levels info and below in release; never log event titles at info (they are personal data); debug level only. Info is the default in every build; `TOLON_LOG=debug` in the environment turns the debug lines on (focus hand-over paths, L-061). Tolon's own crates also write debug lines to rotating daily files in the data folder (`logs/`, 7 days, 10 MB; L-072) for the diagnostics zip; the same redaction rules apply, dependencies stay at info, and `tracing-log` stays off so dependency `log` lines never reach the files.
 - Commits: Conventional Commits, scope = crate or `ui`, signed off (DCO).
 - Branches: `main` protected; one branch per ledger task, PR with the ledger row id in the title.
