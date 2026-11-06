@@ -397,8 +397,8 @@ pub(crate) fn decode_events(stored: Vec<tolon_store::Event>) -> Vec<Event> {
 
 /// One of today's occurrences as `occurrences_today` sends it (decision "All-day events, weekends
 /// and window checks"). No URL: joining goes through `occurrences_join`. `ignored` says why it
-/// gets no alarm, if it gets none (S8.1): `keyword`, `all_day`, `declined`, `cancelled` or
-/// `no_attendees`.
+/// gets no alarm, if it gets none (S8.1, S8.3): `keyword`, `all_day`, `declined`, `cancelled`,
+/// `no_attendees` or `no_join_link`.
 #[derive(Serialize)]
 pub struct ListedDto {
     /// `OccurrenceKey`'s text form, for `occurrences_join`.

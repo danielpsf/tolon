@@ -38,6 +38,12 @@ describe("settings commands", () => {
     expect(invoke).toHaveBeenCalledWith("settings_set", { patch: { lead_minutes: 5 } });
   });
 
+  it("S8.3 saves the call-link rule with settings_set and an ignore patch of only no_join_link", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ ...settings, ignore: { ...settings.ignore, no_join_link: true } });
+    await expect(api.settingsSet({ ignore: { no_join_link: true } })).resolves.toMatchObject({ ignore: { no_join_link: true } });
+    expect(invoke).toHaveBeenCalledWith("settings_set", { patch: { ignore: { no_join_link: true } } });
+  });
+
   it("AC6.3 Play previews the chosen sound with sound_preview", async () => {
     await api.soundPreview("chime");
     expect(invoke).toHaveBeenCalledWith("sound_preview", { sound: "chime" });

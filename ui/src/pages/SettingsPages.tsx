@@ -359,6 +359,12 @@ export function RulesPage() {
                 checked={s.ignore.no_attendees}
                 onChange={(no_attendees) => ignore({ no_attendees })}
               />
+              <Check
+                label={cal.ignoreNoLink}
+                hint={r.noJoinLinkHint}
+                checked={s.ignore.no_join_link}
+                onChange={(no_join_link) => ignore({ no_join_link })}
+              />
             </div>
             <Keywords value={s.ignore.keywords} onSave={(keywords) => ignore({ keywords })} />
           </>

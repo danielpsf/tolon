@@ -21,6 +21,15 @@ describe("settings pages", () => {
     ]);
   });
 
+  it("S8.3 the Rules page has a call-link switch with its own label and hint in every locale", () => {
+    for (const locale of LOCALES) {
+      const { t } = createCopy(locale);
+      expect(t.calendars.ignoreNoLink, locale).not.toBe(t.calendars.ignoreSolo);
+      expect(t.settings.rules.noJoinLinkHint, locale).not.toBe(t.settings.rules.noAttendeesHint);
+    }
+    expect(createCopy("en-US").t.calendars.ignoreNoLink).toBe("Skip events without a call link");
+  });
+
   it("AC9.5 accepts a lead time of 1 to 60 whole minutes only", () => {
     expect([1, 2, 60].map((n) => parseLead(String(n)))).toEqual([1, 2, 60]);
     expect(parseLead(" 15 ")).toBe(15);
