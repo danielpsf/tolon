@@ -139,6 +139,8 @@ export interface MeetingDto {
   join: JoinDto;
   /** Attendee count; names never arrive. */
   people: number;
+  /** The event's LOCATION, trimmed (S5.3); null or absent when blank. */
+  location?: string | null;
 }
 
 /** The `alarm:show` payload and the answer to `alarms_current`: every meeting of one start minute (AC3.5). */
@@ -225,6 +227,8 @@ export interface ListedDto {
   /** Why it gets no alarm (S8.1), or null. */
   ignored: IgnoredReason | null;
   join: JoinDto;
+  /** The event's LOCATION, trimmed (S5.3); null or absent when blank. */
+  location?: string | null;
 }
 
 /** `occurrences_snooze`: `ended` when the snooze would have come after the meeting's window, so its reminders ended instead. */

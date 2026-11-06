@@ -79,6 +79,11 @@ export function detailsText(c: Copy, meeting: MeetingDto): string {
   return c.t.interrupt.details(range, provider, meeting.people);
 }
 
+/** The location to show after the details (S5.3): only when there is no call link, as a link's host names the place. */
+export function locationText(meeting: { join: JoinDto; location?: string | null }): string | null {
+  return meeting.join.kind === "link" ? null : meeting.location?.trim() || null;
+}
+
 /**
  * The key hint line follows what Enter does for the first meeting. It names Space only while Space
  * would mean "I am already there" (`spaceActive`), not while a Snooze or Dismiss button has focus.

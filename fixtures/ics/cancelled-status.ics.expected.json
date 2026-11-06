@@ -12,6 +12,7 @@
         "event": "fixture:confirmed-kept@example.com",
         "original_start": "2026-10-22T12:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-22T14:00:00+02:00",
       "title": "Roadmap review"
@@ -25,6 +26,7 @@
         "event": "fixture:tentative-kept@example.com",
         "original_start": "2026-10-23T09:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-23T11:00:00+02:00",
       "title": "Maybe: partner intro"

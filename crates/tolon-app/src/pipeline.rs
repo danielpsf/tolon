@@ -411,9 +411,11 @@ pub struct ListedDto {
     pub people: u32,
     pub ignored: Option<&'static str>,
     pub join: JoinDto,
+    /// The event's LOCATION, trimmed; `None` when blank (S5.3).
+    pub location: Option<String>,
 }
 
-/// The key (it holds the event id), the title and the join link are not printed.
+/// The key (it holds the event id), the title, the location and the join link are not printed.
 impl std::fmt::Debug for ListedDto {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ListedDto")
@@ -440,6 +442,7 @@ impl ListedDto {
                 Verdict::Ignored(reason) => Some(reason.code()),
             },
             join: JoinDto::of(&o.join),
+            location: crate::interrupt::location_text(o),
         }
     }
 }
