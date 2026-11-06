@@ -5348,7 +5348,7 @@ dependencies = [
 
 [[package]]
 name = "tolon-app"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5381,7 +5381,7 @@ dependencies = [
 
 [[package]]
 name = "tolon-core"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -5394,7 +5394,7 @@ dependencies = [
 
 [[package]]
 name = "tolon-platform"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "keyring",
  "objc2",
@@ -5413,7 +5413,7 @@ dependencies = [
 
 [[package]]
 name = "tolon-store"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "refinery",
  "rusqlite",
@@ -5426,7 +5426,7 @@ dependencies = [
 
 [[package]]
 name = "tolon-sync"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -6553,7 +6553,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "serde_json",
