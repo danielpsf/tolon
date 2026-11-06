@@ -3,8 +3,9 @@
 //!
 //! A window is built the first time its screen needs one and then kept: closing the interrupt
 //! hides it, the next alarm shows it again. Destroying a window leaks its native window on macOS
-//! (decision 2026-10-22, "Interrupt windows are reused"), so only a window whose screen is gone is
-//! destroyed. "Open" means shown: a hidden window never counts.
+//! (decision 2026-10-22, "Interrupt windows are reused"), so no window is ever destroyed: one whose
+//! screen is gone is hidden and kept, and shows again if the screen returns (S4.5, L-075).
+//! "Open" means shown: a hidden window never counts.
 //!
 //! The scheduler (`scheduler.rs`) calls [`open_interrupts`] when an alarm fires. The windows ask for the
 //! payload with `alarms_current` when they load and also listen for `alarm:show` / `alarm:hide`,
@@ -332,9 +333,6 @@ pub trait Windows {
     /// Takes a window off the screen and out of the key and focus chain, and keeps it for the
     /// next alarm. A window that does not exist is ignored.
     fn hide(&self, label: &str);
-    /// Closes a window for good. Only for a window whose screen is gone: closing leaks the
-    /// native window on macOS (decision 2026-10-22, "Interrupt windows are reused").
-    fn destroy(&self, label: &str);
     /// Notes the app that is in front, before anything of Tolon's comes forward.
     fn remember_frontmost(&self);
     /// Gives the front back to the app noted by `remember_frontmost`, once no window is left.
@@ -459,15 +457,6 @@ impl Windows for TauriWindows<'_> {
         }
     }
 
-    fn destroy(&self, label: &str) {
-        if let Some(window) = self.app.get_webview_window(label) {
-            // `destroy`, not `close`: the windows are not closable by the person.
-            if let Err(e) = window.destroy() {
-                tracing::warn!(label, error = %e, "could not destroy an interrupt window");
-            }
-        }
-    }
-
     fn remember_frontmost(&self) {
         self.on_main_thread("remember the frontmost app", |p| p.remember_frontmost());
     }
@@ -578,9 +567,10 @@ fn is_visible(states: &[WindowState], label: &str) -> bool {
 }
 
 /// One window per screen: each screen's window is shown (built the first time, reused after) and
-/// raised, and a window that is already shown is raised again. A window whose screen is gone is
-/// destroyed; no other window ever is. If a window cannot be shown, the ones this call showed are
-/// hidden again and the error returned; windows that were already shown stay.
+/// raised, and a window that is already shown is raised again. A shown window whose screen is gone
+/// is hidden (AppKit moved it onto a remaining screen when its display was unplugged) and kept for
+/// when the screen returns; no window is ever destroyed. If a window cannot be shown, the ones this
+/// call showed are hidden again and the error returned; windows that were already shown stay.
 ///
 /// An open that fails with no window left on screen forgets the app noted for the front: nothing
 /// is up to give it back after, and a later notification action must not pull up a stale app.
@@ -607,9 +597,9 @@ fn show_windows(windows: &dyn Windows, screens: &[Screen]) -> anyhow::Result<()>
     windows.leave_regular();
     for gone in before
         .iter()
-        .filter(|s| !specs.iter().any(|spec| spec.label == s.label))
+        .filter(|s| s.visible && !specs.iter().any(|spec| spec.label == s.label))
     {
-        windows.destroy(&gone.label);
+        windows.hide(&gone.label);
     }
     let mut shown: Vec<String> = Vec::new();
     for spec in specs {
@@ -955,7 +945,7 @@ mod tests {
     use tolon_platform::StubPlatform;
 
     /// A windowing system that records what it was asked and can be told to fail an open. A window
-    /// is in `windows` from its first open until it is destroyed; `visible` says if it is shown.
+    /// is in `windows` from its first open for good; `visible` says if it is shown.
     #[derive(Default)]
     struct FakeWindows {
         windows: RefCell<Vec<WindowState>>,
@@ -1045,7 +1035,6 @@ mod tests {
             Ok(())
         }
         fn hide(&self, _label: &str) {}
-        fn destroy(&self, _label: &str) {}
         fn remember_frontmost(&self) {}
         fn restore_previous(&self) {}
         fn forget_frontmost(&self) {}
@@ -1094,10 +1083,6 @@ mod tests {
             {
                 w.visible = false;
             }
-        }
-        fn destroy(&self, label: &str) {
-            self.calls.borrow_mut().push(format!("destroy {label}"));
-            self.windows.borrow_mut().retain(|w| w.label != label);
         }
         fn remember_frontmost(&self) {
             self.calls.borrow_mut().push("remember".to_owned());
@@ -1484,24 +1469,55 @@ mod tests {
     }
 
     #[test]
-    fn s4_2_a_window_whose_screen_is_gone_is_destroyed_and_the_others_are_kept() -> TestResult {
-        // Screens 1 and 2 had windows (2 hidden); only screen 1 is left.
+    fn s4_2_a_hidden_window_of_a_gone_screen_is_left_alone_and_kept() -> TestResult {
+        // Screens 1 and 2 had windows (both hidden); only screen 1 is left.
         let windows = FakeWindows::with(&[], &["interrupt-1", "interrupt-2"]);
         open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
         assert_eq!(
             windows.calls(),
-            [
-                "remember",
-                "destroy interrupt-2",
-                "open interrupt-1",
-                "raise interrupt-1"
-            ]
+            ["remember", "open interrupt-1", "raise interrupt-1"]
         );
-        assert_eq!(windows.labels(), ["interrupt-1"]);
-        // A shown window of a gone screen goes too.
-        let windows = FakeWindows::with(&["interrupt-1", "interrupt-3"], &[]);
-        open_windows(&windows, &[screen(1, 0.0, 1.0)])?;
-        assert_eq!(windows.labels(), ["interrupt-1"]);
+        assert_eq!(windows.labels(), ["interrupt-1", "interrupt-2"]);
+        assert_eq!(windows.shown(), ["interrupt-1"]);
+        Ok(())
+    }
+
+    #[test]
+    fn s4_5_display_disappears_while_shown() -> TestResult {
+        // The interrupt is up on displays 1 and 2; display 2 is unplugged, so AppKit moved its
+        // window onto display 1 and it is still shown.
+        let windows = FakeWindows::with(&["interrupt-1", "interrupt-2"], &[]);
+        let one = [screen(1, 0.0, 1.0)];
+        open_windows(&windows, &one)?;
+        // The window of the gone display is hidden, not left on the remaining one and not
+        // destroyed (a destroyed window may stay on screen, and nothing could hide it any more).
+        assert_eq!(windows.shown(), ["interrupt-1"]);
+        assert_eq!(windows.labels(), ["interrupt-1", "interrupt-2"]);
+        assert_eq!(
+            windows.calls(),
+            ["hide interrupt-2", "raise interrupt-1"],
+            "hidden before anything is raised"
+        );
+        // Esc still reaches every window Tolon owns.
+        hide_windows(&windows);
+        assert!(windows.shown().is_empty());
+        // The next alarm shows exactly one window per connected display.
+        let earlier = windows.calls().len();
+        open_windows(&windows, &one)?;
+        assert_eq!(windows.shown(), ["interrupt-1"]);
+        assert!(windows.calls()[earlier..]
+            .iter()
+            .all(|c| !c.contains("interrupt-2")));
+        // And the display coming back shows its own window again, still one per display.
+        let two = [screen(1, 0.0, 1.0), screen(2, 1920.0, 1.0)];
+        hide_windows(&windows);
+        open_windows(&windows, &two)?;
+        assert_eq!(windows.shown(), ["interrupt-1", "interrupt-2"]);
+        assert_eq!(windows.labels(), ["interrupt-1", "interrupt-2"]);
+        assert!(
+            windows.built.borrow().is_empty(),
+            "no window is built again"
+        );
         Ok(())
     }
 
@@ -1538,10 +1554,10 @@ mod tests {
         Ok(())
     }
 
-    /// A source check for the real windows, which no test can build: closing hides, and the only
-    /// call that destroys is the one for a gone screen (the leak of L-047).
+    /// A source check for the real windows, which no test can build: closing hides, and nothing
+    /// destroys a window (the leak of L-047, the stray window of F2).
     #[test]
-    fn s4_2_closing_hides_and_only_a_gone_screen_destroys() {
+    fn s4_2_closing_hides_and_nothing_destroys() {
         let source = include_str!("interrupt.rs");
         let shipped = source.split("#[cfg(test)]").next().unwrap_or_default();
         let close = shipped
@@ -1552,7 +1568,7 @@ mod tests {
         assert!(close.contains("hide_windows("), "{close}");
         assert!(!close.contains("restore_previous"), "{close}");
         assert!(!close.contains("destroy"), "{close}");
-        assert_eq!(shipped.matches("windows.destroy(").count(), 1);
+        assert!(!shipped.contains(".destroy("));
         assert!(shipped.contains("window.hide()"));
     }
 
