@@ -63,6 +63,11 @@ fn sm_error(call: &'static str, e: &NSError) -> PlatformError {
     }
 }
 
+/// An activation policy as the number AppKit gives it: 0 Regular, 1 Accessory, 2 Prohibited.
+fn policy_code(policy: NSApplicationActivationPolicy) -> u32 {
+    u32::try_from(policy.0).unwrap_or(u32::MAX)
+}
+
 impl Platform for MacPlatform {
     fn name(&self) -> &'static str {
         "macos"
@@ -75,20 +80,37 @@ impl Platform for MacPlatform {
     }
 
     /// `NSApp.setActivationPolicy`: Regular for Cmd-Tab and the Dock while settings shows,
-    /// Accessory otherwise (L-068). A false answer from AppKit is an error.
+    /// Accessory otherwise (L-068). AppKit's BOOL answer is not trusted alone (L-074: it was NO
+    /// on every Regular to Accessory switch, with no documented reason), so the policy is read
+    /// back: already the target is success. If not, one retry through `Prohibited` (a workaround
+    /// reported on Stack Overflow, unverified on macOS 27), then another read back. Only then an
+    /// error, whose `code` is the policy found (0 Regular, 1 Accessory, 2 Prohibited).
     fn set_regular(&self, regular: bool) -> Result<(), PlatformError> {
         let mtm = main_thread()?;
-        let policy = if regular {
+        let target = if regular {
             NSApplicationActivationPolicy::Regular
         } else {
             NSApplicationActivationPolicy::Accessory
         };
-        if NSApplication::sharedApplication(mtm).setActivationPolicy(policy) {
+        let app = NSApplication::sharedApplication(mtm);
+        app.setActivationPolicy(target);
+        if app.activationPolicy() == target {
+            return Ok(());
+        }
+        app.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+        app.setActivationPolicy(target);
+        let now = app.activationPolicy();
+        if now == target {
             Ok(())
         } else {
+            // Stuck Prohibited would leave Tolon with no menu bar and no tray: a Regular app is
+            // the lesser harm, and the error below still says what was found.
+            if now == NSApplicationActivationPolicy::Prohibited {
+                app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+            }
             Err(PlatformError::Os {
                 call: "setActivationPolicy",
-                code: 0,
+                code: policy_code(now),
             })
         }
     }
@@ -394,6 +416,14 @@ mod tests {
             MacPlatform.set_start_at_login(true),
             Err(PlatformError::NotMainThread)
         );
+    }
+
+    #[test]
+    fn policy_codes_follow_appkit() {
+        assert_eq!(policy_code(NSApplicationActivationPolicy::Regular), 0);
+        assert_eq!(policy_code(NSApplicationActivationPolicy::Accessory), 1);
+        assert_eq!(policy_code(NSApplicationActivationPolicy::Prohibited), 2);
+        assert_eq!(policy_code(NSApplicationActivationPolicy(-1)), u32::MAX);
     }
 
     #[test]
