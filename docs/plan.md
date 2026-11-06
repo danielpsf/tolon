@@ -253,8 +253,9 @@ Feature: F5 Join links
     Then the primary button reads "I am already there"
 
   Scenario: S5.3 Location shown
-    Given an event with a LOCATION and no join link
-    Then the interrupt and the panel show the location text
+    Given an event with a LOCATION, with or without a join link
+    Then the interrupt and the panel show the location text, without any URL in it
+    And a Google generated room name shows as the room name only
 ```
 
 ### F6 Alarm sound

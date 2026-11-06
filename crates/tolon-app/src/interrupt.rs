@@ -85,17 +85,31 @@ impl MeetingDto {
     }
 }
 
-/// The location as the pages show it: trimmed, `None` when nothing is left (S5.3) or when the
-/// join link may have come from it (the pages get the host only, AC1.3).
+/// The location as the pages show it (S5.3): URL tokens removed, since the join link may be in it
+/// and the pages get the host only (AC1.3); lines (Apple puts the address on its own lines) shown
+/// as one line with ", "; `None` when nothing is left.
 pub(crate) fn location_text(o: &Occurrence) -> Option<String> {
-    if matches!(o.join, JoinTarget::Link { .. }) {
-        return None;
-    }
-    o.location
-        .as_deref()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .map(str::to_owned)
+    let text = o
+        .location
+        .as_deref()?
+        .lines()
+        .map(|line| {
+            line.split_whitespace()
+                .filter(|w| {
+                    let w = w.to_ascii_lowercase();
+                    !w.contains("http://") && !w.contains("https://")
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .map(|line| {
+            line.trim_matches(|c: char| c == ',' || c == ';' || c.is_whitespace())
+                .to_owned()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+    (!text.is_empty()).then_some(text)
 }
 
 impl JoinDto {
@@ -842,14 +856,33 @@ mod tests {
             o.location = raw.map(str::to_owned);
             assert_eq!(MeetingDto::from_occurrence(&o).location.as_deref(), shown);
         }
-        // A link may come from the location: the page gets the host, never the text.
-        o.location = Some("https://meet.example/SECRET".to_owned());
+        // A link may come from the location: the page gets the host, never the URL text.
         o.join = JoinTarget::Link {
             url: "https://meet.example/SECRET".to_owned(),
             host: "meet.example".to_owned(),
             recognised: false,
         };
-        assert_eq!(MeetingDto::from_occurrence(&o).location, None);
+        for (raw, shown) in [
+            ("https://meet.example/SECRET", None),
+            ("Room 4.12, https://meet.example/SECRET", Some("Room 4.12")),
+            ("Room 4.12 (https://meet.example/SECRET)", Some("Room 4.12")),
+            ("Room 4 HTTPS://meet.example/SECRET", Some("Room 4")),
+            (
+                "Some Store\n123 Main Street\nSpringfield",
+                Some("Some Store, 123 Main Street, Springfield"),
+            ),
+            (
+                "HQ-1-1P Mitte (8) [Google Meet]",
+                Some("HQ-1-1P Mitte (8) [Google Meet]"),
+            ),
+        ] {
+            o.location = Some(raw.to_owned());
+            assert_eq!(
+                MeetingDto::from_occurrence(&o).location.as_deref(),
+                shown,
+                "{raw}"
+            );
+        }
         Ok(())
     }
 
