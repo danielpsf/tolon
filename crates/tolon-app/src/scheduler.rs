@@ -72,6 +72,7 @@ pub const LEAD_MINUTES: &str = "lead_minutes";
 pub const AGAIN_AT_START: &str = "again_at_start";
 pub const IGNORE_KEYWORDS: &str = "ignore_keywords";
 pub const IGNORE_NO_ATTENDEES: &str = "ignore_no_attendees";
+pub const IGNORE_NO_JOIN_LINK: &str = "ignore_no_join_link";
 /// `"soft_bell"`, `"chime"` or `"none"`.
 pub const SOUND: &str = "sound";
 /// Repeat the sound every 30 s until the interrupt closes. Default on (AC6.1).

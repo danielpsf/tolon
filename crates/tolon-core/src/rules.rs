@@ -8,7 +8,7 @@ use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
 use crate::expand::{expand_judged, ExpandOptions};
-use crate::model::{Event, Occurrence};
+use crate::model::{Event, JoinTarget, Occurrence};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IgnoreRules {
@@ -16,6 +16,8 @@ pub struct IgnoreRules {
     pub keywords: String,
     /// Drop events with no attendee besides the owner. Default off.
     pub without_other_attendees: bool,
+    /// Drop events whose join target is `JoinTarget::None` (no link anywhere). Default off (S8.3).
+    pub without_join_link: bool,
 }
 
 impl Default for IgnoreRules {
@@ -23,6 +25,7 @@ impl Default for IgnoreRules {
         Self {
             keywords: "Focus, Lunch, OOO".to_string(),
             without_other_attendees: false,
+            without_join_link: false,
         }
     }
 }
@@ -33,6 +36,7 @@ pub enum IgnoreReason {
     /// The keyword that matched, as the person typed it (trimmed).
     Keyword(String),
     NoOtherAttendees,
+    NoJoinLink,
     AllDay,
     Declined,
     Cancelled,
@@ -45,6 +49,7 @@ impl IgnoreReason {
         match self {
             Self::Keyword(_) => "keyword",
             Self::NoOtherAttendees => "no_attendees",
+            Self::NoJoinLink => "no_join_link",
             Self::AllDay => "all_day",
             Self::Declined => "declined",
             Self::Cancelled => "cancelled",
@@ -109,6 +114,8 @@ fn judge(
                 Verdict::Ignored(IgnoreReason::Keyword((*k).to_string()))
             } else if rules.without_other_attendees && occ.people == 0 {
                 Verdict::Ignored(IgnoreReason::NoOtherAttendees)
+            } else if rules.without_join_link && occ.join == JoinTarget::None {
+                Verdict::Ignored(IgnoreReason::NoJoinLink)
             } else {
                 Verdict::Keep
             };

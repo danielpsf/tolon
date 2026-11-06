@@ -179,6 +179,7 @@ export interface IgnoreDto {
   declined: boolean;
   cancelled: boolean;
   no_attendees: boolean;
+  no_join_link: boolean;
   /** Trimmed, at most 50 of up to 64 characters each; matched case-insensitively. */
   keywords: string[];
 }
@@ -210,7 +211,7 @@ export type SettingsPatch = Partial<Omit<SettingsDto, "quiet" | "ignore" | "star
 
 // The tray panel (F7): `ListedDto` in crates/tolon-app/src/pipeline.rs, `PauseDto` in commands.rs.
 
-export type IgnoredReason = "keyword" | "all_day" | "declined" | "cancelled" | "no_attendees";
+export type IgnoredReason = "keyword" | "all_day" | "declined" | "cancelled" | "no_attendees" | "no_join_link";
 
 /** One of today's meetings from `occurrences_today`. No URL: Join goes through `occurrences_join`. */
 export interface ListedDto {

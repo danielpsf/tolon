@@ -170,7 +170,7 @@ describe("the feed hands Rust the bundle", () => {
       sound: "bell",
       sound_repeat: true,
       quiet: { enabled: false, start: "18:00", end: "09:00", weekends: true },
-      ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, keywords: [] },
+      ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, no_join_link: false, keywords: [] },
       appearance: "auto",
       interrupt_color: "theme",
       style: "swiss-moss",

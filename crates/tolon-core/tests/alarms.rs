@@ -7,7 +7,7 @@ use common::{at, occ, TestResult};
 use tolon_core::{
     already_there, apply_rules, dismiss, expand_window, join, judge_window, parse_ics, snooze,
     snooze_later, Alarm, AlarmKind, AlarmState, EventId, ExpandOptions, IgnoreReason, IgnoreRules,
-    OccurrenceKey, ParseOptions, Verdict,
+    JoinTarget, OccurrenceKey, ParseOptions, Verdict,
 };
 
 fn key(event: &str) -> TestResult<OccurrenceKey> {
@@ -210,6 +210,7 @@ fn ac8_2_keywords_are_case_insensitive_and_comma_separated() -> TestResult {
     let custom = IgnoreRules {
         keywords: " standup ,, ,Ünï ".to_string(),
         without_other_attendees: false,
+        without_join_link: false,
     };
     let got = verdicts(
         &custom,
@@ -220,6 +221,7 @@ fn ac8_2_keywords_are_case_insensitive_and_comma_separated() -> TestResult {
     let empty = IgnoreRules {
         keywords: " , ,".to_string(),
         without_other_attendees: false,
+        without_join_link: false,
     };
     assert_eq!(verdicts(&empty, &[("Focus", 0)])?, [Verdict::Keep]);
     Ok(())
@@ -242,6 +244,52 @@ fn ac8_2_events_without_other_attendees_default_off() -> TestResult {
         [no_others, Verdict::Keep, Verdict::Keep],
         "one ATTENDEE line is someone else; only none at all is a solo event"
     );
+    Ok(())
+}
+
+#[test]
+fn s8_3_skip_events_without_join_link() -> TestResult {
+    let start = at(14, 0)?;
+    let mut no_link = occ("Hallway chat", start, 3);
+    no_link.join = JoinTarget::None;
+    let with_link = occ("Standup", start, 3);
+    let judge = |rules: &IgnoreRules| -> Vec<Verdict> {
+        apply_rules(vec![no_link.clone(), with_link.clone()], rules)
+            .into_iter()
+            .map(|(_, v)| v)
+            .collect()
+    };
+    assert!(!IgnoreRules::default().without_join_link, "default off");
+    assert_eq!(
+        judge(&IgnoreRules::default()),
+        [Verdict::Keep, Verdict::Keep],
+        "rule off keeps both"
+    );
+    let on = IgnoreRules {
+        without_join_link: true,
+        ..IgnoreRules::default()
+    };
+    assert_eq!(
+        judge(&on),
+        [Verdict::Ignored(IgnoreReason::NoJoinLink), Verdict::Keep],
+        "rule on drops only the event with no link"
+    );
+    assert_eq!(IgnoreReason::NoJoinLink.code(), "no_join_link");
+    // Precedence: keyword, then attendees, then this.
+    let mut solo_focus = occ("Focus", start, 0);
+    solo_focus.join = JoinTarget::None;
+    let both = IgnoreRules {
+        without_other_attendees: true,
+        ..on.clone()
+    };
+    let got = apply_rules(vec![solo_focus.clone()], &both);
+    assert_eq!(
+        got[0].1,
+        Verdict::Ignored(IgnoreReason::Keyword("Focus".into()))
+    );
+    solo_focus.title = "Solo".into();
+    let got = apply_rules(vec![solo_focus], &both);
+    assert_eq!(got[0].1, Verdict::Ignored(IgnoreReason::NoOtherAttendees));
     Ok(())
 }
 
