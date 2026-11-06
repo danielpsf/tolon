@@ -339,5 +339,6 @@ The review is in `docs/feedback/2026-11-06-beta1.md` (anonymised). Decisions by 
 - (F6, L-078) New ignore rule "Skip events without a join link", default off. New scenario S8.3. "Skip events longer than N hours" is not added.
 - (R1, L-079) The Calendars form warns about a `/public/basic.ics` address before any sync. New scenario S1.6. OAuth (M5) stays the real fix.
 - (R3, L-080) The location text shows on the interrupt and the panel; a map needs a network call and is parked. New scenario S5.3.
-- (F4, F5, L-077) Stay unconfirmed until the test alarm runs on the owner's two externals; no CSS change before that.
+- (F4, F5, L-077) Stay unconfirmed until the test alarm runs on the owner's two externals; no CSS change before that. Closed 2026-11-06: not reproduced on either display with two same-minute meetings; see the L-077 row.
+- Translations of new copy: cross-reviewed by Gemini 3.1 Pro and Claude Sonnet, with Google Calendar's own localised label for "Secret address in iCal format" fetched from support.google.com per language as the reference. Six strings aligned to Google's wording (de, hi, ja, zh-CN, pt-BR, pt-PT) and one Turkish grammar fix. Native review is still welcome but no longer blocks.
 - (R2, R4) No change: shared "busy" events already fire through iCal; the panel already shows the next event.

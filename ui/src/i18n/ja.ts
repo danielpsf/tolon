@@ -56,7 +56,7 @@ export const ja: Messages = {
     renamePlaceholder: "空のままにすると、カレンダー自体の名前を使います",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon はリンクをこのコンピュータに保存し、読み取りにだけ使います。",
-    publicAddressHint: "これは公開アドレスで、公開カレンダーでのみ使えます。代わりに iCal 形式のシークレット アドレスを貼り付けてください。Google Workspace で表示されない場合は、{help}をご覧ください。",
+    publicAddressHint: "これは公開アドレスで、公開カレンダーでのみ使えます。代わりに 「iCal 形式の非公開 URL」を貼り付けてください。Google Workspace で表示されない場合は、{help}をご覧ください。",
     publicAddressHelp: "ヘルプ",
     adding: "カレンダーを追加しています",
     empty: "カレンダーはまだありません。iCal リンクを貼り付けて追加してください。",
