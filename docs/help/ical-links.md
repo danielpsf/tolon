@@ -40,6 +40,12 @@ The ICS link is private. Anyone who has it can read the calendar. Unpublish stop
 
 Use the secret address, not the public one. The public address only works if the calendar is public; if it is not, Tolon says "this calendar is not public". The Reset button under the secret address makes a new one and stops the old one working. Use it if the link ever leaks.
 
+If you use Google Workspace (a work account), your admin may hide the secret address. Pick one of these:
+
+- Ask your Workspace admin to allow the secret address for your organisation. In the Admin console it is under Apps, Google Workspace, Calendar, Sharing settings, External sharing options.
+- Share the work calendar with a personal Google account, then subscribe to it there. Open the work calendar's sharing settings, add your personal address with "See all event details", and accept the invitation. Then take the secret address from your personal account, using the steps above.
+- Wait for Sign in with Google, which is planned for a later beta and needs no address.
+
 ## Yahoo Calendar
 
 1. Open [calendar.yahoo.com](https://calendar.yahoo.com) and sign in.

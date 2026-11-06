@@ -55,6 +55,8 @@ export const zhCN: Messages = {
     renamePlaceholder: "留空则使用日历自带的名称",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon 只把链接保存在这台电脑上，并且只从中读取。",
+    publicAddressHint: "这是公开地址，只适用于公开日历。请改为粘贴 iCal 格式的私密地址。如果你的 Google Workspace 隐藏了它，请参阅{help}。",
+    publicAddressHelp: "帮助",
     adding: "正在添加日历",
     empty: "还没有日历。粘贴 iCal 链接即可添加。",
     signInGoogle: "使用 Google 登录",

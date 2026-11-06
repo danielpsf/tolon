@@ -56,6 +56,8 @@ export const de: Messages = {
     renamePlaceholder: "Leer lassen, um den eigenen Namen des Kalenders zu verwenden",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon speichert den Link auf diesem Computer und liest nur daraus.",
+    publicAddressHint: "Das ist die öffentliche Adresse, die nur bei öffentlichen Kalendern funktioniert. Füge stattdessen die geheime Adresse im iCal-Format ein. Wenn dein Google Workspace sie ausblendet, siehe {help}.",
+    publicAddressHelp: "Hilfe",
     adding: "Kalender wird hinzugefügt",
     empty: "Noch keine Kalender. Füge einen iCal-Link ein, um einen hinzuzufügen.",
     signInGoogle: "Mit Google anmelden",

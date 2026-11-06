@@ -56,6 +56,8 @@ export const hi: Messages = {
     renamePlaceholder: "कैलेंडर का अपना नाम इस्तेमाल करने के लिए खाली छोड़ें",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon लिंक को इसी कंप्यूटर पर रखता है और उससे सिर्फ़ पढ़ता है।",
+    publicAddressHint: "यह सार्वजनिक पता है, जो सिर्फ़ सार्वजनिक कैलेंडर के लिए काम करता है। इसके बजाय iCal फ़ॉर्मैट वाला गुप्त पता चिपकाएँ। अगर आपका Google Workspace उसे छिपाता है, तो {help} देखें।",
+    publicAddressHelp: "सहायता",
     adding: "कैलेंडर जोड़ा जा रहा है",
     empty: "अभी कोई कैलेंडर नहीं है। जोड़ने के लिए एक iCal लिंक चिपकाएं।",
     signInGoogle: "Google से साइन इन करें",

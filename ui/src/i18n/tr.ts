@@ -55,6 +55,8 @@ export const tr: Messages = {
     renamePlaceholder: "Takvimin kendi adını kullanmak için boş bırak",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon bağlantıyı bu bilgisayarda saklar ve yalnızca okur.",
+    publicAddressHint: "Bu herkese açık adres ve yalnızca herkese açık takvimlerde çalışır. Bunun yerine iCal biçimindeki gizli adresi yapıştır. Google Workspace'in bunu gizliyorsa {help} bölümüne bak.",
+    publicAddressHelp: "Yardım",
     adding: "Takvim ekleniyor",
     empty: "Henüz takvim yok. Eklemek için bir iCal bağlantısı yapıştır.",
     signInGoogle: "Google ile oturum aç",

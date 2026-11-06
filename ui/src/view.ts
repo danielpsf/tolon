@@ -25,6 +25,17 @@ export function statusHelp(calendar: CalendarDto, c: Copy): { href: string; text
   return { href: "#/help/ical-links/google-calendar", text: c.t.calendars.secretAddressHelp };
 }
 
+/** A Google public address (S1.6): it only works for a public calendar, so the form advises the secret one before any sync. */
+export function isGooglePublicAddress(value: string): boolean {
+  return /^(?:https?|webcal):\/\/calendar\.google\.com\/calendar\/ical\/[^/?#]+\/public\/basic\.ics(?:[?#]|$)/i.test(value.trim());
+}
+
+/** The public-address hint as the text before and after its Help link; the locale decides where the link sits. */
+export function publicAddressHintParts(c: Copy): [before: string, after: string] {
+  const [before = "", after = ""] = c.t.calendars.publicAddressHint.split("{help}");
+  return [before, after];
+}
+
 /** "Work, iCal subscription" for a feed, "Team, Google Calendar, signed in" for Google, the bare name for anything else. */
 export function titleOf(calendar: CalendarDto, c: Copy): string {
   const { calendars } = c.t;
