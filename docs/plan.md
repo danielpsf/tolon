@@ -90,6 +90,11 @@ Feature: F1 iCal subscription
     When the next refresh runs
     Then the request carries If-None-Match
     And a 304 response keeps the cached events unchanged
+
+  Scenario: S1.6 Public address of a private Google calendar
+    Given I paste a Google address ending in "/public/basic.ics"
+    Then the form says, before any sync, that this is the public address and asks for the Secret address instead
+    And the help explains what to do when a Google Workspace hides the Secret address
 ```
 
 ### F2 Parse and expand events
@@ -215,6 +220,12 @@ Feature: F4 Interrupt window
     When an alarm fires
     Then a notification with "Join" and "Snooze" actions appears
     And the alarm sound plays
+
+  Scenario: S4.5 A display disappears while the interrupt is shown
+    Given the interrupt is shown on two displays
+    When one display is unplugged
+    Then that display's window is hidden and not left on the remaining display
+    And the next alarm shows exactly one window per connected display
 ```
 
 ### F5 Join links
@@ -240,6 +251,10 @@ Feature: F5 Join links
   Scenario: S5.2 No link
     Given an event with no link anywhere
     Then the primary button reads "I am already there"
+
+  Scenario: S5.3 Location shown
+    Given an event with a LOCATION and no join link
+    Then the interrupt and the panel show the location text
 ```
 
 ### F6 Alarm sound
@@ -291,6 +306,12 @@ Feature: F8 Rules
     Given "Ignore all-day events" is on and an all-day event today
     When I turn the rule off
     Then an alarm for that event appears within 15 seconds
+
+  Scenario: S8.3 Skip events without a join link
+    Given "Skip events without a join link" is on
+    And an event with no link anywhere
+    Then no alarm is scheduled for it
+    And it is listed in the panel with a muted "ignored" tag
 ```
 
 ### F9 Settings and persistence
