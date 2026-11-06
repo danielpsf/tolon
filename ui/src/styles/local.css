@@ -113,6 +113,7 @@
 .tl-status {
   color: var(--sm-moss);
   font-size: 13px;
+  max-width: 240px;
   text-align: end;
 }
 .tl-status.failed {
