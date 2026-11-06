@@ -67,6 +67,8 @@ export const ar: Messages = {
     renamePlaceholder: "اتركه فارغًا لاستخدام اسم التقويم نفسه",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "يحفظ Tolon الرابط على هذا الكمبيوتر ويقرأ منه فقط.",
+    publicAddressHint: "هذا هو العنوان العام الذي يعمل مع التقويمات العامة فقط. الصق بدلاً منه العنوان السري بتنسيق iCal. إذا كان Google Workspace يخفيه فراجع {help}.",
+    publicAddressHelp: "المساعدة",
     adding: "جارٍ إضافة التقويم",
     empty: "لا توجد تقويمات بعد. الصق رابط iCal لإضافة تقويم.",
     signInGoogle: "تسجيل الدخول باستخدام Google",

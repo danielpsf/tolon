@@ -71,6 +71,8 @@ export const he: Messages = {
     renamePlaceholder: "אפשר להשאיר ריק כדי להשתמש בשם של היומן עצמו",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon שומר את הקישור במחשב הזה ורק קורא ממנו.",
+    publicAddressHint: "זו הכתובת הציבורית, שפועלת רק ביומנים ציבוריים. יש להדביק במקומה את הכתובת הסודית בפורמט iCal. אם Google Workspace מסתיר אותה, אפשר לעיין ב{help}.",
+    publicAddressHelp: "עזרה",
     adding: "היומן מתווסף",
     empty: "אין עדיין יומנים. אפשר להדביק קישור iCal כדי להוסיף יומן.",
     signInGoogle: "כניסה עם Google",

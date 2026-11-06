@@ -56,6 +56,8 @@ export const ptBR: Messages = {
     renamePlaceholder: "Deixe em branco para usar o nome do próprio calendário",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "O Tolon guarda o link neste computador e só lê o calendário.",
+    publicAddressHint: "Este é o endereço público, que só funciona com calendários públicos. Cole o endereço secreto em formato iCal no lugar dele. Se o seu Google Workspace o oculta, veja a {help}.",
+    publicAddressHelp: "Ajuda",
     adding: "Adicionando calendário",
     empty: "Nenhum calendário ainda. Cole um link iCal para adicionar um.",
     signInGoogle: "Entrar com o Google",

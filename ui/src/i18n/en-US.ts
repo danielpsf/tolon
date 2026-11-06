@@ -56,6 +56,8 @@ export const enUS = {
     renamePlaceholder: "Leave empty to use the calendar's own name",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon keeps the link on this computer and only reads from it.",
+    publicAddressHint: "This is the public address, which only works for public calendars. Paste the Secret address in iCal format instead. If your Google Workspace hides it, see {help}.",
+    publicAddressHelp: "Help",
     adding: "Adding calendar",
     empty: "No calendars yet. Paste an iCal link to add one.",
     // Google sign-in (F13). The done page is what the browser shows once Google sends it back to Tolon.

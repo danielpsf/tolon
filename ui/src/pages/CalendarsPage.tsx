@@ -3,7 +3,7 @@ import { api, asCommandError } from "../api";
 import type { CalendarDto, GoogleAccountDto } from "../api-types";
 import { copy } from "../copy";
 import { useCalendars } from "../store";
-import { cancelsRename, errorText, MAX_NAME_LENGTH, renameValue, statusHelp, statusOf, titleParts } from "../view";
+import { cancelsRename, errorText, isGooglePublicAddress, MAX_NAME_LENGTH, publicAddressHintParts, renameValue, statusHelp, statusOf, titleParts } from "../view";
 
 const TICK_MS = 30_000;
 
@@ -229,6 +229,20 @@ function ConfirmRemove({
   );
 }
 
+/** Advice under the address field (S1.6): a Google public address only works for a public calendar. It never blocks the add. */
+export function PublicAddressHint({ url }: { url: string }) {
+  const c = copy();
+  if (!isGooglePublicAddress(url)) return null;
+  const [before, after] = publicAddressHintParts(c);
+  return (
+    <span className="sm-hint" id="calendar-url-public">
+      {before}
+      <a href="#/help/ical-links/google-calendar">{c.t.calendars.publicAddressHelp}</a>
+      {after}
+    </span>
+  );
+}
+
 /** The iCal form (`#add-calendar`), shared by the Calendars page and first run (F10). */
 export function AddCalendarForm({
   onAdded,
@@ -282,12 +296,13 @@ export function AddCalendarForm({
           value={url}
           disabled={pending}
           aria-invalid={addError !== null}
-          aria-describedby={addError ? "calendar-url-hint calendar-url-error" : "calendar-url-hint"}
+          aria-describedby={["calendar-url-hint", isGooglePublicAddress(url) && "calendar-url-public", addError && "calendar-url-error"].filter(Boolean).join(" ")}
           onChange={(e) => setUrl(e.target.value)}
         />
         <span className="sm-hint" id="calendar-url-hint">
           {t.urlHint}
         </span>
+        <PublicAddressHint url={url} />
         {addError && (
           <span className="sm-error" id="calendar-url-error" role="alert">
             {addError}

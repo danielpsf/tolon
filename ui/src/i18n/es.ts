@@ -56,6 +56,8 @@ export const es: Messages = {
     renamePlaceholder: "Déjalo en blanco para usar el nombre del propio calendario",
     urlPlaceholder: "https://calendar.example.com/team.ics",
     urlHint: "Tolon guarda el enlace en este equipo y solo lee de él.",
+    publicAddressHint: "Esta es la dirección pública, que solo funciona con calendarios públicos. Pega en su lugar la dirección secreta en formato iCal. Si tu Google Workspace la oculta, consulta la {help}.",
+    publicAddressHelp: "Ayuda",
     adding: "Agregando calendario",
     empty: "Aún no hay calendarios. Pega un enlace iCal para agregar uno.",
     signInGoogle: "Iniciar sesión con Google",
