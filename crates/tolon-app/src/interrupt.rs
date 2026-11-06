@@ -85,17 +85,18 @@ impl MeetingDto {
     }
 }
 
-/// The location as the pages show it: trimmed, `None` when nothing is left (S5.3) or when the
-/// join link may have come from it (the pages get the host only, AC1.3).
+/// The location as the pages show it (S5.3): URL tokens removed, since the join link may be in it
+/// and the pages get the host only (AC1.3); whitespace collapsed; `None` when nothing is left.
 pub(crate) fn location_text(o: &Occurrence) -> Option<String> {
-    if matches!(o.join, JoinTarget::Link { .. }) {
-        return None;
-    }
-    o.location
-        .as_deref()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .map(str::to_owned)
+    let text = o
+        .location
+        .as_deref()?
+        .split_whitespace()
+        .filter(|w| !w.contains("http://") && !w.contains("https://"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text = text.trim_matches(|c: char| c == ',' || c == ';' || c.is_whitespace());
+    (!text.is_empty()).then(|| text.to_owned())
 }
 
 impl JoinDto {
@@ -842,14 +843,28 @@ mod tests {
             o.location = raw.map(str::to_owned);
             assert_eq!(MeetingDto::from_occurrence(&o).location.as_deref(), shown);
         }
-        // A link may come from the location: the page gets the host, never the text.
-        o.location = Some("https://meet.example/SECRET".to_owned());
+        // A link may come from the location: the page gets the host, never the URL text.
         o.join = JoinTarget::Link {
             url: "https://meet.example/SECRET".to_owned(),
             host: "meet.example".to_owned(),
             recognised: false,
         };
-        assert_eq!(MeetingDto::from_occurrence(&o).location, None);
+        for (raw, shown) in [
+            ("https://meet.example/SECRET", None),
+            ("Room 4.12, https://meet.example/SECRET", Some("Room 4.12")),
+            ("Room 4.12 (https://meet.example/SECRET)", Some("Room 4.12")),
+            (
+                "HQ-1-1P Mitte (8) [Google Meet]",
+                Some("HQ-1-1P Mitte (8) [Google Meet]"),
+            ),
+        ] {
+            o.location = Some(raw.to_owned());
+            assert_eq!(
+                MeetingDto::from_occurrence(&o).location.as_deref(),
+                shown,
+                "{raw}"
+            );
+        }
         Ok(())
     }
 

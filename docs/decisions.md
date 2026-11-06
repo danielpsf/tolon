@@ -342,3 +342,12 @@ The review is in `docs/feedback/2026-11-06-beta1.md` (anonymised). Decisions by 
 - (F4, F5, L-077) Stay unconfirmed until the test alarm runs on the owner's two externals; no CSS change before that. Closed 2026-11-06: not reproduced on either display with two same-minute meetings; see the L-077 row.
 - Translations of new copy: cross-reviewed by Gemini 3.1 Pro and Claude Sonnet, with Google Calendar's own localised label for "Secret address in iCal format" fetched from support.google.com per language as the reference. Six strings aligned to Google's wording (de, hi, ja, zh-CN, pt-BR, pt-PT) and one Turkish grammar fix. Native review is still welcome but no longer blocks.
 - (R2, R4) No change: shared "busy" events already fire through iCal; the panel already shows the next event.
+
+## 2026-11-06 Room names on the reminder (L-081)
+
+The owner's feed has 386 events with a room and a call link and 22 with a room only, so S5.3 "location only without a link" hid the room in the common hybrid case. Research (two sub-agents, sources in the L-081 row): Google generates every conference room's name as `Building-Floor-Section-Name (capacity) [features]` (Admin console "structured resource names", Directory API `generatedResourceName`, read-only), so it is a Google-wide pattern, not one company's setup. Microsoft 365, Apple and Nextcloud put free text in LOCATION with no documented pattern; Microsoft joins several locations with "; " and uses "Microsoft Teams Meeting" as a placeholder; Apple separates title and address with line breaks.
+
+Decided:
+- S5.3 becomes "location shown whenever it is set", with or without a call link. Rust strips URL tokens from the text (AC1.3: the page never sees a join URL), the UI does the rest.
+- Built-in cleanup, no setting: when the Google pattern matches, show the room names only ("1P Mitte, All Hands Area"); otherwise show the raw text with "Microsoft Teams Meeting" / "Microsoft Teams" segments dropped and line breaks or "; " shown as ", ". Unmatched text is never altered beyond that.
+- A person-defined pattern (regex with presets) is not built: no vendor other than Google has a pattern to strip. Follow-up row L-082 stays todo until a tester on another vendor reports noise.
