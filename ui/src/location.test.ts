@@ -49,7 +49,9 @@ describe("location (S5.3)", () => {
       ["Torstrasse 1 (3), Berlin", "Torstrasse 1 (3), Berlin"],
       ["Conference Room 2B; Microsoft Teams Meeting", "Conference Room 2B"],
       ["Microsoft Teams", ""],
-      ["Some Store\n123 Main Street\nSpringfield", "Some Store, 123 Main Street, Springfield"],
+      ["Zoom-Room (4)", "Zoom-Room (4)"],
+      ["Berlin-Mitte Office (2) Street 5", "Berlin-Mitte Office (2) Street 5"],
+      ["Room 3 (3)", "Room 3 (3)"],
     ];
     for (const [raw, shown] of cases) expect(locationText({ location: raw }), raw).toBe(shown || null);
   });

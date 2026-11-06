@@ -349,5 +349,5 @@ The owner's feed has 386 events with a room and a call link and 22 with a room o
 
 Decided:
 - S5.3 becomes "location shown whenever it is set", with or without a call link. Rust strips URL tokens from the text (AC1.3: the page never sees a join URL), the UI does the rest.
-- Built-in cleanup, no setting: when the Google pattern matches, show the room names only ("1P Mitte, All Hands Area"); otherwise show the raw text with "Microsoft Teams Meeting" / "Microsoft Teams" segments dropped and line breaks or "; " shown as ", ". Unmatched text is never altered beyond that.
+- Built-in cleanup, no setting: when the Google pattern matches, show the room names only ("1P Mitte, All Hands Area"); otherwise show the raw text with "Microsoft Teams Meeting" / "Microsoft Teams" segments dropped and line breaks (Rust) or "; " (UI) shown as ", ". The Google pattern needs the building and floor parts, so a plain "Zoom-Room (4)" or an address is left as it is; a room name with a hyphen in it loses the part before the hyphen (documented shortcut).
 - A person-defined pattern (regex with presets) is not built: no vendor other than Google has a pattern to strip. Follow-up row L-082 stays todo until a tester on another vendor reports noise.

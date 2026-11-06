@@ -79,15 +79,19 @@ export function detailsText(c: Copy, meeting: MeetingDto): string {
   return c.t.interrupt.details(range, provider, meeting.people);
 }
 
-/** A Google generated room name, "Building-Floor-Section-Name (capacity) [features]": the name only. */
-const GOOGLE_ROOM = /(?<=-)([^-,;()[\]]+?)\s*\(\d+\)(?:\s*\[[^\]]*\])?/gu;
+/**
+ * A Google generated room name, "Building-Floor-Section-Name (capacity) [features]": the name only.
+ * Needs the building and floor parts, so "Zoom-Room (4)" or an address stays as it is.
+ * shortcut: a room name with a hyphen in it loses the part before the hyphen, revisit if a feed shows one.
+ */
+const GOOGLE_ROOM = /(?:^|[,;]\s*)[^,;]*?-[^-,;]+-([^-,;()[\]]+?)\s*\(\d+\)(?:\s*\[[^\]]*\])?/gu;
 /** Outlook's placeholder for an online meeting; the join line already says it is on Teams. */
 const TEAMS_PLACEHOLDER = /^microsoft teams( meeting)?$/iu;
 
 /**
  * The location to show after the details (S5.3), decision 2026-11-06 "Room names": Google room
  * names reduced to the room; otherwise the text as the feed has it, minus Teams placeholders, with
- * line breaks and ";" (Microsoft's separator) shown as ", ". Rust already removed any URL.
+ * ";" (Microsoft's separator) shown as ", ". Rust already removed any URL and joined the lines.
  */
 export function locationText(meeting: { location?: string | null }): string | null {
   const raw = meeting.location?.trim();
@@ -95,7 +99,7 @@ export function locationText(meeting: { location?: string | null }): string | nu
   const rooms = [...raw.matchAll(GOOGLE_ROOM)].map((m) => m[1].trim());
   if (rooms.length > 0) return rooms.join(", ");
   const parts = raw
-    .split(/\s*(?:\n|;)\s*/u)
+    .split(/\s*;\s*/u)
     .map((p) => p.trim())
     .filter((p) => p && !TEAMS_PLACEHOLDER.test(p));
   return parts.join(", ") || null;

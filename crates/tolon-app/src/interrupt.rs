@@ -86,17 +86,30 @@ impl MeetingDto {
 }
 
 /// The location as the pages show it (S5.3): URL tokens removed, since the join link may be in it
-/// and the pages get the host only (AC1.3); whitespace collapsed; `None` when nothing is left.
+/// and the pages get the host only (AC1.3); lines (Apple puts the address on its own lines) shown
+/// as one line with ", "; `None` when nothing is left.
 pub(crate) fn location_text(o: &Occurrence) -> Option<String> {
     let text = o
         .location
         .as_deref()?
-        .split_whitespace()
-        .filter(|w| !w.contains("http://") && !w.contains("https://"))
+        .lines()
+        .map(|line| {
+            line.split_whitespace()
+                .filter(|w| {
+                    let w = w.to_ascii_lowercase();
+                    !w.contains("http://") && !w.contains("https://")
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .map(|line| {
+            line.trim_matches(|c: char| c == ',' || c == ';' || c.is_whitespace())
+                .to_owned()
+        })
+        .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
-        .join(" ");
-    let text = text.trim_matches(|c: char| c == ',' || c == ';' || c.is_whitespace());
-    (!text.is_empty()).then(|| text.to_owned())
+        .join(", ");
+    (!text.is_empty()).then_some(text)
 }
 
 impl JoinDto {
@@ -853,6 +866,11 @@ mod tests {
             ("https://meet.example/SECRET", None),
             ("Room 4.12, https://meet.example/SECRET", Some("Room 4.12")),
             ("Room 4.12 (https://meet.example/SECRET)", Some("Room 4.12")),
+            ("Room 4 HTTPS://meet.example/SECRET", Some("Room 4")),
+            (
+                "Some Store\n123 Main Street\nSpringfield",
+                Some("Some Store, 123 Main Street, Springfield"),
+            ),
             (
                 "HQ-1-1P Mitte (8) [Google Meet]",
                 Some("HQ-1-1P Mitte (8) [Google Meet]"),
