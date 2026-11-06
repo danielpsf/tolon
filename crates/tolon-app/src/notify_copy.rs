@@ -296,6 +296,7 @@ mod tests {
             end: "2026-10-21T15:00:00+02:00".to_owned(),
             join: JoinDto::None,
             people: 2,
+            location: None,
         }
     }
 

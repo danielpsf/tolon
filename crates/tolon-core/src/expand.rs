@@ -300,6 +300,7 @@ fn expand_event(
             all_day: src.all_day,
             join: join.clone(),
             people: src.attendees_count,
+            location: src.location.clone(),
         };
         out.push((occ, hidden));
     };

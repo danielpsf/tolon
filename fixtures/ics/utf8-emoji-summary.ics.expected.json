@@ -12,6 +12,7 @@
         "event": "fixture:utf8-emoji@example.com",
         "original_start": "2026-10-22T09:00:00Z"
       },
+      "location": "Café Müller, Straße der Pariser Kommune 1",
       "people": 0,
       "start": "2026-10-22T11:00:00+02:00",
       "title": "🎉 Release party 🍾 mit Käse und Brötchen"
@@ -25,6 +26,7 @@
         "event": "fixture:utf8-cjk@example.com",
         "original_start": "2026-10-23T09:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-23T11:00:00+02:00",
       "title": "週次ミーティング 東京チーム 🇯🇵"
@@ -38,6 +40,7 @@
         "event": "fixture:utf8-zwj-fold@example.com",
         "original_start": "2026-10-24T09:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-24T11:00:00+02:00",
       "title": "Family day 👨‍👩‍👧‍👦 with a very long title that the exporter folds after a complete character 🌍🌎🌏"
@@ -51,6 +54,7 @@
         "event": "fixture:utf8-rtl@example.com",
         "original_start": "2026-10-25T09:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-25T10:00:00+01:00",
       "title": "اجتماع الفريق ☕ Team sync"

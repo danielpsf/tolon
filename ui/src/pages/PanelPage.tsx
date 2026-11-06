@@ -6,7 +6,7 @@ import { api, onOccurrencesChanged, onPaused } from "../api";
 import type { ListedDto, PauseDto } from "../api-types";
 import { PeekMark } from "../PeekMark";
 import { copy } from "../copy";
-import { detailsText, primaryLabel, SNOOZE_MINUTES } from "../interrupt";
+import { detailsText, locationText, primaryLabel, SNOOZE_MINUTES } from "../interrupt";
 import {
   firstLine,
   focusFirstAction,
@@ -124,7 +124,15 @@ export function PanelPage() {
           <h1 id="tl-panel-title" className="sm-display-m tl-panel-title">
             <bdi>{next.title}</bdi>
           </h1>
-          <p className="sm-body sm-muted">{detailsText(c, next)}</p>
+          <p className="sm-body sm-muted">
+            {detailsText(c, next)}
+            {locationText(next) && (
+              <>
+                {" "}
+                <bdi>{locationText(next)}</bdi>
+              </>
+            )}
+          </p>
           <div className="tl-panel-actions">
             {next.join.kind !== "none" && (
               <button type="button" className="sm-btn primary" onClick={() => void run(() => api.occurrencesJoin(next.key))}>

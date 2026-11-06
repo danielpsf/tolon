@@ -10,6 +10,7 @@ import {
   handlesKey,
   hintText,
   keyAction,
+  locationText,
   nextAlarmView,
   nextFocusIndex,
   NO_ALARM,
@@ -67,6 +68,12 @@ const CONTROLS = "[data-action]";
 /** What the button holding the focus does, or null when focus is on the page itself. */
 const actionOf = (el: Element | null): Action | null =>
   (el?.closest<HTMLElement>(CONTROLS)?.dataset.action as Action | undefined) ?? null;
+
+/** The location after the details line, when the meeting has no call link (S5.3); <bdi>: a feed's text keeps its own direction. */
+function Place({ m }: { m: MeetingDto }) {
+  const place = locationText(m);
+  return place ? <>{" "}<bdi>{place}</bdi></> : null;
+}
 
 /** The page: waits for an interrupt, then shows it. A new interrupt is a new view, so no state carries over. */
 export function InterruptPage() {
@@ -261,6 +268,7 @@ export function InterruptView({
             </h1>
             <p id="tl-int-details" className="tl-int-details">
               {detailsText(c, first)}
+              <Place m={first} />
             </p>
           </div>
         ) : (
@@ -270,7 +278,10 @@ export function InterruptView({
                 <h2 className="sm-display-l">
                   <bdi>{titleOf(m)}</bdi>
                 </h2>
-                <p className="tl-int-details">{detailsText(c, m)}</p>
+                <p className="tl-int-details">
+                  {detailsText(c, m)}
+                  <Place m={m} />
+                </p>
                 {joinButton(m, "lg")}
               </li>
             ))}

@@ -232,6 +232,8 @@ pub struct Occurrence {
     pub all_day: bool,
     pub join: JoinTarget,
     pub people: u32,
+    /// The raw `LOCATION` text; the app trims it for the pages (S5.3).
+    pub location: Option<String>,
 }
 
 #[cfg(test)]

@@ -97,6 +97,7 @@ pub fn occ(title: &str, start: DateTime<Utc>, people: u32) -> tolon_core::Occurr
             recognised: false,
         },
         people,
+        location: None,
     }
 }
 

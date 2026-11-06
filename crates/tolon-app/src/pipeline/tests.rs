@@ -785,6 +785,7 @@ fn debug_output_of_a_listed_meeting_omits_its_title_key_and_join_link() {
             host: "meet-SECRET.example".into(),
             recognised: true,
         },
+        location: Some("Room SECRET".into()),
     };
     let text = format!("{listed:?}");
     assert!(!text.contains("SECRET"), "{text}");
@@ -837,7 +838,7 @@ async fn occurrences_today_sends_no_url_for_any_join_kind() -> TestResult {
     fields.sort_unstable();
     assert_eq!(
         fields,
-        ["all_day", "end", "ignored", "join", "key", "people", "start", "title"]
+        ["all_day", "end", "ignored", "join", "key", "location", "people", "start", "title"]
     );
     Ok(())
 }

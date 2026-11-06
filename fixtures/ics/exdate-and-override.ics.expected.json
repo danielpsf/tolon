@@ -12,6 +12,7 @@
         "event": "fixture:daily-sync@example.com",
         "original_start": "2026-10-22T09:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-22T11:00:00+02:00",
       "title": "Daily sync"
@@ -25,6 +26,7 @@
         "event": "fixture:daily-sync@example.com",
         "original_start": "2026-10-24T09:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-24T10:00:00+02:00",
       "title": "Daily sync"
@@ -38,6 +40,7 @@
         "event": "fixture:daily-sync@example.com",
         "original_start": "2026-10-25T10:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-25T11:00:00+01:00",
       "title": "Daily sync"
@@ -51,6 +54,7 @@
         "event": "fixture:invited-instance-only@example.com#20261025T150000Z",
         "original_start": "2026-10-25T15:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-25T16:00:00+01:00",
       "title": "Vendor demo (one instance, series not shared)"
@@ -64,6 +68,7 @@
         "event": "fixture:daily-sync@example.com",
         "original_start": "2026-10-26T10:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-26T14:00:00+01:00",
       "title": "Daily sync (moved to afternoon)"
@@ -77,6 +82,7 @@
         "event": "fixture:daily-sync@example.com",
         "original_start": "2026-11-02T10:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-28T16:00:00+01:00",
       "title": "Daily sync (pulled forward from 2 Nov)"

@@ -59,6 +59,8 @@ pub struct MeetingDto {
     pub join: JoinDto,
     /// Attendee count; names are not sent.
     pub people: u32,
+    /// The event's LOCATION, trimmed; `None` when blank (S5.3). Personal data: never logged above debug.
+    pub location: Option<String>,
 }
 
 /// The `alarm:show` payload: every meeting that starts in the same minute (AC3.5, S3.6).
@@ -78,8 +80,22 @@ impl MeetingDto {
             end: o.end.to_rfc3339_opts(SecondsFormat::Secs, false),
             join: JoinDto::of(&o.join),
             people: o.people,
+            location: location_text(o),
         }
     }
+}
+
+/// The location as the pages show it: trimmed, `None` when nothing is left (S5.3) or when the
+/// join link may have come from it (the pages get the host only, AC1.3).
+pub(crate) fn location_text(o: &Occurrence) -> Option<String> {
+    if matches!(o.join, JoinTarget::Link { .. }) {
+        return None;
+    }
+    o.location
+        .as_deref()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
 }
 
 impl JoinDto {
@@ -131,6 +147,7 @@ impl AlarmShow {
                     recognised: false,
                 },
                 people: 8,
+                location: None,
             }],
         }
     }
@@ -809,7 +826,31 @@ mod tests {
             all_day: false,
             join,
             people: 3,
+            location: None,
         })
+    }
+
+    #[test]
+    fn s5_3_the_meeting_carries_a_trimmed_location_and_none_when_blank() -> anyhow::Result<()> {
+        let mut o = occurrence("Sync", JoinTarget::None)?;
+        for (raw, shown) in [
+            (Some("  Room 4.12 \n"), Some("Room 4.12")),
+            (Some(" \t\n"), None),
+            (Some(""), None),
+            (None, None),
+        ] {
+            o.location = raw.map(str::to_owned);
+            assert_eq!(MeetingDto::from_occurrence(&o).location.as_deref(), shown);
+        }
+        // A link may come from the location: the page gets the host, never the text.
+        o.location = Some("https://meet.example/SECRET".to_owned());
+        o.join = JoinTarget::Link {
+            url: "https://meet.example/SECRET".to_owned(),
+            host: "meet.example".to_owned(),
+            recognised: false,
+        };
+        assert_eq!(MeetingDto::from_occurrence(&o).location, None);
+        Ok(())
     }
 
     #[test]

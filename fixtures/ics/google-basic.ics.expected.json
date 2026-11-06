@@ -12,6 +12,7 @@
         "event": "fixture:basic-0003@example.com",
         "original_start": "2026-10-22T07:30:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-22T09:30:00+02:00",
       "title": "Already running"
@@ -31,6 +32,7 @@
         "event": "fixture:basic-0004@example.com",
         "original_start": "2026-10-22T09:00:00Z"
       },
+      "location": "Room 4.02, Example HQ",
       "people": 3,
       "start": "2026-10-22T11:00:00+02:00",
       "title": "Planning"
@@ -46,6 +48,7 @@
         "event": "fixture:basic-0005@example.com",
         "original_start": "2026-10-23T13:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-23T15:00:00+02:00",
       "title": "1:1 with Sam"
@@ -59,6 +62,7 @@
         "event": "fixture:basic-0006@example.com",
         "original_start": "2026-10-24T10:00:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-24T12:00:00+02:00",
       "title": "Team lunch, outdoor"
@@ -72,6 +76,7 @@
         "event": "fixture:basic-0007@example.com",
         "original_start": "2026-10-29T07:30:00Z"
       },
+      "location": null,
       "people": 0,
       "start": "2026-10-29T08:30:00+01:00",
       "title": "Starts just inside the window"
