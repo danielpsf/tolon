@@ -22,7 +22,8 @@ use tolon_store::Store;
 use crate::errors::AppError;
 use crate::pipeline::{self, flag, Db, IGNORE_ALL_DAY, IGNORE_CANCELLED, IGNORE_DECLINED};
 use crate::scheduler::{
-    AGAIN_AT_START, IGNORE_KEYWORDS, IGNORE_NO_ATTENDEES, LEAD_MINUTES, SOUND, SOUND_REPEAT,
+    AGAIN_AT_START, IGNORE_KEYWORDS, IGNORE_NO_ATTENDEES, IGNORE_NO_JOIN_LINK, LEAD_MINUTES, SOUND,
+    SOUND_REPEAT,
 };
 
 pub const QUIET_ENABLED: &str = "quiet_enabled";
@@ -122,6 +123,7 @@ pub struct IgnoreDto {
     pub declined: bool,
     pub cancelled: bool,
     pub no_attendees: bool,
+    pub no_join_link: bool,
     pub keywords: Vec<String>,
 }
 
@@ -163,6 +165,7 @@ pub struct IgnorePatch {
     pub declined: Option<bool>,
     pub cancelled: Option<bool>,
     pub no_attendees: Option<bool>,
+    pub no_join_link: Option<bool>,
     pub keywords: Option<Vec<String>>,
 }
 
@@ -204,6 +207,7 @@ impl SettingsDto {
         IgnoreRules {
             keywords: self.ignore.keywords.join(", "),
             without_other_attendees: self.ignore.no_attendees,
+            without_join_link: self.ignore.no_join_link,
         }
     }
 
@@ -287,6 +291,7 @@ pub fn read(store: &Store) -> anyhow::Result<SettingsDto> {
             declined: flag(store, IGNORE_DECLINED, true)?,
             cancelled: flag(store, IGNORE_CANCELLED, true)?,
             no_attendees: flag(store, IGNORE_NO_ATTENDEES, rules.without_other_attendees)?,
+            no_join_link: flag(store, IGNORE_NO_JOIN_LINK, rules.without_join_link)?,
             keywords: keywords(&text(IGNORE_KEYWORDS)?.unwrap_or(rules.keywords)),
         },
         appearance: s
@@ -406,7 +411,7 @@ pub fn change(
 }
 
 /// Every `invalid:` code a patch can get; the UI localises them.
-const CODES: [&str; 21] = [
+const CODES: [&str; 22] = [
     "invalid:patch",
     "invalid:lead_minutes",
     "invalid:again_at_start",
@@ -422,6 +427,7 @@ const CODES: [&str; 21] = [
     "invalid:ignore.declined",
     "invalid:ignore.cancelled",
     "invalid:ignore.no_attendees",
+    "invalid:ignore.no_join_link",
     "invalid:ignore.keywords",
     "invalid:appearance",
     "invalid:interrupt_color",
@@ -523,6 +529,7 @@ fn pairs(p: SettingsPatch) -> anyhow::Result<Vec<(&'static str, Value)>> {
             (IGNORE_DECLINED, i.declined),
             (IGNORE_CANCELLED, i.cancelled),
             (IGNORE_NO_ATTENDEES, i.no_attendees),
+            (IGNORE_NO_JOIN_LINK, i.no_join_link),
         ];
         out.extend(flags.into_iter().filter_map(|(k, v)| Some((k, json!(v?)))));
     }

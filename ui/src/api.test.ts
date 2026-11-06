@@ -13,7 +13,7 @@ const settings: SettingsDto = {
   sound: "bell",
   sound_repeat: true,
   quiet: { enabled: false, start: "18:00", end: "09:00", weekends: true },
-  ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, keywords: ["Focus", "Lunch", "OOO"] },
+  ignore: { all_day: true, declined: true, cancelled: true, no_attendees: false, no_join_link: false, keywords: ["Focus", "Lunch", "OOO"] },
   appearance: "auto",
   interrupt_color: "theme",
   style: "swiss-moss",

@@ -35,6 +35,7 @@ fn defaults() -> SettingsDto {
             declined: true,
             cancelled: true,
             no_attendees: false,
+            no_join_link: false,
             keywords: vec!["Focus".into(), "Lunch".into(), "OOO".into()],
         },
         appearance: Appearance::Auto,
@@ -61,7 +62,7 @@ fn the_dto_serialises_with_the_contract_field_names() -> TestResult {
             "lead_minutes": 2, "again_at_start": false, "sound": "bell", "sound_repeat": true,
             "quiet": { "enabled": false, "start": "18:00", "end": "09:00", "weekends": true },
             "ignore": { "all_day": true, "declined": true, "cancelled": true, "no_attendees": false,
-                        "keywords": ["Focus", "Lunch", "OOO"] },
+                        "no_join_link": false, "keywords": ["Focus", "Lunch", "OOO"] },
             "appearance": "auto", "interrupt_color": "theme", "style": "swiss-moss",
             "locale": null,
             "start_at_login": false,
@@ -76,7 +77,7 @@ fn everything() -> Value {
         "lead_minutes": 10, "again_at_start": true, "sound": "chime", "sound_repeat": false,
         "quiet": { "enabled": true, "start": "22:30", "end": "07:15", "weekends": false },
         "ignore": { "all_day": false, "declined": false, "cancelled": false, "no_attendees": true,
-                    "keywords": [" Standup ", "", "1:1"] },
+                    "no_join_link": true, "keywords": [" Standup ", "", "1:1"] },
         "appearance": "dark", "interrupt_color": "moss-deep", "style": "peek",
         "locale": "pt-BR",
         "start_at_login": true
@@ -100,6 +101,7 @@ fn everything_dto() -> SettingsDto {
             declined: false,
             cancelled: false,
             no_attendees: true,
+            no_join_link: true,
             keywords: vec!["Standup".into(), "1:1".into()],
         },
         appearance: Appearance::Dark,
@@ -377,7 +379,7 @@ fn nested_patches_may_be_complete_or_partial() -> TestResult {
     let complete = json!({
         "quiet": { "enabled": true, "start": "20:00", "end": "08:00", "weekends": false },
         "ignore": { "all_day": false, "declined": true, "cancelled": true, "no_attendees": true,
-                    "keywords": ["Focus"] }
+                    "no_join_link": true, "keywords": ["Focus"] }
     });
     let s = apply(&db, &complete)?;
     assert_eq!(
@@ -396,6 +398,7 @@ fn nested_patches_may_be_complete_or_partial() -> TestResult {
             declined: true,
             cancelled: true,
             no_attendees: true,
+            no_join_link: true,
             keywords: vec!["Focus".into()]
         }
     );
