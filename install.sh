@@ -27,6 +27,7 @@ tolon_install() {
       exit 1
       ;;
   esac
+  [ "$uid" != 0 ] || fail "Run this command as your own user, without sudo."
   if [ "$os" = Linux ] && [ "$(uname -m)" != x86_64 ]; then
     fail "Tolon has Linux builds for x86_64 only. See https://github.com/$repo/releases."
   fi
@@ -100,7 +101,7 @@ tolon_install() {
       rm -f "$dest.new"
       fail "Could not copy Tolon into $HOME/.local/bin."
     fi
-    mv -f "$dest.new" "$dest" || fail "Could not move Tolon into place in $HOME/.local/bin."
+    mv -f "$dest.new" "$dest" || { rm -f "$dest.new"; fail "Could not move Tolon into place in $HOME/.local/bin."; }
     printf '[Desktop Entry]\nType=Application\nName=Tolon\nComment=Never miss a meeting again.\nExec=%s\nTerminal=false\nCategories=Office;Calendar;\n' "$dest" \
       > "$HOME/.local/share/applications/tolon.desktop" || say "Could not write the applications menu entry. Start Tolon with $dest."
     say "Installed Tolon $version in $dest. It is in your applications menu as Tolon."

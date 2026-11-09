@@ -283,11 +283,21 @@ fn on_linux_installs_the_appimage_into_local_bin_with_a_menu_entry_and_starts_it
     assert!(out.status.success(), "{}", stderr(&out));
     let dest = sb.path("home/.local/bin/tolon");
     assert!(dest.is_file());
-    assert_ne!(fs::metadata(&dest)?.permissions().mode() & 0o111, 0, "runnable");
-    assert!(!sb.path("home/.local/bin/tolon.new").exists(), "no staged copy left");
+    assert_ne!(
+        fs::metadata(&dest)?.permissions().mode() & 0o111,
+        0,
+        "runnable"
+    );
+    assert!(
+        !sb.path("home/.local/bin/tolon.new").exists(),
+        "no staged copy left"
+    );
     let entry = fs::read_to_string(sb.path("home/.local/share/applications/tolon.desktop"))?;
     assert!(entry.starts_with("[Desktop Entry]\n"), "{entry}");
-    assert!(entry.contains(&format!("Exec={}\n", dest.display())), "{entry}");
+    assert!(
+        entry.contains(&format!("Exec={}\n", dest.display())),
+        "{entry}"
+    );
     assert!(stdout(&out).contains(&format!("Installed Tolon {VERSION} in {}", dest.display())));
     assert!(!stdout(&out).contains('!'), "no exclamation marks");
     // Give the started copy a moment to log itself.
@@ -298,7 +308,10 @@ fn on_linux_installs_the_appimage_into_local_bin_with_a_menu_entry_and_starts_it
     );
     assert!(position(&log, &url) < position(&log, "SHA256SUMS"), "{log}");
     assert!(log.contains("appimage"), "Tolon was not started: {log}");
-    assert!(!log.contains("hdiutil") && !log.contains("ditto") && !log.contains("open "), "{log}");
+    assert!(
+        !log.contains("hdiutil") && !log.contains("ditto") && !log.contains("open "),
+        "{log}"
+    );
     assert!(!sb.path("home/Applications").exists() && !sb.path("apps").exists());
     assert!(sb.tmp_is_empty()?);
     Ok(())
