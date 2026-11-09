@@ -72,7 +72,11 @@ function Install-Tolon {
     # The installer records where it put Tolon; the default is %LOCALAPPDATA%\Tolon.
     $where = Join-Path $env:LOCALAPPDATA 'Tolon'
     $key = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tolon' -ErrorAction SilentlyContinue
-    if ($key -and $key.InstallLocation) { $where = $key.InstallLocation }
+    # The installer writes the value wrapped in quotes.
+    if ($key -and $key.InstallLocation) {
+      $recorded = $key.InstallLocation.Trim('"')
+      if (Test-Path -LiteralPath $recorded) { $where = $recorded }
+    }
     $app = Get-ChildItem -LiteralPath $where -Filter '*.exe' -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -ne 'uninstall.exe' } | Select-Object -First 1
     if (-not $app) { throw "Tolon $version is installed, but its program was not found in $where. Start Tolon from the Start menu." }
