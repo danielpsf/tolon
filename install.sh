@@ -27,7 +27,7 @@ tolon_install() {
       exit 1
       ;;
   esac
-  [ "$uid" != 0 ] || fail "Run this command as your own user, without sudo."
+  [ "$uid" != 0 ] || fail "Run this command as your own user, not as root."
   if [ "$os" = Linux ] && [ "$(uname -m)" != x86_64 ]; then
     fail "Tolon has Linux builds for x86_64 only. See https://github.com/$repo/releases."
   fi
