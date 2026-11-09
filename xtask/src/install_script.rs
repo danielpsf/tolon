@@ -2,8 +2,9 @@
 //!
 //! The script runs under `sh` with stub `uname`, `curl`, `hdiutil`, `ditto`, `open`, `pkill` and `pgrep` first on
 //! PATH. Each stub logs its call to one file. HOME, TMPDIR and the Applications folder (`TOLON_APPLICATIONS`) are
-//! temporary folders, so a test never touches the real /Applications or a real Tolon. Unix only: Windows has no `sh`
-//! on the runner's PATH that the script could use, and the script is macOS only anyway.
+//! temporary folders, so a test never touches the real /Applications, ~/.local or a real Tolon. The Linux path
+//! (L-083) runs with `STUB_UNAME=Linux`; its "AppImage" is a shell script that logs when it is started. Unix only:
+//! Windows has no `sh` on the runner's PATH that the script could use, and the script is for macOS and Linux.
 #![cfg(unix)]
 
 use anyhow::{Context, Result};
@@ -16,6 +17,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 const VERSION: &str = "1.2.3";
 const DMG: &str = "Tolon_1.2.3_universal.dmg";
+const APPIMAGE: &str = "Tolon_1.2.3_amd64.AppImage";
+const LINUX: &[(&str, &str)] = &[("STUB_UNAME", "Linux")];
 
 fn repo_script() -> Result<PathBuf> {
     Ok(crate::repo_root()?.join("install.sh"))
@@ -43,6 +46,9 @@ impl Sandbox {
             fs::set_permissions(&file, fs::Permissions::from_mode(0o755))?;
         }
         fs::write(sb.path("server").join(DMG), "dmg bytes")?;
+        let appimage = sb.path("server").join(APPIMAGE);
+        fs::write(&appimage, "#!/bin/sh\necho \"appimage $*\" >> \"$LOG\"\n")?;
+        fs::set_permissions(&appimage, fs::Permissions::from_mode(0o644))?;
         sb.sums()?;
         Ok(sb)
     }
@@ -55,7 +61,7 @@ impl Sandbox {
     fn sums(&self) -> Result<()> {
         let status = Command::new("sh")
             .current_dir(self.path("server"))
-            .args(["-c", "shasum -a 256 Tolon_*.dmg > SHA256SUMS"])
+            .args(["-c", "shasum -a 256 Tolon_* > SHA256SUMS"])
             .status()
             .context("cannot run shasum")?;
         anyhow::ensure!(status.success(), "shasum failed");
@@ -148,7 +154,10 @@ fn position(log: &str, needle: &str) -> Option<usize> {
 }
 
 const STUBS: &[(&str, &str)] = &[
-    ("uname", r#"echo "${STUB_UNAME:-Darwin}""#),
+    (
+        "uname",
+        r#"case "$1" in -m) echo "${STUB_ARCH:-x86_64}" ;; *) echo "${STUB_UNAME:-Darwin}" ;; esac"#,
+    ),
     (
         "curl",
         r#"echo "curl $*" >> "$LOG"
@@ -242,14 +251,82 @@ fn never_uses_sudo_or_apple_events() -> Result<()> {
 }
 
 #[test]
-fn refuses_to_run_off_macos_before_any_download() -> Result<()> {
+fn refuses_to_run_off_macos_and_linux_before_any_download() -> Result<()> {
     let sb = Sandbox::new()?;
     let apps = sb.path("apps");
-    let out = sb.run(&sb.stamped()?, &apps, &[("STUB_UNAME", "Linux")])?;
+    let out = sb.run(&sb.stamped()?, &apps, &[("STUB_UNAME", "MINGW64_NT-10.0")])?;
     assert!(!out.status.success());
-    assert!(stderr(&out).contains("macOS"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("macOS and Linux"), "{}", stderr(&out));
     assert!(stderr(&out).contains("https://github.com/danielpsf/tolon/releases"));
     assert_eq!(sb.log(), "", "nothing may run before the check");
+    Ok(())
+}
+
+#[test]
+fn on_linux_refuses_anything_but_x86_64_before_any_download() -> Result<()> {
+    let sb = Sandbox::new()?;
+    let out = sb.run(
+        &sb.stamped()?,
+        &sb.path("apps"),
+        &[("STUB_UNAME", "Linux"), ("STUB_ARCH", "aarch64")],
+    )?;
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("x86_64"), "{}", stderr(&out));
+    assert_eq!(sb.log(), "", "nothing may run before the check");
+    Ok(())
+}
+
+#[test]
+fn on_linux_installs_the_appimage_into_local_bin_with_a_menu_entry_and_starts_it() -> Result<()> {
+    let sb = Sandbox::new()?;
+    let out = sb.run(&sb.stamped()?, &sb.path("apps"), LINUX)?;
+    assert!(out.status.success(), "{}", stderr(&out));
+    let dest = sb.path("home/.local/bin/tolon");
+    assert!(dest.is_file());
+    assert_ne!(
+        fs::metadata(&dest)?.permissions().mode() & 0o111,
+        0,
+        "runnable"
+    );
+    assert!(
+        !sb.path("home/.local/bin/tolon.new").exists(),
+        "no staged copy left"
+    );
+    let entry = fs::read_to_string(sb.path("home/.local/share/applications/tolon.desktop"))?;
+    assert!(entry.starts_with("[Desktop Entry]\n"), "{entry}");
+    assert!(
+        entry.contains(&format!("Exec={}\n", dest.display())),
+        "{entry}"
+    );
+    assert!(stdout(&out).contains(&format!("Installed Tolon {VERSION} in {}", dest.display())));
+    assert!(!stdout(&out).contains('!'), "no exclamation marks");
+    // Give the started copy a moment to log itself.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let log = sb.log();
+    let url = format!(
+        "curl --proto =https --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/download/v{VERSION}/{APPIMAGE} -o "
+    );
+    assert!(position(&log, &url) < position(&log, "SHA256SUMS"), "{log}");
+    assert!(log.contains("appimage"), "Tolon was not started: {log}");
+    assert!(
+        !log.contains("hdiutil") && !log.contains("ditto") && !log.contains("open "),
+        "{log}"
+    );
+    assert!(!sb.path("home/Applications").exists() && !sb.path("apps").exists());
+    assert!(sb.tmp_is_empty()?);
+    Ok(())
+}
+
+#[test]
+fn on_linux_a_checksum_mismatch_stops_before_any_copy_and_cleans_up() -> Result<()> {
+    let sb = Sandbox::new()?;
+    fs::write(sb.path("server").join(APPIMAGE), "tampered bytes")?;
+    let out = sb.run(&sb.stamped()?, &sb.path("apps"), LINUX)?;
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("checksum"), "{}", stderr(&out));
+    assert!(!sb.path("home/.local").exists(), "nothing was installed");
+    assert!(!sb.log().contains("appimage"), "Tolon was started");
+    assert!(sb.tmp_is_empty()?);
     Ok(())
 }
 

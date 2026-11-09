@@ -1,6 +1,7 @@
 #!/bin/sh
-# Installs Tolon on macOS:  curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
+# Installs Tolon on macOS or Linux:  curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
 # What it does, and how to read it first: docs/install.md, "Install from the Terminal".
+# macOS: the .dmg into /Applications. Linux (x86_64): the AppImage into ~/.local/bin/tolon with a desktop entry.
 # The whole script is one function, called on the last line, so a download that is cut off runs nothing.
 # The copy attached to a release is stamped with that release's version (release_assets.py stamp-install).
 # The copy in the repository is not: it asks GitHub for the latest version instead.
@@ -18,9 +19,17 @@ tolon_install() {
   fetch() { curl --proto '=https' --tlsv1.2 -fsSL "$@"; }
   fail() { printf 'Tolon was not installed. %s\n' "$*" >&2; exit 1; }
 
-  if [ "$(uname -s)" != "Darwin" ]; then
-    printf 'This installer is for macOS. Download the installer for your system from https://github.com/%s/releases.\n' "$repo" >&2
-    exit 1
+  os=$(uname -s)
+  case "$os" in
+    Darwin|Linux) ;;
+    *)
+      printf 'This installer is for macOS and Linux. Download the installer for your system from https://github.com/%s/releases.\n' "$repo" >&2
+      exit 1
+      ;;
+  esac
+  [ "$uid" != 0 ] || fail "Run this command as your own user, not as root."
+  if [ "$os" = Linux ] && [ "$(uname -m)" != x86_64 ]; then
+    fail "Tolon has Linux builds for x86_64 only. See https://github.com/$repo/releases."
   fi
 
   case "$version" in
@@ -33,7 +42,13 @@ tolon_install() {
   printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' ||
     fail "Could not find out which version to install. Download it from https://github.com/$repo/releases."
 
-  dmg="Tolon_${version}_universal.dmg"
+  if [ "$os" = Linux ]; then
+    file="Tolon_${version}_amd64.AppImage"
+    dest="$HOME/.local/bin/tolon"
+  else
+    file="Tolon_${version}_universal.dmg"
+    dest="$apps/Tolon.app"
+  fi
   base="https://github.com/$repo/releases/download/v$version"
 
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/tolon-install.XXXXXX") || fail "Could not create a temporary folder."
@@ -42,26 +57,32 @@ tolon_install() {
   trap 'exit 1' HUP INT TERM
 
   say "Downloading Tolon $version."
-  fetch "$base/$dmg" -o "$tmp/$dmg" || fail "The download of $dmg failed. Check your connection and try again."
+  fetch "$base/$file" -o "$tmp/$file" || fail "The download of $file failed. Check your connection and try again."
   fetch "$base/SHA256SUMS" -o "$tmp/SHA256SUMS" || fail "The download of SHA256SUMS failed. Check your connection and try again."
 
-  awk -v f="$dmg" 'length($1) == 64 && ($2 == f || $2 == "*" f)' "$tmp/SHA256SUMS" > "$tmp/SHA256SUMS.dmg"
-  [ -s "$tmp/SHA256SUMS.dmg" ] || fail "SHA256SUMS has no line for $dmg, so the download cannot be checked."
-  (cd "$tmp" && shasum -a 256 -c SHA256SUMS.dmg >/dev/null 2>&1) ||
-    fail "The checksum of $dmg does not match SHA256SUMS. The download was deleted. Try again, and report it if it keeps happening."
+  awk -v f="$file" 'length($1) == 64 && ($2 == f || $2 == "*" f)' "$tmp/SHA256SUMS" > "$tmp/SHA256SUMS.one"
+  [ -s "$tmp/SHA256SUMS.one" ] || fail "SHA256SUMS has no line for $file, so the download cannot be checked."
+  # sha256sum is coreutils (every Linux); macOS has shasum instead.
+  if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi
+  (cd "$tmp" && $sum -c SHA256SUMS.one >/dev/null 2>&1) ||
+    fail "The checksum of $file does not match SHA256SUMS. The download was deleted. Try again, and report it if it keeps happening."
   say "The checksum matches."
 
-  mkdir "$tmp/mnt"
-  hdiutil attach -nobrowse -readonly -mountpoint "$tmp/mnt" "$tmp/$dmg" >/dev/null </dev/null ||
-    fail "Could not open $dmg."
-  mounted=1
-  [ -d "$tmp/mnt/Tolon.app" ] || fail "$dmg does not hold Tolon.app."
+  if [ "$os" = Linux ]; then
+    mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" || fail "Could not create $HOME/.local/bin."
+  else
+    mkdir "$tmp/mnt"
+    hdiutil attach -nobrowse -readonly -mountpoint "$tmp/mnt" "$tmp/$file" >/dev/null </dev/null ||
+      fail "Could not open $file."
+    mounted=1
+    [ -d "$tmp/mnt/Tolon.app" ] || fail "$file does not hold Tolon.app."
 
-  if [ ! -d "$apps" ] || [ ! -w "$apps" ]; then
-    apps="$HOME/Applications"
-    mkdir -p "$apps" || fail "Could not create $apps."
+    if [ ! -d "$apps" ] || [ ! -w "$apps" ]; then
+      apps="$HOME/Applications"
+      mkdir -p "$apps" || fail "Could not create $apps."
+    fi
+    dest="$apps/Tolon.app"
   fi
-  dest="$apps/Tolon.app"
 
   if [ -e "$dest" ] && pgrep -U "$uid" -x tolon-app >/dev/null 2>&1; then
     say "Quitting Tolon so it can be replaced."
@@ -75,6 +96,19 @@ tolon_install() {
   fi
 
   say "Installing Tolon $version."
+  if [ "$os" = Linux ]; then
+    if ! cp "$tmp/$file" "$dest.new" || ! chmod 755 "$dest.new"; then
+      rm -f "$dest.new"
+      fail "Could not copy Tolon into $HOME/.local/bin."
+    fi
+    mv -f "$dest.new" "$dest" || { rm -f "$dest.new"; fail "Could not move Tolon into place in $HOME/.local/bin."; }
+    printf '[Desktop Entry]\nType=Application\nName=Tolon\nComment=Never miss a meeting again.\nExec=%s\nTerminal=false\nCategories=Office;Calendar;\n' "$dest" \
+      > "$HOME/.local/share/applications/tolon.desktop" || say "Could not write the applications menu entry. Start Tolon with $dest."
+    say "Installed Tolon $version in $dest. It is in your applications menu as Tolon."
+    "$dest" </dev/null >/dev/null 2>&1 &
+    say "Tolon is starting. If it does not open, it needs the FUSE library (libfuse2 on Ubuntu); install it, then run $dest."
+    return 0
+  fi
   staged="$apps/.Tolon.app.new"
   rm -rf "$staged"
   ditto "$tmp/mnt/Tolon.app" "$staged" </dev/null || { rm -rf "$staged"; fail "Could not copy Tolon into $apps."; }

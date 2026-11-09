@@ -37,6 +37,7 @@ For what CI cannot run. Sign off per release in `docs/ledger.md` with OS, versio
 - [ ] S4.4 On a Wayland session (GNOME), the fallback notification shows Join and Snooze and the sound plays.
 - [ ] S4.1 On X11, the interrupt covers a full-screen browser video.
 - [ ] AC12.3 `.AppImage` runs after `chmod +x`; `.deb` installs on Ubuntu 22.04 and 24.04.
+- [ ] AC12.3 (L-083) The one-line install from `docs/install.md` on an x86_64 Linux machine puts Tolon in `~/.local/bin/tolon`, shows it in the applications menu and starts it, with no password prompt.
 - [ ] L-044 Starting Tolon a second time (applications menu, or the AppImage again) brings the running settings window forward and starts no second copy.
 - [ ] AC9.4 Turning start at login on writes `~/.config/autostart/dev.tolon.desktop` with `Exec=` pointing at the AppImage path, and Tolon starts after logging out and in.
 
