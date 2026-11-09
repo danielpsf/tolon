@@ -106,8 +106,8 @@ def stamp_install(src, out, tag):
     stamp = stamp_pattern(src)
     if len(stamp.findall(text)) != 1:
         return [f"{src} needs exactly one line with the @TOLON_VERSION@ placeholder to stamp; without it the copy would install the latest version, not {tag}"]
-    quote = "'" if stamp is INSTALL_PS1_STAMP else '"'
-    Path(out).write_text(stamp.sub(rf"\g<1>{quote}{tag.removeprefix('v')}{quote}", text))
+    q = "'" if stamp is INSTALL_PS1_STAMP else '"'
+    Path(out).write_text(stamp.sub(rf"\g<1>{q}{tag.removeprefix('v')}{q}", text))
     return []
 
 

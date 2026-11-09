@@ -13,12 +13,9 @@ function Install-Tolon {
 
   function Say($text) { Write-Host $text }
   function Fail($text) { throw "Tolon was not installed. $text" }
-  function Fetch($url, $out) {
-    if ($out) { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $out }
-    else { (Invoke-WebRequest -UseBasicParsing -Uri $url).Content }
-  }
+  function Fetch($url, $out) { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $out }
 
-  if (-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+  if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     Fail "This installer is for Windows. Download the installer for your system from https://github.com/$repo/releases."
   }
   if (-not [Environment]::Is64BitOperatingSystem) {
@@ -29,7 +26,12 @@ function Install-Tolon {
 
   if ($version -like '@*' -or -not $version) {
     Say 'Looking up the latest version of Tolon.'
-    $version = (Fetch "https://github.com/$repo/releases/latest/download/latest.json" | ConvertFrom-Json).version
+    # GitHub serves the file as octet-stream, so Invoke-RestMethod would not parse it; read the bytes as text.
+    try { $latest = Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$repo/releases/latest/download/latest.json" }
+    catch { Fail "Could not look up the latest version. Check your connection, or download Tolon from https://github.com/$repo/releases." }
+    $text = $latest.Content
+    if ($text -is [byte[]]) { $text = [Text.Encoding]::UTF8.GetString($text) }
+    $version = ($text | ConvertFrom-Json).version
   }
   if ($version -notmatch '^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$') {
     Fail "Could not find out which version to install. Download it from https://github.com/$repo/releases."
@@ -45,15 +47,15 @@ function Install-Tolon {
     try { Fetch "$base/SHA256SUMS" (Join-Path $tmp 'SHA256SUMS') } catch { Fail 'The download of SHA256SUMS failed. Check your connection and try again.' }
 
     $pattern = '^([0-9A-Fa-f]{64})\s+\*?' + [regex]::Escape($file) + '$'
-    $expected = @(Get-Content (Join-Path $tmp 'SHA256SUMS') | ForEach-Object { if ($_ -match $pattern) { $Matches[1] } })
+    $expected = @(Get-Content -LiteralPath (Join-Path $tmp 'SHA256SUMS') | ForEach-Object { if ($_ -match $pattern) { $Matches[1] } })
     if ($expected.Count -ne 1) { Fail "SHA256SUMS has no line for $file, so the download cannot be checked." }
-    $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $tmp $file)).Hash
+    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $tmp $file)).Hash
     if ($actual -ne $expected[0]) {
       Fail "The checksum of $file does not match SHA256SUMS. The download was deleted. Try again, and report it if it keeps happening."
     }
     Say 'The checksum matches.'
-    # The checksum stands in for the mark of the web, as on macOS: SmartScreen then does not ask about the download.
-    Unblock-File -Path (Join-Path $tmp $file) -ErrorAction SilentlyContinue
+    # Invoke-WebRequest sets no mark of the web, so SmartScreen does not ask; this only makes sure of it. The checksum is the check.
+    Unblock-File -LiteralPath (Join-Path $tmp $file) -ErrorAction SilentlyContinue
 
     $running = @(Get-Process -Name 'Tolon', 'tolon-app' -ErrorAction SilentlyContinue)
     if ($running.Count -gt 0) {
@@ -67,14 +69,18 @@ function Install-Tolon {
     $setup = Start-Process -FilePath (Join-Path $tmp $file) -ArgumentList '/S' -Wait -PassThru
     if ($setup.ExitCode -ne 0) { Fail "The installer stopped with code $($setup.ExitCode). Run $file by hand from your Downloads folder to see why." }
 
-    $app = Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Tolon') -Filter '*.exe' -ErrorAction SilentlyContinue |
+    # The installer records where it put Tolon; the default is %LOCALAPPDATA%\Tolon.
+    $where = Join-Path $env:LOCALAPPDATA 'Tolon'
+    $key = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tolon' -ErrorAction SilentlyContinue
+    if ($key -and $key.InstallLocation) { $where = $key.InstallLocation }
+    $app = Get-ChildItem -LiteralPath $where -Filter '*.exe' -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -ne 'uninstall.exe' } | Select-Object -First 1
-    if (-not $app) { Fail "The installer finished, but Tolon was not found in $env:LOCALAPPDATA\Tolon. Start it from the Start menu." }
+    if (-not $app) { throw "Tolon $version is installed, but its program was not found in $where. Start Tolon from the Start menu." }
     Say "Installed Tolon $version in $($app.DirectoryName)."
     Start-Process -FilePath $app.FullName
   }
   finally {
-    Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
 
