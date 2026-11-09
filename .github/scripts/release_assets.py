@@ -5,7 +5,7 @@
   release_assets.py prerelease TAG            print true when TAG is a pre-release (has a `-`), else false
   release_assets.py check-key SIG             a probe signature was made by the key in tauri.conf.json
   release_assets.py latest-json DIR TAG REPO  write DIR/latest.json for the Tauri updater
-  release_assets.py stamp-install SRC OUT TAG write OUT: SRC (install.sh) with the version of TAG stamped in, so the
+  release_assets.py stamp-install SRC OUT TAG write OUT: SRC (install.sh or install.ps1) with the version of TAG stamped in, so the
                                               copy attached to a release installs that release and no other
   release_assets.py notes TAG INSTALL_MD OUT [REPO]
                                               write the release notes: docs/releases/TAG.md, `---`, then INSTALL_MD with
@@ -27,8 +27,15 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parents[2]
 TAURI_CONF = ROOT / "crates/tolon-app/tauri.conf.json"
 INSTALL_SH = ROOT / "install.sh"
-# The one line of install.sh that holds the version. The script reads a value that starts with `@` as "not stamped".
+INSTALL_PS1 = ROOT / "install.ps1"
+# The one line of each install script that holds the version. A script reads a value that starts with `@` as "not stamped".
 INSTALL_STAMP = re.compile(r'^(  version=)"@TOLON_VERSION@"$', re.M)
+INSTALL_PS1_STAMP = re.compile(r"^(  \$version = )'@TOLON_VERSION@'$", re.M)
+
+
+def stamp_pattern(path):
+    """The stamp line of an install script, by its file name: install.ps1 (L-085) or install.sh (L-073)."""
+    return INSTALL_PS1_STAMP if str(path).endswith(".ps1") else INSTALL_STAMP
 
 # Updater manifest keys and the artifact patterns behind them, best first. The artifact is the file with a
 # `.sig` next to it. Tauri 2 signs the installer itself (the AppImage, `-setup.exe`, `.msi`, `.deb`) and
@@ -86,6 +93,8 @@ def check_tag(tag):
         errors.append("plugins.updater needs a pubkey and endpoints in tauri.conf.json (L-019)")
     if len(INSTALL_STAMP.findall(INSTALL_SH.read_text())) != 1:
         errors.append('install.sh needs exactly one line `  version="@TOLON_VERSION@"` for the release to stamp (L-073)')
+    if len(INSTALL_PS1_STAMP.findall(INSTALL_PS1.read_text())) != 1:
+        errors.append("install.ps1 needs exactly one line `  $version = '@TOLON_VERSION@'` for the release to stamp (L-085)")
     return errors
 
 
@@ -94,9 +103,11 @@ def stamp_install(src, out, tag):
     if not re.fullmatch(r"v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?", tag):
         return [f"tag {tag!r} is not v<semver>"]
     text = Path(src).read_text()
-    if len(INSTALL_STAMP.findall(text)) != 1:
-        return [f'{src} needs exactly one line `  version="@TOLON_VERSION@"` to stamp; without it the copy would install the latest version, not {tag}']
-    Path(out).write_text(INSTALL_STAMP.sub(rf'\g<1>"{tag.removeprefix("v")}"', text))
+    stamp = stamp_pattern(src)
+    if len(stamp.findall(text)) != 1:
+        return [f"{src} needs exactly one line with the @TOLON_VERSION@ placeholder to stamp; without it the copy would install the latest version, not {tag}"]
+    quote = "'" if stamp is INSTALL_PS1_STAMP else '"'
+    Path(out).write_text(stamp.sub(rf"\g<1>{quote}{tag.removeprefix('v')}{quote}", text))
     return []
 
 

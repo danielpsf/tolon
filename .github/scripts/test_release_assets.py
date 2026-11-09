@@ -134,6 +134,23 @@ class StampInstall(unittest.TestCase):
 
     def test_the_repository_copy_holds_exactly_one_stamp(self):
         self.assertEqual(len(ra.INSTALL_STAMP.findall(ra.INSTALL_SH.read_text())), 1)
+        self.assertEqual(len(ra.INSTALL_PS1_STAMP.findall(ra.INSTALL_PS1.read_text())), 1)
+
+    PS1 = "function Install-Tolon {\n  $version = '@TOLON_VERSION@'\n  if ($version -like '@*') { }\n}\n"
+
+    def test_install_ps1_is_stamped_with_single_quotes(self):
+        d = Path(tempfile.mkdtemp())
+        src, out = d / "install.ps1", d / "out.ps1"
+        src.write_text(self.PS1)
+        self.assertEqual(ra.stamp_install(src, out, "v0.1.0-beta.2"), [])
+        self.assertEqual(out.read_text(), self.PS1.replace("@TOLON_VERSION@", "0.1.0-beta.2"))
+        self.assertIn("$version = '0.1.0-beta.2'", out.read_text())
+
+    def test_check_tag_reports_a_missing_ps1_stamp(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "install.ps1").write_text("function Install-Tolon { }\n")
+        with mock.patch.object(ra, "INSTALL_PS1", d / "install.ps1"):
+            self.assertTrue(any("install.ps1" in e for e in ra.check_tag("v9.9.9")))
 
     def test_check_tag_reports_a_missing_stamp(self):
         _, bare = self.files("tolon_install() { :; }\n")
@@ -145,7 +162,9 @@ class ReleaseWorkflow(unittest.TestCase):
     def test_install_sh_is_stamped_before_the_checksums_are_written_and_is_uploaded(self):
         text = (ra.ROOT / ".github/workflows/release.yml").read_text()
         stamp = text.index("release_assets.py stamp-install install.sh dist/install.sh ")
+        stamp_ps1 = text.index("release_assets.py stamp-install install.ps1 dist/install.ps1 ")
         sums = text.index("name: Write SHA256SUMS")
+        self.assertLess(stamp_ps1, sums)
         create = text.index("gh release create")
         self.assertLess(stamp, sums)
         self.assertLess(sums, create)
