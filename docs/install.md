@@ -44,7 +44,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/release
 
 The copy of `install.sh` on each release installs that release. Here is what it does, in order:
 
-1. It stops unless this is a Mac.
+1. It stops unless this is a Mac or a Linux machine (the Linux steps are in the Linux section below).
 2. It downloads the `.dmg` and `SHA256SUMS` of the release into a temporary folder.
 3. It checks the `.dmg` against its line in `SHA256SUMS`. If the line is missing or the checksum does not match, it stops and deletes the download.
 4. It opens the `.dmg` read-only at a temporary mount point.
@@ -72,6 +72,18 @@ macOS shows the Open Anyway warning for files that a browser downloads, because 
 5. After that, Tolon lives in the system tray at the bottom right. If you do not see its icon, click the small arrow to show hidden icons.
 
 ## Linux
+
+### Install from the Terminal
+
+One line in a terminal installs the AppImage on an x86_64 machine, any distribution:
+
+```
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/danielpsf/tolon/releases/latest/download/install.sh | sh
+```
+
+It is the same script as on macOS. On Linux it downloads the `.AppImage` and `SHA256SUMS` of the release, checks the file against its line in `SHA256SUMS` and stops on a mismatch, copies it to `~/.local/bin/tolon`, makes it runnable, writes `~/.local/share/applications/tolon.desktop` so Tolon is in your applications menu, and starts it. If Tolon is already installed there and running, it quits Tolon first. It never uses `sudo` and never touches a system folder. If Tolon does not open, install the FUSE library (below) and run `~/.local/bin/tolon`. The menu entry has no icon yet.
+
+### By hand
 
 AppImage, any distribution:
 

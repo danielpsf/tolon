@@ -2,6 +2,10 @@
 
 One entry per decision, newest first. Format: date, decision, why, what it replaces, who. Entries are never edited after the fact; a later entry supersedes.
 
+## 2026-11-09 install.sh installs on Linux too (L-083)
+
+The one-line Terminal install (L-073) was macOS only; the beta 2 announcement film shows the command, and Linux testers had only the manual AppImage steps. The same `install.sh` now handles `uname -s` Linux on x86_64: it downloads the `.AppImage`, checks it against `SHA256SUMS` (with `sha256sum`, or `shasum` where only that exists), copies it to `~/.local/bin/tolon`, writes a `.desktop` entry in `~/.local/share/applications` and starts it. No `sudo`, no system folder, no `.deb` (that would need root). Anything else (Windows, other architectures) still stops with the Releases link before any download. Windows gets no one-liner: the `.exe` is one download and one double-click, and a PowerShell script would be a second thing to review and sign. Tests in `xtask/src/install_script.rs` run the Linux path with a stub `uname` and a shell-script "AppImage". The beta 2 release gets a re-stamped copy of the script attached, so `releases/latest/download/install.sh` serves it now; the next tag stamps it as usual.
+
 ## 2026-10-19 CSP allows `data:` images
 Add `img-src 'self' data:` to the CSP in `tauri.conf.json` before the first Swiss Moss form control ships (M1, L-008). Why: `swiss-moss.css` draws the checkbox tick, the indeterminate dash and the select chevron as `data:image/svg+xml` backgrounds, which `default-src 'self'` blocks. No network origin is added. Replaces the CSP line in `docs/architecture.md`. Who: orchestrator, after the L-002 and L-003 reviews.
 
