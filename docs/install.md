@@ -65,6 +65,32 @@ macOS shows the Open Anyway warning for files that a browser downloads, because 
 
 ## Windows
 
+### Install from PowerShell
+
+One line in PowerShell installs Tolon without the browser and SmartScreen steps:
+
+```
+irm https://github.com/danielpsf/tolon/releases/latest/download/install.ps1 | iex
+```
+
+The copy of `install.ps1` on each release installs that release. Here is what it does, in order:
+
+1. It stops unless this is 64-bit Windows.
+2. It downloads the `-setup.exe` and `SHA256SUMS` of the release into a temporary folder.
+3. It checks the installer against its line in `SHA256SUMS`. If the line is missing or the checksum does not match, it stops and deletes the download.
+4. It quits Tolon if it is running, then runs the installer silently. The installer is per user, so there is no administrator prompt.
+5. It starts Tolon from the folder the installer recorded, `%LOCALAPPDATA%\Tolon` by default, and deletes the temporary folder. The installer also puts a Tolon shortcut on the desktop.
+
+It never asks for administrator rights. To read the script before you run it, save it, look at it, and run the saved copy:
+
+```
+irm https://github.com/danielpsf/tolon/releases/latest/download/install.ps1 -OutFile install.ps1
+notepad install.ps1
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+### By hand
+
 1. Download the `.exe`. Your browser may block it as "not commonly downloaded". In Edge or Chrome, open the downloads list, click the three dots next to the file, choose Keep, then choose Keep anyway.
 2. Double-click the file.
 3. Windows may show "Windows protected your PC". Tolon is not yet signed by a certificate authority, so Windows does not know the publisher. Click More info, then click Run anyway.

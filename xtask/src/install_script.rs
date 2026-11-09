@@ -568,3 +568,74 @@ fn a_swap_that_cannot_remove_the_old_copy_fails_and_leaves_no_staging_folder() -
     assert!(sb.tmp_is_empty()?);
     Ok(())
 }
+
+// ---- install.ps1 (L-085): the same rules, checked by text, plus a PowerShell parse where `pwsh` exists ----
+
+fn ps1_script() -> Result<PathBuf> {
+    Ok(crate::repo_root()?.join("install.ps1"))
+}
+
+#[test]
+fn ps1_the_whole_body_is_one_function_called_on_the_last_line_only() -> Result<()> {
+    let text = fs::read_to_string(ps1_script()?)?;
+    let top: Vec<&str> = code_lines(&text)
+        .into_iter()
+        .filter(|l| !l.starts_with(char::is_whitespace))
+        .collect();
+    assert_eq!(top, ["function Install-Tolon {", "}", "Install-Tolon"]);
+    assert_eq!(text.lines().last(), Some("Install-Tolon"));
+    Ok(())
+}
+
+#[test]
+fn ps1_never_asks_for_administrator_rights_and_stamps_once() -> Result<()> {
+    let text = fs::read_to_string(ps1_script()?)?;
+    for line in code_lines(&text) {
+        for word in ["RunAs", "runas", "Invoke-Expression", "iex "] {
+            assert!(!line.contains(word), "{word} in: {line}");
+        }
+    }
+    assert_eq!(
+        text.lines()
+            .filter(|l| *l == "  $version = '@TOLON_VERSION@'")
+            .count(),
+        1
+    );
+    for line in text
+        .lines()
+        .filter(|l| l.contains("Say ") || l.contains("Fail "))
+    {
+        assert!(!line.contains('!'), "exclamation mark in: {line}");
+    }
+    assert!(
+        text.contains("Get-FileHash -Algorithm SHA256"),
+        "the download is checked"
+    );
+    assert!(
+        text.contains("-ArgumentList '/S'"),
+        "silent per-user install"
+    );
+    Ok(())
+}
+
+#[test]
+fn ps1_parses_when_powershell_is_installed() -> Result<()> {
+    let script = ps1_script()?;
+    let check = format!(
+        "$e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile('{}', [ref]$null, [ref]$e); if ($e.Count) {{ $e | ForEach-Object {{ Write-Output $_.Message }}; exit 1 }}",
+        script.display()
+    );
+    match Command::new("pwsh")
+        .args(["-NoProfile", "-Command", &check])
+        .output()
+    {
+        Ok(o) => assert!(
+            o.status.success(),
+            "pwsh parse: {}{}",
+            stdout(&o),
+            stderr(&o)
+        ),
+        Err(_) => println!("skipped: pwsh is not installed"),
+    }
+    Ok(())
+}
